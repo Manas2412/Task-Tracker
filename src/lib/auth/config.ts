@@ -3,10 +3,10 @@ import type { NextAuthConfig } from 'next-auth';
 /**
  * Edge-safe NextAuth config.
  *
- * Why split: middleware runs on the edge runtime and cannot import native
- * modules (e.g. argon2 used in the Credentials provider's `authorize`
- * callback). This file contains only what middleware needs — pages,
- * callbacks that don't touch native code, route gating logic.
+ * Why split: middleware runs on the edge runtime and cannot import
+ * Prisma or other Node-only modules used in the Credentials provider's
+ * `authorize` callback. This file contains only what middleware needs —
+ * pages, callbacks that don't touch Node APIs, route gating logic.
  *
  * The full config — including the Credentials provider — lives in
  * src/lib/auth/index.ts (Node runtime).
