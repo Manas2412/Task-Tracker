@@ -1,0 +1,317 @@
+import Link from 'next/link';
+import { notFound, redirect } from 'next/navigation';
+import { formatDistanceToNow } from 'date-fns';
+
+import { AttachmentList, type AttachmentRow, Pill, TimelineFileCard } from '@/components/ui';
+import { canEditTaskAttachments } from '@/app/actions/attachments';
+import { isS3Configured } from '@/lib/s3';
+import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/db';
+import { initialsOf } from '@/lib/format';
+import { CollaboratorsSection, type Candidate, type CollaboratorRow } from './_components/CollaboratorsSection';
+import { JsLanePicker } from './_components/JsLanePicker';
+import { TagsSection, type TaskTagRow } from './_components/TagsSection';
+import { MoreMenu } from './_components/MoreMenu';
+import { PriorityPicker } from './_components/PriorityPicker';
+import { SectionActivity } from './_components/SectionActivity';
+import { SectionComments, type Mentionable } from './_components/SectionComments';
+import { SectionContext } from './_components/SectionContext';
+import { SectionDetails } from './_components/SectionDetails';
+import { SectionSubtasks } from './_components/SectionSubtasks';
+import { StatusPicker } from './_components/StatusPicker';
+
+import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/ui/Pill';
+
+type PageProps = { params: { id: string } };
+
+export default async function TaskDetailPage({ params }: PageProps) {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+
+  // UUID guard — keeps invalid IDs from blowing up Prisma.
+  if (!/^[0-9a-f-]{36}$/i.test(params.id)) notFound();
+
+  const task = await prisma.task.findUnique({
+    where: { id: params.id },
+    include: {
+      owner: { include: { division: true } },
+      division: true,
+      collaborators: {
+        include: { user: { include: { division: true } } },
+      },
+      subtasks: {
+        include: { owner: { include: { division: true } } },
+        orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
+      },
+      comments: {
+        include: { user: { include: { division: true } } },
+        orderBy: { createdAt: 'asc' },
+      },
+      activity: {
+        include: { actor: true },
+        orderBy: { createdAt: 'desc' },
+      },
+      linkedTimelineFile: true,
+      tags: { include: { tag: { select: { id: true, name: true } } } },
+      _count: { select: { comments: true, collaborators: true } },
+    },
+  });
+
+  if (!task || task.archivedAt) notFound();
+
+  // TODO: Phase 1 follow-up — full visibility check before render.
+  // For now: anyone signed in can view. Owner-only Personal tasks honoured.
+  if (task.visibility === 'personal' && task.ownerId !== session.user.id) {
+    notFound();
+  }
+
+  const isSolo = task._count.comments === 0 && task._count.collaborators === 0;
+  const canDelete = isSolo && task.createdById === session.user.id;
+
+  // Collaborator editing: owner, creator, or OSD / Super Admin can manage.
+  const canEditCollaborators =
+    task.ownerId === session.user.id ||
+    task.createdById === session.user.id ||
+    session.user.isSuperAdmin ||
+    session.user.hierarchySlot === 'osd';
+
+  // Candidate users: active users excluding the owner.
+  const candidateRows = canEditCollaborators
+    ? await prisma.user.findMany({
+        where: {
+          isActive: true,
+          id: { not: task.ownerId },
+        },
+        select: {
+          id: true,
+          name: true,
+          designation: true,
+          division: { select: { name: true } },
+        },
+        orderBy: { name: 'asc' },
+      })
+    : [];
+
+  const candidates: Candidate[] = candidateRows.map((u) => ({
+    id: u.id,
+    name: u.name,
+    designation: u.designation,
+    divisionName: u.division.name,
+  }));
+
+  // Mentionables: every active user (including the owner). Cap at 200 for
+  // the in-memory typeahead — the picker filters client-side.
+  const mentionableRows = await prisma.user.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      designation: true,
+      division: { select: { avatarColour: true } },
+    },
+    orderBy: { name: 'asc' },
+    take: 200,
+  });
+  const mentionables: Mentionable[] = mentionableRows.map((u) => ({
+    id: u.id,
+    name: u.name,
+    username: u.username,
+    designation: u.designation,
+    divisionColour: u.division.avatarColour,
+  }));
+
+  const collaboratorRows: CollaboratorRow[] = task.collaborators.map((c) => ({
+    id: c.id,
+    userId: c.userId,
+    name: c.user.name,
+    designation: c.user.designation,
+    role: c.role as CollaboratorRow['role'],
+    division: {
+      name: c.user.division.name,
+      avatarColour: c.user.division.avatarColour,
+    },
+  }));
+
+  // Cross-division marker — a task is "cross-division" if at least one
+  // collaborator carries the division_lead role.
+  const isCrossDivision = collaboratorRows.some((c) => c.role === 'division_lead');
+
+  // Attachment editing — share the same permission as task tags.
+  const canEditAttachments = await canEditTaskAttachments(session.user.id, task.id);
+  const s3Ready = isS3Configured();
+
+  const attachmentRows = await prisma.attachment.findMany({
+    where: { ownerType: 'task', ownerId: task.id },
+    include: { uploadedBy: { select: { name: true } } },
+    orderBy: { uploadedAt: 'desc' },
+  });
+  const taskAttachments: AttachmentRow[] = attachmentRows.map((a) => ({
+    id: a.id,
+    fileName: a.fileName,
+    fileUrl: a.fileUrl,
+    mimeType: a.mimeType,
+    sizeBytes: a.sizeBytes,
+    source: a.source as 'uploaded' | 'drive_link',
+    uploadedAt: a.uploadedAt,
+    uploaderName: a.uploadedBy.name,
+    canDelete: canEditAttachments || a.uploadedById === session.user.id,
+  }));
+
+  // Tag editing: owner, creator, OSD, or Super Admin can manage tags.
+  const canEditTags =
+    task.ownerId === session.user.id ||
+    task.createdById === session.user.id ||
+    session.user.isSuperAdmin ||
+    session.user.hierarchySlot === 'osd';
+
+  const currentTagRows: TaskTagRow[] = task.tags.map((t) => ({
+    id: t.tag.id,
+    name: t.tag.name,
+  }));
+
+  const availableTagRows: TaskTagRow[] = canEditTags
+    ? (
+        await prisma.tag.findMany({
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true },
+        })
+      )
+    : [];
+
+  return (
+    <div className="max-w-3xl xl:max-w-4xl mx-auto pb-16">
+      {/* Header bar */}
+      <header className="sticky top-14 md:top-16 z-10 bg-bg/90 backdrop-blur-sm border-b border-line-2">
+        <div className="flex items-center justify-between gap-3 px-4 md:px-6 h-12">
+          <Link
+            href="/tasks"
+            aria-label="Back to tasks"
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-2 hover:text-ink"
+          >
+            <i className="ti ti-arrow-left text-[16px]" aria-hidden="true" />
+            <span className="hidden md:inline">Back to tasks</span>
+          </Link>
+          <MoreMenu
+            taskId={task.id}
+            canDelete={canDelete}
+            reasonNoDelete={
+              !isSolo
+                ? 'Delete is unavailable once the task has been shared. Archive instead.'
+                : task.createdById !== session.user.id
+                  ? 'Only the creator can delete a solo task.'
+                  : undefined
+            }
+          />
+        </div>
+      </header>
+
+      {/* Title block */}
+      <section
+        aria-labelledby="task-title"
+        className="px-4 md:px-6 py-5 border-b border-line-2"
+      >
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <StatusPicker taskId={task.id} current={task.status as PillStatusTone} />
+          <PriorityPicker taskId={task.id} current={task.priority as PillPriorityTone} />
+          <JsLanePicker
+            taskId={task.id}
+            current={task.jsPriorityLane as PillJsLane | null}
+            canCurate={
+              session.user.isSuperAdmin || session.user.hierarchySlot === 'osd'
+            }
+          />
+          {task.milestone ? <Pill variant="milestone" /> : null}
+        </div>
+
+        <h1
+          id="task-title"
+          className="font-serif text-[26px] md:text-[30px] leading-tight font-medium text-ink tracking-tight-title"
+        >
+          {task.name}
+        </h1>
+
+        <p className="mt-2 text-[11px] text-ink-3 inline-flex items-center gap-1.5">
+          <i className="ti ti-edit text-[12px]" aria-hidden="true" />
+          Last edited {formatDistanceToNow(task.updatedAt, { addSuffix: true })}
+        </p>
+      </section>
+
+      <SectionContext taskId={task.id} description={task.description} />
+
+      <SectionSubtasks taskId={task.id} subtasks={task.subtasks} />
+
+      {task.linkedTimelineFile ? (
+        <section className="px-4 md:px-6 py-5 border-b border-line-2">
+          <h2 className="section-label mb-2.5">Linked timeline file</h2>
+          <TimelineFileCard
+            variant="compact"
+            refNo={task.linkedTimelineFile.refNo}
+            subject={task.linkedTimelineFile.subject}
+            fromWhom={task.linkedTimelineFile.fromWhom}
+            deadlineDate={task.linkedTimelineFile.deadlineDate}
+            href={`/timeline-files/${task.linkedTimelineFile.id}`}
+          />
+        </section>
+      ) : null}
+
+      <SectionDetails
+        taskId={task.id}
+        owner={task.owner}
+        due={task.dueDate}
+        divisionName={task.division.name}
+        visibility={task.visibility as 'division' | 'personal'}
+        recurrence={task.recurrenceRule}
+        milestone={task.milestone}
+      />
+
+      <CollaboratorsSection
+        taskId={task.id}
+        collaborators={collaboratorRows}
+        candidates={candidates}
+        canEdit={canEditCollaborators}
+      />
+
+      <TagsSection
+        taskId={task.id}
+        current={currentTagRows}
+        available={availableTagRows}
+        canEdit={canEditTags}
+      />
+
+      <section className="px-4 md:px-6 py-5 border-b border-line-2">
+        <h2 className="section-label mb-3">
+          Attachments
+          {taskAttachments.length > 0 ? (
+            <span className="ml-2 text-ink-3 text-[11px] tracking-normal normal-case font-normal">
+              {taskAttachments.length}{' '}
+              {taskAttachments.length === 1 ? 'file' : 'files'}
+            </span>
+          ) : null}
+        </h2>
+        <AttachmentList
+          scope="task"
+          parentId={task.id}
+          attachments={taskAttachments}
+          canEdit={canEditAttachments}
+          s3Configured={s3Ready}
+        />
+      </section>
+
+      <SectionComments
+        taskId={task.id}
+        comments={task.comments}
+        mentionables={mentionables}
+      />
+
+      <SectionActivity
+        activity={task.activity.map((a) => ({
+          ...a,
+          payload: (a.payload ?? {}) as Record<string, unknown>,
+        }))}
+      />
+    </div>
+  );
+}
+
+

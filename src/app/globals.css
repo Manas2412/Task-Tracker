@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Runtime colour tokens */
+@import '../styles/tokens.css';
+
+/* Tabler Icons webfont (outline variants by default; filled only inside pills) */
+@import 'https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css';
+
+/* ============================================================
+   Base
+   ============================================================ */
+
+@layer base {
+  html,
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: var(--font-manrope), system-ui, sans-serif;
+    font-weight: 400;
+  }
+
+  /* Hierarchy through size, colour, and family — never weight stacking. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-newsreader), Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  /* Mono surface for usernames, TF reference numbers, system IDs. */
+  .font-mono,
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono), 'Menlo', monospace;
+  }
+
+  /* WCAG-AA focus rings, keyboard-only. */
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  /* No clickable divs. Buttons are buttons. */
+  button {
+    font-family: inherit;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+  }
+
+  /* Section-header label convention: small uppercase via CSS only. */
+  .section-label {
+    font-size: 11px;
+    color: var(--ink-2);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+}
+
+/* ============================================================
+   Sortable.js drag states — for the Super Admin Structure mapper
+   ============================================================ */
+
+.sortable-ghost {
+  opacity: 0.45;
+  background-color: var(--accent-soft) !important;
+  border: 1px dashed var(--accent) !important;
+}
+
+.sortable-chosen {
+  box-shadow: 0 8px 20px -6px rgba(0, 0, 0, 0.2);
+  transform: scale(1.02);
+}
+
+.sortable-drag {
+  cursor: grabbing !important;
+  box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.25);
+}
+
+body.sortable-dragging .sortable-target {
+  background-color: rgba(180, 83, 9, 0.04);
+  border-color: var(--accent-line);
+}

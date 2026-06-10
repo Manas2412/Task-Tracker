@@ -1,0 +1,96 @@
+/* ============================================================
+   MYAS Task Tracker — Colour Tokens
+   Source: Design Tokens & Patterns §1
+   Every colour used in the app must come from this file.
+   ============================================================ */
+
+:root {
+  /* ----------------------------------------------------------
+     §1.1  Neutrals — surfaces and ink
+     ---------------------------------------------------------- */
+  --bg:      #f5f4f0;   /* Page background (warm off-white) */
+  --canvas:  #fafaf7;   /* Secondary canvas (e.g. inside a layout grid) */
+  --panel:   #ffffff;   /* Cards, sheets, panels */
+
+  --ink:     #1a1a1a;   /* Primary text, primary buttons */
+  --ink-2:   #525252;   /* Secondary text, section headings */
+  --ink-3:   #8a8a8a;   /* Tertiary text, metadata */
+  --ink-4:   #b8b6ae;   /* Disabled, some dividers */
+
+  --line:    #e8e6df;   /* Standard border / divider */
+  --line-2:  #efedf0;   /* Subtle divider */
+
+  /* ----------------------------------------------------------
+     §1.2  Brand accents — the two signals
+     INDIGO  = Super Admin surface + Timeline File reference
+     AMBER   = JS Priority signal
+     Never use interchangeably.
+     ---------------------------------------------------------- */
+  --primary:       #1e1b4b;   /* indigo */
+  --primary-soft:  #ebebf7;   /* indigo background — quote callouts, soft pills */
+  --primary-line:  #c4c2e0;   /* indigo border */
+
+  --accent:        #b45309;   /* amber */
+  --accent-soft:   #fef3c7;   /* amber background — JS Priority badges, deadline warnings */
+  --accent-line:   #f0c674;   /* amber border */
+
+  /* ----------------------------------------------------------
+     §1.3  Status colours
+     Each status has a paired "-soft" variant for backgrounds
+     (used in pills, callouts). Colour is never the only signal —
+     every status colour is paired with a Tabler icon.
+     ---------------------------------------------------------- */
+  --urgent:       #b91c1c;
+  --urgent-soft:  #fee2e2;
+
+  --high:         #c2410c;
+  --high-soft:    #ffedd5;
+
+  --medium:       #1e40af;
+  --medium-soft:  #dbeafe;
+
+  --low:          #525252;
+  --low-soft:     #f0f0ec;
+
+  --info:         #0e7490;   /* In progress */
+  --info-soft:    #cffafe;
+
+  --hold:         #92400e;   /* Awaiting input / On hold */
+  --hold-soft:    #fef3c7;
+
+  --success:      #15803d;   /* Completed / Closed */
+  --success-soft: #dcfce7;
+
+  --pending:      #525252;   /* Not started / Pending action (TF) */
+  --pending-soft: #f0f0ec;
+
+  /* ----------------------------------------------------------
+     §1.4  Division avatar colours
+     Each division has a stable avatar colour assigned at
+     creation. Officers and tasks within a division inherit
+     that colour on their avatar / division-tag. These are the
+     INITIAL assignments — Super Admin can introduce new
+     divisions with new colours later.
+     ---------------------------------------------------------- */
+  --division-khelo-india-division:       #4338ca;  /* indigo-purple */
+  --division-khelo-india-mission:        #b45309;  /* amber */
+  --division-autonomous-bodies:          #047857;  /* emerald */
+  --division-sports-goods-manufacturing: #be185d;  /* rose */
+  --division-media-and-it:               #1e40af;  /* blue */
+  --division-office-of-js-osd:           #1e1b4b;  /* deep indigo */
+
+  /* ----------------------------------------------------------
+     §1.4 (cont.)  Hierarchy slot tones
+     Officer-card avatars in the Super Admin hierarchy chart
+     lighten as the slot descends — subtle visual depth cue.
+     Contract role overrides the slot tone with amber.
+     ---------------------------------------------------------- */
+  --slot-js:               #1e1b4b;
+  --slot-osd:              #312e81;
+  --slot-director:         #4338ca;
+  --slot-deputy-secretary: #5b58d6;
+  --slot-under-secretary:  #4f46e5;
+  --slot-section-officer:  #6366f1;
+  --slot-aso:              #7c7be0;
+  --slot-contract:         #b45309;   /* amber; overrides the slot tone */
+}

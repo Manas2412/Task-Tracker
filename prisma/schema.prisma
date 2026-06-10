@@ -1,0 +1,566 @@
+// MYAS Task Tracker — Prisma schema
+// Source of truth for the database. Translation of docs/DATA_MODEL.md.
+// Convention: camelCase in code, snake_case in the database via @map / @@map.
+// Check constraints and table-level guards that Prisma cannot express are
+// added in raw SQL migrations (see prisma/migrations/<timestamp>/migration.sql).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = []
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Direct (non-pooled) connection for migrations / introspection.
+  // Required when DATABASE_URL points at Neon's pgbouncer endpoint.
+  // Falls back to DATABASE_URL when DIRECT_URL is unset (local Postgres).
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum HierarchySlot {
+  js
+  osd
+  director
+  deputy_secretary
+  under_secretary
+  section_officer
+  aso
+}
+
+enum ContractRole {
+  po
+  apo
+  yp
+}
+
+enum PmuRole {
+  pmu_senior_leadership
+  pmu_team_leader
+  pmu_senior_consultant
+  pmu_consultant
+  pmu_intern
+}
+
+enum TaskStatus {
+  not_started
+  in_progress
+  awaiting_input
+  on_hold
+  completed
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum JsPriorityLane {
+  today
+  week
+  month
+  watchlist
+}
+
+enum Visibility {
+  personal
+  division
+}
+
+enum RecurrenceRule {
+  daily
+  weekly
+  monthly
+  quarterly
+  half_yearly
+}
+
+enum TaskCollaboratorRole {
+  collaborator
+  division_lead
+  co_owner
+}
+
+enum TimelineFileStatus {
+  pending_action
+  in_progress
+  awaiting_reply
+  on_hold
+  closed
+}
+
+enum AttachmentOwnerType {
+  task
+  task_comment
+  timeline_file
+  timeline_file_source
+  timeline_file_action
+}
+
+enum AttachmentSource {
+  uploaded
+  drive_link
+}
+
+enum DivisionKind {
+  division
+  sub_division
+  section
+  pmu
+}
+
+enum NotificationType {
+  task_assigned
+  mention
+  status_changed_on_my_task
+  js_priority_added
+  task_due_soon
+  task_overdue
+  timeline_file_marked_to_division
+  secretary_comment_on_timeline_file
+  cross_division_status_change
+  reassignment_approval_requested
+  reassignment_approved
+  reassignment_rejected
+  password_reset_by_admin
+}
+
+enum AuditAction {
+  create
+  update
+  delete
+  archive
+  restore
+  login
+  logout
+  password_reset
+  role_change
+  hierarchy_change
+}
+
+enum ReassignmentRequestStatus {
+  pending
+  approved
+  rejected
+  withdrawn
+}
+
+// ============================================================
+// Users
+// ============================================================
+
+model User {
+  id                    String         @id @default(uuid()) @db.Uuid
+  name                  String
+  username              String         @unique
+  email                 String?        @unique
+  passwordHash          String         @map("password_hash")
+  designation           String
+  hierarchySlot         HierarchySlot  @map("hierarchy_slot")
+  contractRole          ContractRole?  @map("contract_role")
+
+  divisionId            String         @map("division_id") @db.Uuid
+  subDivisionId         String?        @map("sub_division_id") @db.Uuid
+  sectionId             String?        @map("section_id") @db.Uuid
+
+  isPmu                 Boolean        @default(false) @map("is_pmu")
+  pmuRole               PmuRole?       @map("pmu_role")
+
+  supervisorId          String?        @map("supervisor_id") @db.Uuid
+
+  isActive              Boolean        @default(true) @map("is_active")
+  isSuperAdmin          Boolean        @default(false) @map("is_super_admin")
+  forcePasswordChange   Boolean        @default(false) @map("force_password_change")
+  passwordChangedAt     DateTime?      @map("password_changed_at") @db.Timestamptz(6)
+  lastLogin             DateTime?      @map("last_login") @db.Timestamptz(6)
+
+  createdById           String?        @map("created_by") @db.Uuid
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  division              Division       @relation("UserDivision", fields: [divisionId], references: [id])
+  subDivision           Division?      @relation("UserSubDivision", fields: [subDivisionId], references: [id])
+  section               Division?      @relation("UserSection", fields: [sectionId], references: [id])
+
+  supervisor            User?          @relation("UserSupervisor", fields: [supervisorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subordinates          User[]         @relation("UserSupervisor")
+
+  createdBy             User?          @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdUsers          User[]         @relation("UserCreatedBy")
+
+  ownedTasks            Task[]         @relation("TaskOwner")
+  createdTasks          Task[]         @relation("TaskCreatedBy")
+  archivedTasks         Task[]         @relation("TaskArchivedBy")
+  taskCollaborators     TaskCollaborator[] @relation("TaskCollaboratorUser")
+  addedTaskCollaborators TaskCollaborator[] @relation("TaskCollaboratorAddedBy")
+  taskComments          TaskComment[]
+  taskActivity          TaskActivity[]
+
+  uploadedAttachments   Attachment[]   @relation("AttachmentUploadedBy")
+
+  createdTimelineFiles  TimelineFile[] @relation("TimelineFileCreatedBy")
+  archivedTimelineFiles TimelineFile[] @relation("TimelineFileArchivedBy")
+  linkedTaskLinks       TimelineFileTaskLink[]
+  timelineFileActivity  TimelineFileActivity[]
+
+  createdTags           Tag[]
+  notifications         Notification[]
+
+  reassignmentRequestsBy       ReassignmentRequest[] @relation("ReassignmentRequestedBy")
+  reassignmentRequestsApprover ReassignmentRequest[] @relation("ReassignmentApprover")
+  reassignmentRequestsProposed ReassignmentRequest[] @relation("ReassignmentProposedOwner")
+
+  auditLog              AuditLog[]
+
+  createdDivisions      Division[]     @relation("DivisionCreatedBy")
+
+  @@index([supervisorId])
+  @@index([divisionId])
+  @@index([hierarchySlot])
+  @@index([username])
+  @@map("users")
+}
+
+// ============================================================
+// Divisions (also stores sub-divisions, sections, PMUs)
+// ============================================================
+
+model Division {
+  id                       String        @id @default(uuid()) @db.Uuid
+  name                     String
+  parentId                 String?       @map("parent_id") @db.Uuid
+  kind                     DivisionKind
+  hasPmu                   Boolean       @default(false) @map("has_pmu")
+  pmuParentDivisionId      String?       @map("pmu_parent_division_id") @db.Uuid
+  avatarColour             String        @map("avatar_colour")
+  displayOrder             Int           @default(0) @map("display_order")
+
+  createdById              String?       @map("created_by") @db.Uuid
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  parent                   Division?     @relation("DivisionParent", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children                 Division[]    @relation("DivisionParent")
+
+  pmuParentDivision        Division?     @relation("DivisionPmuParent", fields: [pmuParentDivisionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pmuChildren              Division[]    @relation("DivisionPmuParent")
+
+  createdBy                User?         @relation("DivisionCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  usersInDivision          User[]        @relation("UserDivision")
+  usersInSubDivision       User[]        @relation("UserSubDivision")
+  usersInSection           User[]        @relation("UserSection")
+  tasks                    Task[]
+  markedTimelineFiles      TimelineFileMarkedTo[]
+
+  @@index([parentId])
+  @@index([kind])
+  @@map("divisions")
+}
+
+// ============================================================
+// Tasks
+// ============================================================
+
+model Task {
+  id                       String          @id @default(uuid()) @db.Uuid
+  name                     String
+  description              String?
+
+  ownerId                  String          @map("owner_id") @db.Uuid
+  divisionId               String          @map("division_id") @db.Uuid
+
+  status                   TaskStatus      @default(not_started)
+  priority                 TaskPriority    @default(low)
+  jsPriorityLane           JsPriorityLane? @map("js_priority_lane")
+  visibility               Visibility      @default(division)
+
+  dueDate                  DateTime?       @map("due_date") @db.Timestamptz(6)
+  milestone                Boolean         @default(false)
+  recurrenceRule           RecurrenceRule? @map("recurrence_rule")
+
+  parentTaskId             String?         @map("parent_task_id") @db.Uuid
+  linkedTimelineFileId     String?         @map("linked_timeline_file_id") @db.Uuid
+
+  createdById              String          @map("created_by") @db.Uuid
+  createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  archivedAt               DateTime?       @map("archived_at") @db.Timestamptz(6)
+  archivedById             String?         @map("archived_by") @db.Uuid
+
+  owner                    User            @relation("TaskOwner", fields: [ownerId], references: [id])
+  division                 Division        @relation(fields: [divisionId], references: [id])
+  createdBy                User            @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  archivedBy               User?           @relation("TaskArchivedBy", fields: [archivedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  parentTask               Task?           @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subtasks                 Task[]          @relation("TaskSubtasks")
+
+  linkedTimelineFile       TimelineFile?   @relation(fields: [linkedTimelineFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  collaborators            TaskCollaborator[]
+  comments                 TaskComment[]
+  activity                 TaskActivity[]
+  tags                     TaskTag[]
+  reassignmentRequests     ReassignmentRequest[]
+  timelineFileLinks        TimelineFileTaskLink[]
+
+  @@index([ownerId])
+  @@index([divisionId])
+  @@index([status])
+  @@index([jsPriorityLane])
+  @@index([dueDate])
+  @@index([parentTaskId])
+  @@index([linkedTimelineFileId])
+  @@map("tasks")
+}
+
+model TaskCollaborator {
+  id        String                @id @default(uuid()) @db.Uuid
+  taskId    String                @map("task_id") @db.Uuid
+  userId    String                @map("user_id") @db.Uuid
+  role      TaskCollaboratorRole
+  addedById String                @map("added_by") @db.Uuid
+  addedAt   DateTime              @default(now()) @map("added_at") @db.Timestamptz(6)
+
+  task    Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user    User @relation("TaskCollaboratorUser", fields: [userId], references: [id])
+  addedBy User @relation("TaskCollaboratorAddedBy", fields: [addedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([taskId, userId])
+  @@index([userId])
+  @@map("task_collaborators")
+}
+
+model TaskComment {
+  id               String      @id @default(uuid()) @db.Uuid
+  taskId           String      @map("task_id") @db.Uuid
+  userId           String      @map("user_id") @db.Uuid
+  body             String
+  mentions         String[]    @default([]) @db.Uuid
+  statusTransition TaskStatus? @map("status_transition")
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  editedAt         DateTime?   @map("edited_at") @db.Timestamptz(6)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([taskId, createdAt(sort: Desc)])
+  @@map("task_comments")
+}
+
+model TaskActivity {
+  id        String   @id @default(uuid()) @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  eventType String   @map("event_type")
+  payload   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task  Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([taskId, createdAt(sort: Desc)])
+  @@map("task_activity")
+}
+
+// ============================================================
+// Attachments (polymorphic)
+// ============================================================
+
+model Attachment {
+  id           String              @id @default(uuid()) @db.Uuid
+  ownerType    AttachmentOwnerType @map("owner_type")
+  ownerId      String              @map("owner_id") @db.Uuid
+  fileName     String              @map("file_name")
+  fileUrl      String              @map("file_url")
+  mimeType     String?             @map("mime_type")
+  sizeBytes    BigInt?             @map("size_bytes")
+  source       AttachmentSource
+  uploadedById String              @map("uploaded_by") @db.Uuid
+  uploadedAt   DateTime            @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+
+  uploadedBy            User           @relation("AttachmentUploadedBy", fields: [uploadedById], references: [id])
+  timelineFilesActioned TimelineFile[] @relation("TimelineFileActionDocument")
+
+  @@index([ownerType, ownerId])
+  @@map("attachments")
+}
+
+// ============================================================
+// Timeline Files
+// ============================================================
+
+model TimelineFile {
+  id                          String              @id @default(uuid()) @db.Uuid
+  refNo                       String              @unique @map("ref_no")
+  refYear                     Int                 @map("ref_year")
+  refSeq                      Int                 @map("ref_seq")
+  subject                     String
+  fromWhom                    String              @map("from_whom")
+  receivedDate                DateTime            @map("received_date") @db.Date
+  deadlineDate                DateTime?           @map("deadline_date") @db.Date
+  status                      TimelineFileStatus  @default(pending_action)
+  secretaryComments           String?             @map("secretary_comments")
+  actionDocumentAttachmentId  String?             @map("action_document_attachment_id") @db.Uuid
+
+  createdById                 String              @map("created_by") @db.Uuid
+  createdAt                   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  archivedAt                  DateTime?           @map("archived_at") @db.Timestamptz(6)
+  archivedById                String?             @map("archived_by") @db.Uuid
+
+  createdBy                   User                @relation("TimelineFileCreatedBy", fields: [createdById], references: [id])
+  archivedBy                  User?               @relation("TimelineFileArchivedBy", fields: [archivedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actionDocument              Attachment?         @relation("TimelineFileActionDocument", fields: [actionDocumentAttachmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  markedTo                    TimelineFileMarkedTo[]
+  taskLinks                   TimelineFileTaskLink[]
+  activity                    TimelineFileActivity[]
+  tasksLinkedTo               Task[]
+
+  @@unique([refYear, refSeq])
+  @@index([deadlineDate])
+  @@index([status])
+  @@index([receivedDate(sort: Desc)])
+  @@map("timeline_files")
+}
+
+model TimelineFileMarkedTo {
+  timelineFileId String   @map("timeline_file_id") @db.Uuid
+  divisionId     String   @map("division_id") @db.Uuid
+  markedAt       DateTime @default(now()) @map("marked_at") @db.Timestamptz(6)
+
+  timelineFile TimelineFile @relation(fields: [timelineFileId], references: [id], onDelete: Cascade)
+  division     Division     @relation(fields: [divisionId], references: [id])
+
+  @@id([timelineFileId, divisionId])
+  @@index([divisionId])
+  @@map("timeline_file_marked_to")
+}
+
+model TimelineFileTaskLink {
+  timelineFileId String   @map("timeline_file_id") @db.Uuid
+  taskId         String   @map("task_id") @db.Uuid
+  linkedAt       DateTime @default(now()) @map("linked_at") @db.Timestamptz(6)
+  linkedById     String   @map("linked_by") @db.Uuid
+
+  timelineFile TimelineFile @relation(fields: [timelineFileId], references: [id], onDelete: Cascade)
+  task         Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  linkedBy     User         @relation(fields: [linkedById], references: [id])
+
+  @@id([timelineFileId, taskId])
+  @@index([taskId])
+  @@map("timeline_file_task_links")
+}
+
+model TimelineFileActivity {
+  id             String   @id @default(uuid()) @db.Uuid
+  timelineFileId String   @map("timeline_file_id") @db.Uuid
+  actorId        String   @map("actor_id") @db.Uuid
+  eventType      String   @map("event_type")
+  payload        Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  timelineFile TimelineFile @relation(fields: [timelineFileId], references: [id], onDelete: Cascade)
+  actor        User         @relation(fields: [actorId], references: [id])
+
+  @@index([timelineFileId, createdAt(sort: Desc)])
+  @@map("timeline_file_activity")
+}
+
+// ============================================================
+// Tags
+// ============================================================
+
+model Tag {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  createdById String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  createdBy User      @relation(fields: [createdById], references: [id])
+  tasks     TaskTag[]
+
+  @@map("tags")
+}
+
+model TaskTag {
+  taskId String @map("task_id") @db.Uuid
+  tagId  String @map("tag_id") @db.Uuid
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id])
+
+  @@id([taskId, tagId])
+  @@map("task_tags")
+}
+
+// ============================================================
+// Notifications
+// ============================================================
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  payload   Json             @default("{}")
+  readAt    DateTime?        @map("read_at") @db.Timestamptz(6)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+// ============================================================
+// Reassignment requests
+// ============================================================
+
+model ReassignmentRequest {
+  id               String                     @id @default(uuid()) @db.Uuid
+  taskId           String                     @map("task_id") @db.Uuid
+  requestedById    String                     @map("requested_by") @db.Uuid
+  proposedOwnerId  String                     @map("proposed_owner_id") @db.Uuid
+  approverId       String                     @map("approver_id") @db.Uuid
+  status           ReassignmentRequestStatus  @default(pending)
+  createdAt        DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt       DateTime?                  @map("resolved_at") @db.Timestamptz(6)
+
+  task           Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestedBy    User @relation("ReassignmentRequestedBy", fields: [requestedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  proposedOwner  User @relation("ReassignmentProposedOwner", fields: [proposedOwnerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approver       User @relation("ReassignmentApprover", fields: [approverId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([approverId, status])
+  @@map("reassignment_requests")
+}
+
+// ============================================================
+// Audit log (system-wide, immutable — insert-only)
+// ============================================================
+
+model AuditLog {
+  id         String      @id @default(uuid()) @db.Uuid
+  actorId    String?     @map("actor_id") @db.Uuid
+  entityType String      @map("entity_type")
+  entityId   String      @map("entity_id") @db.Uuid
+  action     AuditAction
+  before     Json        @default("{}")
+  after      Json        @default("{}")
+  ip         String?     @db.Inet
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId, createdAt(sort: Desc)])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_log")
+}

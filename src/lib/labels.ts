@@ -1,0 +1,62 @@
+/**
+ * Human-readable labels for enum values used across the app.
+ * Keep this file as the single source for sentence-case copy of system
+ * values so all screens read identically.
+ */
+
+export const HIERARCHY_SLOT_LABEL: Record<string, string> = {
+  js: 'Joint Secretary',
+  osd: 'Officer on Special Duty',
+  director: 'Director',
+  deputy_secretary: 'Deputy Secretary',
+  under_secretary: 'Under Secretary',
+  section_officer: 'Section Officer',
+  aso: 'Assistant Section Officer',
+};
+
+export const HIERARCHY_SLOT_LEVEL: Record<string, number> = {
+  js: 1,
+  osd: 2,
+  director: 3,
+  deputy_secretary: 4,
+  under_secretary: 5,
+  section_officer: 6,
+  aso: 7,
+};
+
+export const CONTRACT_ROLE_LABEL: Record<string, string> = {
+  po: 'Project Officer',
+  apo: 'Assistant Project Officer',
+  yp: 'Young Professional',
+};
+
+export const PMU_ROLE_LABEL: Record<string, string> = {
+  pmu_senior_leadership: 'Senior Leadership',
+  pmu_team_leader: 'Team Leader',
+  pmu_senior_consultant: 'Senior Consultant',
+  pmu_consultant: 'Consultant',
+  pmu_intern: 'Intern',
+};
+
+export const TASK_STATUS_LABEL: Record<string, string> = {
+  not_started: 'Not started',
+  in_progress: 'In progress',
+  awaiting_input: 'Awaiting input',
+  on_hold: 'On hold',
+  completed: 'Completed',
+};
+
+export const TASK_PRIORITY_LABEL: Record<string, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  urgent: 'Urgent',
+};
+
+export const RECURRENCE_LABEL: Record<string, string> = {
+  daily: 'Daily',
+  weekly: 'Weekly',
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  half_yearly: 'Half-yearly',
+};

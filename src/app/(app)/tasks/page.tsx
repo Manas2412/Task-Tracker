@@ -1,0 +1,158 @@
+import { redirect } from 'next/navigation';
+
+import { PullToRefresh } from '@/components/ui';
+import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/db';
+import { formatDue, initialsOf } from '@/lib/format';
+import { fetchTaskCounts, fetchVisibleTasks, type TaskFilter } from '@/lib/visibility';
+
+import { FilterChips } from './_components/FilterChips';
+import { StatsStrip } from './_components/StatsStrip';
+import { TaskListItem } from './_components/TaskListItem';
+import {
+  QuickCreateFab,
+  QuickCreatePrimary,
+  QuickCreateProvider,
+} from './_components/QuickCreate';
+
+import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/ui/Pill';
+
+const VALID_FILTERS: TaskFilter[] = ['all', 'today', 'overdue', 'mine', 'urgent'];
+
+type PageProps = {
+  searchParams?: { filter?: string };
+};
+
+export default async function TasksPage({ searchParams }: PageProps) {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+
+  const filter: TaskFilter = VALID_FILTERS.includes(
+    (searchParams?.filter as TaskFilter) ?? 'all',
+  )
+    ? ((searchParams?.filter as TaskFilter) ?? 'all')
+    : 'all';
+
+  // Caller's profile — drives default division for Quick Create and the
+  // archive-permission check on each row.
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      id: true,
+      divisionId: true,
+      isSuperAdmin: true,
+      hierarchySlot: true,
+    },
+  });
+  if (!me) redirect('/login');
+
+  const isAdminLike = me.isSuperAdmin || me.hierarchySlot === 'osd';
+
+  const [tasks, counts] = await Promise.all([
+    fetchVisibleTasks({ callerId: me.id, filter }),
+    fetchTaskCounts(me.id),
+  ]);
+
+  return (
+    <QuickCreateProvider defaultDivisionId={me.divisionId}>
+      <PullToRefresh>
+      <div className="pb-24 md:pb-10">
+        {/* Page header */}
+        <div className="px-4 md:px-6 lg:px-8 pt-4 md:pt-6">
+          <div className="flex items-end justify-between gap-4 mb-4 md:mb-5">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.08em] text-ink-3 font-medium mb-1">
+                Workspace
+              </p>
+              <h1 className="font-serif text-[22px] md:text-[26px] leading-tight text-ink">
+                Active tasks
+              </h1>
+            </div>
+            <div className="hidden md:block">
+              <QuickCreatePrimary />
+            </div>
+          </div>
+
+          <FilterChips active={filter} />
+          <StatsStrip counts={counts} />
+        </div>
+
+        {/* Task list */}
+        <div className="px-4 md:px-6 lg:px-8 mt-5">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="section-label">Tasks</h2>
+            <span className="text-[11px] text-ink-3">
+              {tasks.length} {tasks.length === 1 ? 'item' : 'items'}
+            </span>
+          </div>
+
+          {tasks.length === 0 ? (
+            <EmptyState filter={filter} />
+          ) : (
+            <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
+              {tasks.map((t) => {
+                const subtaskTotal = t.subtasks.length;
+                const subtaskDone = t.subtasks.filter((s) => s.status === 'completed').length;
+                const due = formatDue(t.dueDate);
+                const canArchive =
+                  t.ownerId === me.id ||
+                  t.createdById === me.id ||
+                  isAdminLike;
+
+                return (
+                  <li key={t.id}>
+                    <TaskListItem
+                      canArchive={canArchive}
+                      taskId={t.id}
+                      name={t.name}
+                      division={{ name: t.division.name }}
+                      status={t.status as PillStatusTone}
+                      priority={t.priority as PillPriorityTone}
+                      jsPriorityLane={t.jsPriorityLane as PillJsLane | null}
+                      milestone={t.milestone}
+                      due={due}
+                      owner={{
+                        initials: initialsOf(t.owner.name),
+                        colour: t.owner.division.avatarColour,
+                        name: t.owner.name,
+                      }}
+                      subtasks={
+                        subtaskTotal > 0 ? { done: subtaskDone, total: subtaskTotal } : undefined
+                      }
+                      primaryDivisionName={
+                        t.collaborators.some((c) => c.role === 'division_lead')
+                          ? t.division.name
+                          : undefined
+                      }
+                      href={`/tasks/${t.id}`}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* Mobile-only FAB */}
+        <QuickCreateFab />
+      </div>
+      </PullToRefresh>
+    </QuickCreateProvider>
+  );
+}
+
+function EmptyState({ filter }: { filter: TaskFilter }) {
+  const copy: Record<TaskFilter, string> = {
+    all: 'No tasks yet. Use the + button or "New task" to create one.',
+    today: 'Nothing due today.',
+    overdue: 'No overdue tasks. Stay on top.',
+    mine: 'No tasks owned by you in this view.',
+    urgent: 'No urgent tasks right now.',
+  };
+  return (
+    <div className="rounded-xl border border-dashed border-line p-10 text-center bg-panel">
+      <i className="ti ti-inbox text-[28px] text-ink-3 mb-2 block" aria-hidden="true" />
+      <p className="text-[13px] text-ink-2">{copy[filter]}</p>
+    </div>
+  );
+}
