@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Manrope, Newsreader, JetBrains_Mono } from 'next/font/google';
+import Script from 'next/script';
 
 import { cn } from '@/lib/utils';
 
@@ -57,6 +58,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={cn(manrope.variable, newsreader.variable, jetbrainsMono.variable)}>
       <body>{children}</body>
+      <Script
+        src="https://www.googletagmanager.com/gtag/js?id=G-2NQ2NTQ2CB"
+        strategy="afterInteractive"
+      />
+      <Script id="google-analytics" strategy="afterInteractive">
+        {`window.dataLayer=window.dataLayer||[];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js',new Date());
+          gtag('config','G-2NQ2NTQ2CB');`}
+      </Script>
     </html>
   );
 }
