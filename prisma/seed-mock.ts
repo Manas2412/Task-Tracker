@@ -47,14 +47,18 @@ function daysAgo(n: number): Date {
 async function main() {
   console.log('seed-mock: checking if already seeded…');
 
-  const existing = await prisma.division.findFirst({
+  const taskCount = await prisma.task.count();
+  const divisionsExist = await prisma.division.findFirst({
     where: { name: 'Khelo India Division' },
   });
 
-  if (existing) {
-    console.log('seed-mock: Khelo India Division already exists — skipping (already seeded).');
+  if (taskCount > 0) {
+    console.log(`seed-mock: ${taskCount} tasks already exist — skipping.`);
     return;
   }
+
+  // Divisions/users may already exist from a prior partial seed — skip creating them if so
+  const skipStructure = !!divisionsExist;
 
   console.log('seed-mock: starting…');
 
@@ -72,9 +76,42 @@ async function main() {
   // -------------------------------------------------------------------------
   // 1. Divisions
   // -------------------------------------------------------------------------
+  let khiDiv: { id: string }, abDiv: { id: string }, khiOperations: { id: string },
+    abNada: { id: string }, abNcssr: { id: string }, abSai: { id: string }, kimPmu: { id: string };
+  let uJs: { id: string }, uDirKhi: { id: string }, uDysKhi: { id: string }, uUsKhi: { id: string },
+    uSoKhiYp: { id: string }, uAsoKhi: { id: string }, uDirAb: { id: string },
+    uUsAbPo: { id: string }, pTl: { id: string }, pSc: { id: string }, pC: { id: string };
+
+  if (skipStructure) {
+    console.log('seed-mock: divisions and users already exist — looking them up…');
+    const find = async (model: 'division' | 'user', where: Record<string, unknown>) => {
+      const r = model === 'division'
+        ? await prisma.division.findFirstOrThrow({ where: where as never })
+        : await prisma.user.findFirstOrThrow({ where: where as never });
+      return { id: r.id };
+    };
+    khiDiv = await find('division', { name: 'Khelo India Division' });
+    abDiv = await find('division', { name: 'Autonomous Bodies' });
+    khiOperations = await find('division', { name: 'Operations', parentId: khiDiv.id });
+    abNada = await find('division', { name: 'NADA' });
+    abNcssr = await find('division', { name: 'NCSSR' });
+    abSai = await find('division', { name: 'SAI' });
+    kimPmu = await find('division', { name: 'KIM PMU' });
+    uJs = await find('user', { username: 'vivek.r' });
+    uDirKhi = await find('user', { username: 'ravi.kumar' });
+    uDysKhi = await find('user', { username: 'suresh.s' });
+    uUsKhi = await find('user', { username: 'pooja.d' });
+    uSoKhiYp = await find('user', { username: 'sneha.t' });
+    uAsoKhi = await find('user', { username: 'meena.p' });
+    uDirAb = await find('user', { username: 'anita.m' });
+    uUsAbPo = await find('user', { username: 'rohit.m' });
+    pTl = await find('user', { username: 'karan.v' });
+    pSc = await find('user', { username: 'lekha.r' });
+    pC = await find('user', { username: 'aditya.n' });
+  } else {
   console.log('seed-mock: creating divisions…');
 
-  const khiDiv = await prisma.division.create({
+  khiDiv = await prisma.division.create({
     data: {
       name: 'Khelo India Division',
       kind: 'division',
@@ -364,6 +401,7 @@ async function main() {
     where: { id: osd.id },
     data: { supervisorId: uJs.id },
   });
+  } // end if/else skipStructure
 
   // -------------------------------------------------------------------------
   // 3. Timeline Files
