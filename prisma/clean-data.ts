@@ -14,6 +14,10 @@ async function main() {
   await prisma.taskTag.deleteMany();
   await prisma.reassignmentRequest.deleteMany();
   await prisma.notification.deleteMany();
+  await prisma.timelineFile.updateMany({
+    where: { actionDocumentAttachmentId: { not: null } },
+    data: { actionDocumentAttachmentId: null },
+  });
   await prisma.attachment.deleteMany();
   await prisma.task.deleteMany();
   await prisma.timelineFile.deleteMany();
