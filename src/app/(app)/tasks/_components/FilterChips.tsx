@@ -19,7 +19,7 @@ const CHIPS: { id: TaskFilter; label: string }[] = [
   { id: 'overdue', label: 'Overdue' },
   { id: 'mine', label: 'Owned by me' },
   { id: 'urgent', label: 'Urgent' },
-  // TODO: Phase 2 — { id: 'js', label: 'JS priority' }
+  { id: 'completed', label: 'Completed' },
 ];
 
 export function FilterChips({ active }: { active: TaskFilter }) {

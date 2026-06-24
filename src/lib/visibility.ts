@@ -14,7 +14,7 @@ import { prisma } from '@/lib/db';
  * including Super Admin and OSD.
  */
 
-export type TaskFilter = 'all' | 'today' | 'overdue' | 'mine' | 'urgent';
+export type TaskFilter = 'all' | 'today' | 'overdue' | 'mine' | 'urgent' | 'completed';
 
 export type CallerSummary = {
   id: string;
@@ -103,9 +103,11 @@ function buildFilterClause(filter: TaskFilter, callerId: string): Prisma.TaskWhe
       return { priority: 'urgent' };
     case 'mine':
       return { ownerId: callerId };
+    case 'completed':
+      return { status: 'completed' };
     case 'all':
     default:
-      return {};
+      return { status: { not: 'completed' } };
   }
 }
 

@@ -19,7 +19,7 @@ import {
 
 import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/ui/Pill';
 
-const VALID_FILTERS: TaskFilter[] = ['all', 'today', 'overdue', 'mine', 'urgent'];
+const VALID_FILTERS: TaskFilter[] = ['all', 'today', 'overdue', 'mine', 'urgent', 'completed'];
 
 type PageProps = {
   searchParams?: { filter?: string; division?: string; group?: string };
@@ -219,6 +219,7 @@ function EmptyState({ filter }: { filter: TaskFilter }) {
     overdue: 'No overdue tasks. Stay on top.',
     mine: 'No tasks owned by you in this view.',
     urgent: 'No urgent tasks right now.',
+    completed: 'No completed tasks.',
   };
   return (
     <div className="rounded-xl border border-dashed border-line p-10 text-center bg-panel">

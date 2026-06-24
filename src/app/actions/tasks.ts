@@ -813,24 +813,36 @@ export async function deleteTaskAction(
       id: true,
       name: true,
       createdById: true,
-      _count: { select: { comments: true, collaborators: true } },
+      ownerId: true,
     },
   });
   if (!task) return fail('Task not found.', epoch);
 
-  // Solo check: no collaborators, no comments.
-  const isSolo = task._count.comments === 0 && task._count.collaborators === 0;
-  if (!isSolo) {
-    return fail('This task has been shared. Archive it instead of deleting.', epoch);
-  }
-  if (task.createdById !== me.id) {
-    return fail('Only the creator can delete a solo task.', epoch);
+  if (task.createdById !== me.id && task.ownerId !== me.id) {
+    return fail('Only the owner or creator can delete a task.', epoch);
   }
 
   try {
-    await prisma.$transaction([
-      prisma.task.delete({ where: { id: task.id } }),
-      prisma.auditLog.create({
+    await prisma.$transaction(async (tx) => {
+      const subtaskIds = (
+        await tx.task.findMany({
+          where: { parentTaskId: task.id },
+          select: { id: true },
+        })
+      ).map((s) => s.id);
+
+      if (subtaskIds.length > 0) {
+        await tx.attachment.deleteMany({
+          where: { ownerType: 'task', ownerId: { in: subtaskIds } },
+        });
+        await tx.task.deleteMany({ where: { parentTaskId: task.id } });
+      }
+
+      await tx.attachment.deleteMany({
+        where: { ownerType: 'task', ownerId: task.id },
+      });
+      await tx.task.delete({ where: { id: task.id } });
+      await tx.auditLog.create({
         data: {
           actorId: me.id,
           action: 'delete',
@@ -839,8 +851,8 @@ export async function deleteTaskAction(
           before: { name: task.name },
           after: {},
         },
-      }),
-    ]);
+      });
+    });
   } catch (err) {
     console.error('deleteTaskAction failed:', err);
     return fail('Could not delete.', epoch);

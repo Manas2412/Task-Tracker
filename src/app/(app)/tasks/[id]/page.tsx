@@ -60,7 +60,6 @@ export default async function TaskDetailPage({ params }: PageProps) {
       },
       linkedTimelineFile: true,
       tags: { include: { tag: { select: { id: true, name: true } } } },
-      _count: { select: { comments: true, collaborators: true } },
     },
   });
 
@@ -72,8 +71,9 @@ export default async function TaskDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  const isSolo = task._count.comments === 0 && task._count.collaborators === 0;
-  const canDelete = isSolo && task.createdById === session.user.id;
+  const canDelete =
+    task.createdById === session.user.id ||
+    task.ownerId === session.user.id;
 
   // Collaborator editing: owner, creator, or OSD / Super Admin can manage.
   const canEditCollaborators =
@@ -203,11 +203,9 @@ export default async function TaskDetailPage({ params }: PageProps) {
             taskId={task.id}
             canDelete={canDelete}
             reasonNoDelete={
-              !isSolo
-                ? 'Delete is unavailable once the task has been shared. Archive instead.'
-                : task.createdById !== session.user.id
-                  ? 'Only the creator can delete a solo task.'
-                  : undefined
+              !canDelete
+                ? 'Only the owner or creator can delete a task.'
+                : undefined
             }
           />
         </div>
