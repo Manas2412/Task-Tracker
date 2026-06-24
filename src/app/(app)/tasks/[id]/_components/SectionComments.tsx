@@ -280,7 +280,7 @@ function CommentRow({
               <button
                 type="button"
                 onClick={() => setMenuOpen(!menuOpen)}
-                className="w-5 h-5 grid place-items-center rounded-full text-ink-3 hover:text-ink hover:bg-line-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="w-5 h-5 grid place-items-center rounded-full text-ink-3 hover:text-ink hover:bg-line-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                 aria-label="Comment actions"
               >
                 <i className="ti ti-dots text-[13px]" aria-hidden="true" />
