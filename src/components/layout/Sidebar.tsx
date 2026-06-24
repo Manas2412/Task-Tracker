@@ -109,7 +109,7 @@ export function Sidebar({
         />
       ))}
 
-      {isSuperAdmin ? (
+      {isSuperAdmin || isOsd ? (
         <>
           <Group label="Super Admin" drawerMode={drawerMode} className="mt-4" />
           {ADMIN_ITEMS.map((item) => (

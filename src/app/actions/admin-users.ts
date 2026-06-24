@@ -62,11 +62,12 @@ async function requireSuperAdmin(): Promise<
 
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { isSuperAdmin: true, isActive: true },
+    select: { isSuperAdmin: true, isActive: true, hierarchySlot: true },
   });
   if (!me) return { ok: false, error: 'Your account could not be found.' };
   if (!me.isActive) return { ok: false, error: 'Your account is disabled.' };
-  if (!me.isSuperAdmin) return { ok: false, error: 'Super Admin access is required.' };
+  const isOsd = me.hierarchySlot === 'osd';
+  if (!me.isSuperAdmin && !isOsd) return { ok: false, error: 'Super Admin or OSD access is required.' };
   return { ok: true, userId: session.user.id };
 }
 

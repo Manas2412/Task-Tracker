@@ -5,19 +5,11 @@ import { cn } from '@/lib/utils';
 
 import { AdminSubNav } from './_components/AdminSubNav';
 
-/**
- * Admin layout — nests inside the (app) layout.
- *
- * The parent already runs the auth check and wraps everything in AppShell.
- * This layout only adds:
- *   - Super Admin guard (bounces non-admins to /tasks)
- *   - The admin chrome: "Super Admin Console" label + sub-nav strip
- */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  // Parent already redirected unauthed users, but defensively bounce if needed.
   if (!session?.user) redirect('/login');
-  if (!session.user.isSuperAdmin) redirect('/tasks');
+  const isOsd = session.user.hierarchySlot === 'osd';
+  if (!session.user.isSuperAdmin && !isOsd) redirect('/tasks');
 
   return (
     <div className="bg-canvas min-h-[calc(100dvh-3.5rem)] md:min-h-[calc(100dvh-4rem)]">

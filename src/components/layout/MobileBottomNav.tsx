@@ -129,7 +129,7 @@ export function MobileBottomNav({ isSuperAdmin, isOsd, isJs, unreadCount }: Mobi
                   {ADMIN_MORE_ITEMS.map((item) => {
                     if ('osdOnly' in item && item.osdOnly && !isOsd) return null;
                     if ('jsOnly' in item && item.jsOnly && !isJs) return null;
-                    if ('adminOnly' in item && item.adminOnly && !isSuperAdmin) return null;
+                    if ('adminOnly' in item && item.adminOnly && !isSuperAdmin && !isOsd) return null;
                     return (
                       <MoreMenuItem
                         key={item.href}
