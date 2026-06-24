@@ -16,28 +16,12 @@ import {
 } from '@/components/layout';
 import { Sheet, Switch } from '@/components/ui';
 import { createTaskAction } from '@/app/actions/tasks';
+import { registerAttachmentAction } from '@/app/actions/attachments';
 import {
   INITIAL_CREATE_STATE,
   type CreateTaskState,
 } from '@/app/actions/states';
 import { cn } from '@/lib/utils';
-
-/**
- * Quick Create — turn B of Phase 1.
- *
- * Architecture:
- *   - QuickCreateProvider owns the open/close state and renders the Sheet.
- *   - QuickCreateFab + QuickCreatePrimary are thin trigger buttons that
- *     pull `open()` from the context. They can sit anywhere in the page
- *     tree without prop-drilling.
- *   - QuickCreateForm uses useFormState. On state.ok we close the sheet
- *     and revalidatePath('/tasks') (server-side) brings the new task in.
- *
- * Form fields per PRD §5.1 — name (required) + Add more details expander
- * for description, due date, priority, visibility, milestone. Owner and
- * division default to the caller. Recurrence + collaborators + attachments
- * arrive in later turns when there's more data to wire to.
- */
 
 // ------------------------------------------------------------
 // Context
@@ -61,10 +45,11 @@ function useQuickCreate(): QuickCreateContextValue {
 
 type ProviderProps = {
   defaultDivisionId: string;
+  s3Configured: boolean;
   children: ReactNode;
 };
 
-export function QuickCreateProvider({ defaultDivisionId, children }: ProviderProps) {
+export function QuickCreateProvider({ defaultDivisionId, s3Configured, children }: ProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const close = () => setIsOpen(false);
   const open = () => setIsOpen(true);
@@ -74,9 +59,12 @@ export function QuickCreateProvider({ defaultDivisionId, children }: ProviderPro
       {children}
 
       <Sheet open={isOpen} onClose={close} title="Quick create">
-        {/* Mount fresh on every open so useFormState resets. */}
         {isOpen ? (
-          <QuickCreateForm onSuccess={close} defaultDivisionId={defaultDivisionId} />
+          <QuickCreateForm
+            onSuccess={close}
+            defaultDivisionId={defaultDivisionId}
+            s3Configured={s3Configured}
+          />
         ) : null}
       </Sheet>
     </QuickCreateContext.Provider>
@@ -108,6 +96,7 @@ export function QuickCreatePrimary() {
 type FormProps = {
   onSuccess: () => void;
   defaultDivisionId: string;
+  s3Configured: boolean;
 };
 
 const PRIORITIES = [
@@ -122,8 +111,17 @@ const VISIBILITIES = [
   { value: 'personal', label: 'Personal', icon: 'ti-lock' },
 ] as const;
 
-function QuickCreateForm({ onSuccess, defaultDivisionId }: FormProps) {
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function QuickCreateForm({ onSuccess, defaultDivisionId, s3Configured }: FormProps) {
   const formRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [state, formAction] = useFormState<CreateTaskState, FormData>(
     createTaskAction,
     INITIAL_CREATE_STATE,
@@ -134,14 +132,90 @@ function QuickCreateForm({ onSuccess, defaultDivisionId }: FormProps) {
   const [visibility, setVisibility] =
     useState<(typeof VISIBILITIES)[number]['value']>('division');
 
-  // Close on successful save. `epoch` ensures successive successes re-fire.
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // After task creation succeeds, upload the pending file if any, then close.
   useEffect(() => {
-    if (state.ok) {
+    if (!state.ok) return;
+    const taskId = state.taskId;
+
+    if (pendingFile && taskId) {
+      uploadFileToTask(pendingFile, taskId).then(() => {
+        formRef.current?.reset();
+        setPendingFile(null);
+        setUploadStatus(null);
+        onSuccess();
+      });
+    } else {
       formRef.current?.reset();
+      setPendingFile(null);
       onSuccess();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, state.epoch]);
+
+  async function uploadFileToTask(file: File, taskId: string) {
+    setUploadStatus(`Uploading ${file.name}…`);
+    setUploadError(null);
+    try {
+      const presignRes = await fetch('/api/attachments/upload-url', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'task',
+          parentId: taskId,
+          filename: file.name,
+          contentType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+        }),
+      });
+      if (!presignRes.ok) {
+        const body = await presignRes.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Could not start upload.');
+      }
+      const { key, url } = (await presignRes.json()) as { key: string; url: string };
+
+      const putRes = await fetch(url, {
+        method: 'PUT',
+        headers: { 'content-type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+      if (!putRes.ok) {
+        throw new Error(`Upload failed (${putRes.status}).`);
+      }
+
+      const fd = new FormData();
+      fd.set('scope', 'task');
+      fd.set('parentId', taskId);
+      fd.set('source', 'uploaded');
+      fd.set('key', key);
+      fd.set('fileName', file.name);
+      fd.set('mimeType', file.type || '');
+      fd.set('sizeBytes', String(file.size));
+      const registered = await registerAttachmentAction(undefined, fd);
+      if (!registered.ok) {
+        throw new Error(registered.error ?? 'Could not save the attachment.');
+      }
+    } catch (err) {
+      console.error('Post-create upload failed:', err);
+      setUploadError(err instanceof Error ? err.message : 'Upload failed.');
+    }
+    setUploadStatus(null);
+  }
+
+  const onFileChosen = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setUploadError(`File is over ${formatBytes(MAX_UPLOAD_BYTES)}.`);
+      return;
+    }
+    setUploadError(null);
+    setPendingFile(file);
+  };
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-3" noValidate>
@@ -203,7 +277,7 @@ function QuickCreateForm({ onSuccess, defaultDivisionId }: FormProps) {
         id="qc-more"
         className={cn(
           'overflow-hidden transition-[max-height,opacity] duration-300',
-          showMore ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0',
+          showMore ? 'max-h-[900px] opacity-100' : 'max-h-0 opacity-0',
         )}
       >
         <div className="flex flex-col gap-3.5 pb-1">
@@ -298,26 +372,81 @@ function QuickCreateForm({ onSuccess, defaultDivisionId }: FormProps) {
             <Switch name="milestone" ariaLabel="Mark as milestone" />
           </CheckRow>
 
-          {/* Drive link */}
-          <Field label="Attach link" error={state.fieldErrors?.driveUrl}>
-            <div className="flex gap-2">
-              <input
-                name="driveUrl"
-                type="url"
-                placeholder="Paste a Google Drive or any URL…"
+          {/* Attachments */}
+          <Field label="Attach">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!s3Configured}
+                title={s3Configured ? undefined : 'Storage is not configured. Use a link instead.'}
                 className={cn(
-                  'flex-1 px-3 py-2.5 rounded-lg border bg-panel text-[14px] text-ink outline-none focus:border-ink',
-                  state.fieldErrors?.driveUrl ? 'border-urgent' : 'border-line',
+                  'inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[13px] font-medium transition-colors',
+                  s3Configured
+                    ? 'border-line bg-panel text-ink hover:border-ink-4'
+                    : 'border-line bg-bg text-ink-3 cursor-not-allowed',
                 )}
-                maxLength={1000}
+              >
+                <i className="ti ti-cloud-upload text-[15px]" aria-hidden="true" />
+                Upload file
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={onFileChosen}
+                className="sr-only"
+                aria-hidden="true"
               />
             </div>
-            <p className="text-[10px] text-ink-3 mt-1">
-              Optional. File will be linked to the task after creation.
-            </p>
+
+            {pendingFile ? (
+              <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-bg border border-line rounded-lg">
+                <i className="ti ti-file text-[14px] text-ink-2" aria-hidden="true" />
+                <span className="flex-1 min-w-0 text-[12px] text-ink truncate">
+                  {pendingFile.name}
+                </span>
+                <span className="text-[10px] text-ink-3 shrink-0">
+                  {formatBytes(pendingFile.size)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPendingFile(null)}
+                  aria-label="Remove file"
+                  className="w-6 h-6 grid place-items-center rounded text-ink-3 hover:text-urgent shrink-0"
+                >
+                  <i className="ti ti-x text-[12px]" aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
+
+            {uploadError ? (
+              <p className="text-[11px] text-urgent mt-1">{uploadError}</p>
+            ) : null}
+          </Field>
+
+          {/* Drive link */}
+          <Field label="Or paste a link" error={state.fieldErrors?.driveUrl}>
+            <input
+              name="driveUrl"
+              type="url"
+              placeholder="Google Drive, Dropbox, or any URL…"
+              className={cn(
+                'w-full px-3 py-2.5 rounded-lg border bg-panel text-[14px] text-ink outline-none focus:border-ink',
+                state.fieldErrors?.driveUrl ? 'border-urgent' : 'border-line',
+              )}
+              maxLength={1000}
+            />
           </Field>
         </div>
       </div>
+
+      {/* Upload progress */}
+      {uploadStatus ? (
+        <p className="text-[12px] text-ink-2 inline-flex items-center gap-1.5">
+          <i className="ti ti-loader-2 animate-spin text-[13px]" aria-hidden="true" />
+          {uploadStatus}
+        </p>
+      ) : null}
 
       {/* Global error */}
       {state.error ? (
@@ -338,7 +467,7 @@ function QuickCreateForm({ onSuccess, defaultDivisionId }: FormProps) {
         >
           Cancel
         </button>
-        <SaveButton />
+        <SaveButton uploading={!!uploadStatus} />
       </div>
     </form>
   );
@@ -388,15 +517,16 @@ function CheckRow({
   );
 }
 
-function SaveButton() {
+function SaveButton({ uploading }: { uploading: boolean }) {
   const { pending } = useFormStatus();
+  const disabled = pending || uploading;
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={disabled}
       className="flex-1 py-3 rounded-lg bg-ink text-white text-[14px] font-medium transition-opacity disabled:opacity-60"
     >
-      {pending ? 'Saving…' : 'Save task'}
+      {uploading ? 'Uploading…' : pending ? 'Saving…' : 'Save task'}
     </button>
   );
 }

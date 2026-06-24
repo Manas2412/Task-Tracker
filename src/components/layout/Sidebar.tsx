@@ -91,7 +91,7 @@ export function Sidebar({
           onClick={onNavigate}
         />
       ) : null}
-      {isJs && !isOsd ? (
+      {isJs ? (
         <NavItem
           item={JS_DASHBOARD_ITEM}
           active={isActive(pathname, JS_DASHBOARD_ITEM.href)}
