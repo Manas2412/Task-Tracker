@@ -2,6 +2,7 @@ export { AppShell } from './AppShell';
 export { AppHeader } from './AppHeader';
 export { Sidebar } from './Sidebar';
 export { MobileNavDrawer } from './MobileNavDrawer';
+export { MobileBottomNav } from './MobileBottomNav';
 export { UserMenu } from './UserMenu';
 export { NotificationsBell, type BellNotification } from './NotificationsBell';
 export { RoleSwitcher } from './RoleSwitcher';

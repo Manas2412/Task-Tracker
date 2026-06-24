@@ -5,6 +5,7 @@ import { useState } from 'react';
 import type { BellNotification } from './NotificationsBell';
 
 import { AppHeader } from './AppHeader';
+import { MobileBottomNav } from './MobileBottomNav';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { Sidebar } from './Sidebar';
 
@@ -91,6 +92,15 @@ export function AppShell({
           {children}
         </main>
       </div>
+
+      <MobileBottomNav
+        isSuperAdmin={user.isSuperAdmin}
+        isOsd={user.isOsd}
+        unreadCount={notifications.unreadCount}
+      />
+
+      {/* Spacer so content isn't hidden behind the fixed bottom nav on mobile */}
+      <div className="h-14 md:hidden" aria-hidden="true" />
     </div>
   );
 }

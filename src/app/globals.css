@@ -94,3 +94,11 @@ body.sortable-dragging .sortable-target {
   background-color: rgba(180, 83, 9, 0.04);
   border-color: var(--accent-line);
 }
+
+/* ============================================================
+   Mobile bottom nav — safe area for iPhone home indicator
+   ============================================================ */
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
