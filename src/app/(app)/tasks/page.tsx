@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 
 import { PullToRefresh } from '@/components/ui';
@@ -83,7 +84,9 @@ export default async function TasksPage({ searchParams }: PageProps) {
           </div>
 
           <FilterChips active={filter} />
-          <DivisionControls divisions={divisions} />
+          <Suspense fallback={null}>
+            <DivisionControls divisions={divisions} />
+          </Suspense>
           <StatsStrip counts={counts} />
         </div>
 
