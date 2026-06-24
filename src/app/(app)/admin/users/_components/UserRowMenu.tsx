@@ -79,10 +79,10 @@ export function UserRowMenu({ user, divisions, supervisors, isSelf }: UserRowMen
             disabled={pending}
             title={user.isActive ? 'Disable user' : 'Enable user'}
             className={cn(
-              'w-8 h-8 grid place-items-center rounded-full transition-colors disabled:opacity-60',
+              'w-8 h-8 grid place-items-center rounded-full border transition-colors disabled:opacity-60',
               user.isActive
-                ? 'text-ink-3 hover:bg-urgent-soft hover:text-urgent'
-                : 'text-success hover:bg-success-soft',
+                ? 'text-urgent border-urgent/20 bg-urgent-soft hover:bg-urgent/10'
+                : 'text-success border-success/20 bg-success-soft hover:bg-success/10',
             )}
           >
             <i
