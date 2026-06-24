@@ -18,6 +18,8 @@ type AppShellProps = {
     isSuperAdmin: boolean;
     /** OSD slot OR Super Admin — gates Command Centre */
     isOsd: boolean;
+    /** JS slot — gates JS Dashboard */
+    isJs: boolean;
     /** Show RoleSwitcher when the caller has both Command Centre and Super Admin */
     canSwitchRole: boolean;
   };
@@ -69,6 +71,7 @@ export function AppShell({
         onClose={() => setDrawerOpen(false)}
         isSuperAdmin={user.isSuperAdmin}
         isOsd={user.isOsd}
+        isJs={user.isJs}
       />
 
       <div className="flex-1 grid md:grid-cols-[64px_1fr] lg:grid-cols-[240px_1fr]">
@@ -78,7 +81,7 @@ export function AppShell({
           className="hidden md:block border-r border-line bg-panel"
         >
           <div className="sticky top-16">
-            <Sidebar isSuperAdmin={user.isSuperAdmin} isOsd={user.isOsd} />
+            <Sidebar isSuperAdmin={user.isSuperAdmin} isOsd={user.isOsd} isJs={user.isJs} />
           </div>
         </aside>
 
@@ -96,6 +99,7 @@ export function AppShell({
       <MobileBottomNav
         isSuperAdmin={user.isSuperAdmin}
         isOsd={user.isOsd}
+        isJs={user.isJs}
         unreadCount={notifications.unreadCount}
       />
 

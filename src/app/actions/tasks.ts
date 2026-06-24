@@ -84,6 +84,13 @@ const createTaskSchema = z.object({
     .union([z.literal(''), z.string().uuid()])
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
+  driveUrl: z
+    .string()
+    .trim()
+    .optional()
+    .transform((s) => (s && s.length > 0 ? s : undefined))
+    .refine((s) => !s || /^https?:\/\//.test(s), 'URL must start with http:// or https://')
+    .refine((s) => !s || s.length <= 1000, 'URL is too long'),
 });
 
 type CreateTaskState = ActionState & { taskId?: string };
@@ -106,13 +113,14 @@ export async function createTaskAction(
     milestone: formData.get('milestone'),
     divisionId: formData.get('divisionId') || undefined,
     linkedTimelineFileId: formData.get('linkedTimelineFileId') || undefined,
+    driveUrl: formData.get('driveUrl') || undefined,
   });
 
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) {
       const key = String(issue.path[0]);
-      if (key === 'name' || key === 'dueDate') fieldErrors[key] = issue.message;
+      if (key === 'name' || key === 'dueDate' || key === 'driveUrl') fieldErrors[key] = issue.message;
     }
     return { ok: false, fieldErrors, epoch };
   }
@@ -169,6 +177,34 @@ export async function createTaskAction(
         payload: { name: task.name, priority: task.priority, milestone: task.milestone },
       },
     });
+
+    if (parsed.data.driveUrl) {
+      const url = parsed.data.driveUrl;
+      let fileName = 'Linked file';
+      try {
+        const urlObj = new URL(url);
+        const pathParts = urlObj.pathname.split('/').filter(Boolean);
+        if (pathParts.length > 0) {
+          const last = pathParts[pathParts.length - 1];
+          if (last.length > 0 && last.length < 100) fileName = decodeURIComponent(last);
+        }
+      } catch {
+        // Keep default fileName
+      }
+
+      await prisma.attachment.create({
+        data: {
+          ownerType: 'task',
+          ownerId: task.id,
+          fileName,
+          fileUrl: url,
+          mimeType: null,
+          sizeBytes: null,
+          source: 'drive_link',
+          uploadedById: meRow.id,
+        },
+      });
+    }
 
     revalidatePath('/tasks');
     return { ok: true, taskId: task.id, epoch };

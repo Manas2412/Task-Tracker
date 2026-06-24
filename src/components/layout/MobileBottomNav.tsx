@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 type MobileBottomNavProps = {
   isSuperAdmin: boolean;
   isOsd: boolean;
+  isJs: boolean;
   unreadCount: number;
 };
 
@@ -27,11 +28,12 @@ const MORE_ITEMS = [
 
 const ADMIN_MORE_ITEMS = [
   { href: '/command-centre', label: 'Command Centre', icon: 'ti-radar-2', osdOnly: true },
+  { href: '/js-dashboard', label: 'JS Dashboard', icon: 'ti-bookmark-filled', jsOnly: true },
   { href: '/admin/structure', label: 'Structure', icon: 'ti-sitemap', adminOnly: true },
   { href: '/admin/users', label: 'Users', icon: 'ti-users', adminOnly: true },
 ] as const;
 
-export function MobileBottomNav({ isSuperAdmin, isOsd, unreadCount }: MobileBottomNavProps) {
+export function MobileBottomNav({ isSuperAdmin, isOsd, isJs, unreadCount }: MobileBottomNavProps) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -121,11 +123,12 @@ export function MobileBottomNav({ isSuperAdmin, isOsd, unreadCount }: MobileBott
                   active={isActive(pathname, item.href)}
                 />
               ))}
-              {(isSuperAdmin || isOsd) ? (
+              {(isSuperAdmin || isOsd || isJs) ? (
                 <>
                   <div className="border-t border-line-2 mx-3" />
                   {ADMIN_MORE_ITEMS.map((item) => {
                     if ('osdOnly' in item && item.osdOnly && !isOsd) return null;
+                    if ('jsOnly' in item && item.jsOnly && !isJs) return null;
                     if ('adminOnly' in item && item.adminOnly && !isSuperAdmin) return null;
                     return (
                       <MoreMenuItem

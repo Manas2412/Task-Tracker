@@ -44,6 +44,8 @@ type SidebarProps = {
   isSuperAdmin: boolean;
   /** OSD or Super Admin — gates Command Centre */
   isOsd: boolean;
+  /** JS slot — gates JS Dashboard */
+  isJs: boolean;
   /** mobile drawer mode renders labels regardless of breakpoint */
   drawerMode?: boolean;
   onNavigate?: () => void;
@@ -56,9 +58,17 @@ const COMMAND_CENTRE_ITEM: Item = {
   phase: 1,
 };
 
+const JS_DASHBOARD_ITEM: Item = {
+  href: '/js-dashboard',
+  label: 'JS Dashboard',
+  icon: 'ti-bookmark-filled',
+  phase: 1,
+};
+
 export function Sidebar({
   isSuperAdmin,
   isOsd,
+  isJs,
   drawerMode = false,
   onNavigate,
 }: SidebarProps) {
@@ -77,6 +87,14 @@ export function Sidebar({
         <NavItem
           item={COMMAND_CENTRE_ITEM}
           active={isActive(pathname, COMMAND_CENTRE_ITEM.href)}
+          drawerMode={drawerMode}
+          onClick={onNavigate}
+        />
+      ) : null}
+      {isJs && !isOsd ? (
+        <NavItem
+          item={JS_DASHBOARD_ITEM}
+          active={isActive(pathname, JS_DASHBOARD_ITEM.href)}
           drawerMode={drawerMode}
           onClick={onNavigate}
         />

@@ -10,6 +10,7 @@ type MobileNavDrawerProps = {
   onClose: () => void;
   isSuperAdmin: boolean;
   isOsd: boolean;
+  isJs: boolean;
 };
 
 /**
@@ -22,6 +23,7 @@ export function MobileNavDrawer({
   onClose,
   isSuperAdmin,
   isOsd,
+  isJs,
 }: MobileNavDrawerProps) {
   useEffect(() => {
     if (!open) return;
@@ -68,6 +70,7 @@ export function MobileNavDrawer({
         <Sidebar
           isSuperAdmin={isSuperAdmin}
           isOsd={isOsd}
+          isJs={isJs}
           drawerMode
           onNavigate={onClose}
         />

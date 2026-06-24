@@ -203,7 +203,7 @@ function QuickCreateForm({ onSuccess, defaultDivisionId }: FormProps) {
         id="qc-more"
         className={cn(
           'overflow-hidden transition-[max-height,opacity] duration-300',
-          showMore ? 'max-h-[640px] opacity-100' : 'max-h-0 opacity-0',
+          showMore ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0',
         )}
       >
         <div className="flex flex-col gap-3.5 pb-1">
@@ -297,6 +297,25 @@ function QuickCreateForm({ onSuccess, defaultDivisionId }: FormProps) {
           >
             <Switch name="milestone" ariaLabel="Mark as milestone" />
           </CheckRow>
+
+          {/* Drive link */}
+          <Field label="Attach link" error={state.fieldErrors?.driveUrl}>
+            <div className="flex gap-2">
+              <input
+                name="driveUrl"
+                type="url"
+                placeholder="Paste a Google Drive or any URL…"
+                className={cn(
+                  'flex-1 px-3 py-2.5 rounded-lg border bg-panel text-[14px] text-ink outline-none focus:border-ink',
+                  state.fieldErrors?.driveUrl ? 'border-urgent' : 'border-line',
+                )}
+                maxLength={1000}
+              />
+            </div>
+            <p className="text-[10px] text-ink-3 mt-1">
+              Optional. File will be linked to the task after creation.
+            </p>
+          </Field>
         </div>
       </div>
 

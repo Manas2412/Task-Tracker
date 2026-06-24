@@ -51,6 +51,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }));
 
   const isOsd = me.hierarchySlot === 'osd' || me.isSuperAdmin;
+  const isJs = me.hierarchySlot === 'js' || isOsd;
   // Role switcher appears only when both surfaces are accessible.
   const canSwitchRole = isOsd && me.isSuperAdmin;
 
@@ -63,6 +64,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         designation: me.designation,
         isSuperAdmin: me.isSuperAdmin,
         isOsd,
+        isJs,
         canSwitchRole,
       }}
       notifications={{ unreadCount, recent }}
