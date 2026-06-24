@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
 
 import { Sheet } from '@/components/ui/Sheet';
 import { EditUserDialog } from './EditUserDialog';
@@ -235,19 +234,35 @@ function ChangeDivisionDialog({
   currentDivisionId: string;
   divisions: { id: string; name: string }[];
 }) {
-  const formRef = useRef<HTMLFormElement>(null);
-  const [state, formAction] = useFormState(changeDivisionAction, {
-    ok: false,
-    epoch: 0,
-  });
+  const [selected, setSelected] = useState(currentDivisionId);
+  const [saving, startSaving] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (state.ok) {
-      formRef.current?.reset();
-      onClose();
+    if (open) {
+      setSelected(currentDivisionId);
+      setError(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.ok, state.epoch]);
+  }, [open, currentDivisionId]);
+
+  const handleSave = () => {
+    if (selected === currentDivisionId) {
+      onClose();
+      return;
+    }
+    setError(null);
+    const fd = new FormData();
+    fd.set('userId', userId);
+    fd.set('divisionId', selected);
+    startSaving(async () => {
+      const result = await changeDivisionAction(undefined, fd);
+      if (result.ok) {
+        onClose();
+      } else {
+        setError(result.error ?? 'Could not change division.');
+      }
+    });
+  };
 
   return (
     <Sheet
@@ -257,14 +272,12 @@ function ChangeDivisionDialog({
       subtitle={`Reassign ${userName} to a different division.`}
     >
       {open ? (
-        <form ref={formRef} action={formAction} className="flex flex-col gap-3">
-          <input type="hidden" name="userId" value={userId} />
-
+        <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-medium text-ink-2">Division</span>
             <select
-              name="divisionId"
-              defaultValue={currentDivisionId}
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-line bg-panel text-[13px] text-ink outline-none focus:border-ink"
             >
               {divisions.map((d) => (
@@ -275,12 +288,12 @@ function ChangeDivisionDialog({
             </select>
           </label>
 
-          {state.error ? (
+          {error ? (
             <p
               role="alert"
               className="text-[12px] text-urgent bg-urgent-soft border border-urgent/20 rounded-lg px-3 py-2"
             >
-              {state.error}
+              {error}
             </p>
           ) : null}
 
@@ -292,23 +305,17 @@ function ChangeDivisionDialog({
             >
               Cancel
             </button>
-            <SubmitButton />
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
           </div>
-        </form>
+        </div>
       ) : null}
     </Sheet>
-  );
-}
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
-    >
-      {pending ? 'Saving…' : 'Save'}
-    </button>
   );
 }
