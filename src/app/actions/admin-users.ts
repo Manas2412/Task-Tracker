@@ -530,3 +530,53 @@ export async function setUserSuperAdminAction(
     return fail('Could not change role.', epoch);
   }
 }
+
+// ============================================================
+// changeDivisionAction — quick division reassignment
+// ============================================================
+
+const changeDivisionSchema = z.object({
+  userId: z.string().uuid(),
+  divisionId: z.string().uuid('Pick a division'),
+});
+
+export async function changeDivisionAction(
+  prev: AdminUserState | undefined,
+  formData: FormData,
+): Promise<AdminUserState> {
+  const epoch = bump(prev);
+  const guard = await requireSuperAdmin();
+  if (!guard.ok) return fail(guard.error, epoch);
+
+  const parsed = changeDivisionSchema.safeParse({
+    userId: formData.get('userId'),
+    divisionId: formData.get('divisionId'),
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const before = await prisma.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { divisionId: true },
+  });
+  if (!before) return fail('User not found.', epoch);
+  if (before.divisionId === parsed.data.divisionId) return ok(epoch);
+
+  try {
+    await prisma.user.update({
+      where: { id: parsed.data.userId },
+      data: { divisionId: parsed.data.divisionId, subDivisionId: null },
+    });
+    await audit(
+      guard.userId,
+      'update',
+      parsed.data.userId,
+      { divisionId: before.divisionId },
+      { divisionId: parsed.data.divisionId },
+    );
+    revalidateAll();
+    return ok(epoch);
+  } catch (err) {
+    console.error('changeDivisionAction failed:', err);
+    return fail('Could not change division.', epoch);
+  }
+}

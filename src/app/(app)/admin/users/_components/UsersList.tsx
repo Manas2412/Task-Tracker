@@ -171,6 +171,7 @@ function DesktopRow({
             id: u.id,
             name: u.name,
             isActive: u.isActive,
+            divisionId: u.divisionId,
             defaults: rowToDefaults(u),
           }}
           divisions={divisions}
@@ -214,6 +215,7 @@ function MobileRow({
               id: u.id,
               name: u.name,
               isActive: u.isActive,
+              divisionId: u.divisionId,
               defaults: rowToDefaults(u),
             }}
             divisions={divisions}
