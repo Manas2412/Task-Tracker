@@ -15,8 +15,10 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
             cd /var/www/myas
             git pull origin main
             pnpm install --frozen-lockfile
+            npx prisma db push --accept-data-loss
             pnpm build
             pm2 restart myas
