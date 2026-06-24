@@ -191,40 +191,31 @@ function CommentRow({
   currentUserId,
   mentionables,
   taskId,
+  showActions,
 }: {
   comment: Reply;
   compact?: boolean;
   currentUserId: string;
   mentionables: Mentionable[];
   taskId: string;
+  showActions?: boolean;
 }) {
-  const isOwn = comment.userId === currentUserId;
-  const elapsed = Date.now() - new Date(comment.createdAt).getTime();
-  const canModify = isOwn && elapsed < EDIT_WINDOW_MS;
-
+  const isOwn = String(comment.userId) === String(currentUserId);
+  const [windowOpen, setWindowOpen] = useState(() => {
+    const elapsed = Date.now() - new Date(comment.createdAt).getTime();
+    return isOwn && elapsed < EDIT_WINDOW_MS;
+  });
   const [editing, setEditing] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!menuOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [menuOpen]);
-
-  // Auto-close menu when edit window expires
-  useEffect(() => {
-    if (!canModify || !menuOpen) return;
+    if (!windowOpen) return;
+    const elapsed = Date.now() - new Date(comment.createdAt).getTime();
     const remaining = EDIT_WINDOW_MS - elapsed;
-    if (remaining <= 0) { setMenuOpen(false); return; }
-    const timer = setTimeout(() => setMenuOpen(false), remaining);
+    if (remaining <= 0) { setWindowOpen(false); return; }
+    const timer = setTimeout(() => setWindowOpen(false), remaining);
     return () => clearTimeout(timer);
-  }, [canModify, menuOpen, elapsed]);
+  }, [windowOpen, comment.createdAt]);
 
   if (editing) {
     return (
@@ -250,7 +241,7 @@ function CommentRow({
   }
 
   return (
-    <div className={cn('flex gap-2.5 group', compact && 'gap-2')}>
+    <div className={cn('flex gap-2.5', compact && 'gap-2')}>
       <Avatar
         initials={initialsOf(comment.user.name)}
         colour={comment.user.division.avatarColour}
@@ -274,32 +265,6 @@ function CommentRow({
           >
             {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
           </time>
-
-          {canModify ? (
-            <div ref={menuRef} className="relative ml-1">
-              <button
-                type="button"
-                onClick={() => setMenuOpen(!menuOpen)}
-                className="w-5 h-5 grid place-items-center rounded-full text-ink-3 hover:text-ink hover:bg-line-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
-                aria-label="Comment actions"
-              >
-                <i className="ti ti-dots text-[13px]" aria-hidden="true" />
-              </button>
-              {menuOpen ? (
-                <div className="absolute right-0 top-full mt-1 z-30 min-w-[120px] rounded-lg border border-line bg-panel shadow-xl overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => { setMenuOpen(false); setEditing(true); }}
-                    className="w-full text-left px-3 py-2 text-[12px] text-ink-2 hover:bg-bg flex items-center gap-2"
-                  >
-                    <i className="ti ti-pencil text-[13px]" aria-hidden="true" />
-                    Edit
-                  </button>
-                  <DeleteButton commentId={comment.id} onDone={() => setMenuOpen(false)} />
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </header>
         <p
           className={cn(
@@ -317,48 +282,53 @@ function CommentRow({
             />
           </div>
         ) : null}
+
+        {/* Inline edit/delete actions — visible text links, like Reply */}
+        {windowOpen && !deleting ? (
+          <div className="flex items-center gap-3 mt-1">
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-[11px] text-ink-3 hover:text-primary font-medium flex items-center gap-1"
+            >
+              <i className="ti ti-pencil text-[12px]" aria-hidden="true" />
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleting(true)}
+              className="text-[11px] text-ink-3 hover:text-urgent font-medium flex items-center gap-1"
+            >
+              <i className="ti ti-trash text-[12px]" aria-hidden="true" />
+              Delete
+            </button>
+          </div>
+        ) : null}
+
+        {deleting ? (
+          <DeleteConfirm
+            commentId={comment.id}
+            onCancel={() => setDeleting(false)}
+          />
+        ) : null}
       </div>
     </div>
   );
 }
 
-function DeleteButton({ commentId, onDone }: { commentId: string; onDone: () => void }) {
+function DeleteConfirm({ commentId, onCancel }: { commentId: string; onCancel: () => void }) {
   const [state, formAction] = useFormState(deleteCommentAction, { ok: false, epoch: 0 });
-  const [confirming, setConfirming] = useState(false);
-
-  useEffect(() => {
-    if (state.ok) onDone();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.ok, state.epoch]);
-
-  if (!confirming) {
-    return (
-      <button
-        type="button"
-        onClick={() => setConfirming(true)}
-        className="w-full text-left px-3 py-2 text-[12px] text-urgent hover:bg-bg flex items-center gap-2"
-      >
-        <i className="ti ti-trash text-[13px]" aria-hidden="true" />
-        Delete
-      </button>
-    );
-  }
 
   return (
-    <form action={formAction} className="px-3 py-2">
+    <form action={formAction} className="mt-1.5">
       <input type="hidden" name="commentId" value={commentId} />
       <p className="text-[11px] text-ink-2 mb-1.5">Delete this comment?</p>
-      <div className="flex gap-1.5">
-        <button
-          type="submit"
-          className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-urgent text-white"
-        >
-          Delete
-        </button>
+      <div className="flex gap-2">
+        <SubmitDeleteButton />
         <button
           type="button"
-          onClick={() => setConfirming(false)}
-          className="px-2.5 py-1 rounded-md text-[11px] font-medium text-ink-2 hover:bg-bg"
+          onClick={onCancel}
+          className="px-2.5 py-1 rounded-md text-[11px] font-medium text-ink-3 hover:text-ink"
         >
           Cancel
         </button>
@@ -367,6 +337,19 @@ function DeleteButton({ commentId, onDone }: { commentId: string; onDone: () => 
         <p className="text-[10px] text-urgent mt-1">{state.error}</p>
       ) : null}
     </form>
+  );
+}
+
+function SubmitDeleteButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-urgent text-white disabled:opacity-50"
+    >
+      {pending ? 'Deleting…' : 'Delete'}
+    </button>
   );
 }
 
