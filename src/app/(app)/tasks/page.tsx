@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db';
 import { formatDue, initialsOf } from '@/lib/format';
 import { fetchTaskCounts, fetchVisibleTasks, type TaskFilter } from '@/lib/visibility';
 
+import { DivisionControls } from './_components/DivisionControls';
 import { FilterChips } from './_components/FilterChips';
 import { StatsStrip } from './_components/StatsStrip';
 import { TaskListItem } from './_components/TaskListItem';
@@ -20,7 +21,7 @@ import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/
 const VALID_FILTERS: TaskFilter[] = ['all', 'today', 'overdue', 'mine', 'urgent'];
 
 type PageProps = {
-  searchParams?: { filter?: string };
+  searchParams?: { filter?: string; division?: string; group?: string };
 };
 
 export default async function TasksPage({ searchParams }: PageProps) {
@@ -33,8 +34,9 @@ export default async function TasksPage({ searchParams }: PageProps) {
     ? ((searchParams?.filter as TaskFilter) ?? 'all')
     : 'all';
 
-  // Caller's profile — drives default division for Quick Create and the
-  // archive-permission check on each row.
+  const divisionFilter = searchParams?.division ?? '';
+  const groupByDivision = searchParams?.group === 'division';
+
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: {
@@ -48,10 +50,17 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
   const isAdminLike = me.isSuperAdmin || me.hierarchySlot === 'osd';
 
-  const [tasks, counts] = await Promise.all([
-    fetchVisibleTasks({ callerId: me.id, filter }),
+  const [tasks, counts, divisions] = await Promise.all([
+    fetchVisibleTasks({ callerId: me.id, filter, divisionId: divisionFilter || undefined }),
     fetchTaskCounts(me.id),
+    prisma.division.findMany({
+      where: { kind: 'division' },
+      select: { id: true, name: true },
+      orderBy: { displayOrder: 'asc' },
+    }),
   ]);
+
+  const grouped = groupByDivision ? groupTasksByDivision(tasks) : null;
 
   return (
     <QuickCreateProvider defaultDivisionId={me.divisionId}>
@@ -74,6 +83,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
           </div>
 
           <FilterChips active={filter} />
+          <DivisionControls divisions={divisions} />
           <StatsStrip counts={counts} />
         </div>
 
@@ -88,47 +98,35 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
           {tasks.length === 0 ? (
             <EmptyState filter={filter} />
+          ) : grouped ? (
+            <div className="space-y-6">
+              {grouped.map((group) => (
+                <section key={group.divisionId}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: group.colour }}
+                    />
+                    <h3 className="text-[12px] font-medium text-ink-2 uppercase tracking-[0.06em]">
+                      {group.divisionName}
+                    </h3>
+                    <span className="text-[11px] text-ink-3">
+                      {group.tasks.length}
+                    </span>
+                  </div>
+                  <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
+                    {group.tasks.map((t) => (
+                      <TaskRow key={t.id} task={t} meId={me.id} isAdminLike={isAdminLike} />
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
           ) : (
             <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
-              {tasks.map((t) => {
-                const subtaskTotal = t.subtasks.length;
-                const subtaskDone = t.subtasks.filter((s) => s.status === 'completed').length;
-                const due = formatDue(t.dueDate);
-                const canArchive =
-                  t.ownerId === me.id ||
-                  t.createdById === me.id ||
-                  isAdminLike;
-
-                return (
-                  <li key={t.id}>
-                    <TaskListItem
-                      canArchive={canArchive}
-                      taskId={t.id}
-                      name={t.name}
-                      division={{ name: t.division.name }}
-                      status={t.status as PillStatusTone}
-                      priority={t.priority as PillPriorityTone}
-                      jsPriorityLane={t.jsPriorityLane as PillJsLane | null}
-                      milestone={t.milestone}
-                      due={due}
-                      owner={{
-                        initials: initialsOf(t.owner.name),
-                        colour: t.owner.division.avatarColour,
-                        name: t.owner.name,
-                      }}
-                      subtasks={
-                        subtaskTotal > 0 ? { done: subtaskDone, total: subtaskTotal } : undefined
-                      }
-                      primaryDivisionName={
-                        t.collaborators.some((c) => c.role === 'division_lead')
-                          ? t.division.name
-                          : undefined
-                      }
-                      href={`/tasks/${t.id}`}
-                    />
-                  </li>
-                );
-              })}
+              {tasks.map((t) => (
+                <TaskRow key={t.id} task={t} meId={me.id} isAdminLike={isAdminLike} />
+              ))}
             </ul>
           )}
         </div>
@@ -139,6 +137,76 @@ export default async function TasksPage({ searchParams }: PageProps) {
       </PullToRefresh>
     </QuickCreateProvider>
   );
+}
+
+type VisibleTask = Awaited<ReturnType<typeof fetchVisibleTasks>>[number];
+
+function TaskRow({
+  task: t,
+  meId,
+  isAdminLike,
+}: {
+  task: VisibleTask;
+  meId: string;
+  isAdminLike: boolean;
+}) {
+  const subtaskTotal = t.subtasks.length;
+  const subtaskDone = t.subtasks.filter((s) => s.status === 'completed').length;
+  const due = formatDue(t.dueDate);
+  const canArchive = t.ownerId === meId || t.createdById === meId || isAdminLike;
+
+  return (
+    <li>
+      <TaskListItem
+        canArchive={canArchive}
+        taskId={t.id}
+        name={t.name}
+        division={{ name: t.division.name }}
+        status={t.status as PillStatusTone}
+        priority={t.priority as PillPriorityTone}
+        jsPriorityLane={t.jsPriorityLane as PillJsLane | null}
+        milestone={t.milestone}
+        due={due}
+        owner={{
+          initials: initialsOf(t.owner.name),
+          colour: t.owner.division.avatarColour,
+          name: t.owner.name,
+        }}
+        subtasks={subtaskTotal > 0 ? { done: subtaskDone, total: subtaskTotal } : undefined}
+        primaryDivisionName={
+          t.collaborators.some((c) => c.role === 'division_lead')
+            ? t.division.name
+            : undefined
+        }
+        href={`/tasks/${t.id}`}
+      />
+    </li>
+  );
+}
+
+type DivisionGroup = {
+  divisionId: string;
+  divisionName: string;
+  colour: string;
+  tasks: VisibleTask[];
+};
+
+function groupTasksByDivision(tasks: VisibleTask[]): DivisionGroup[] {
+  const map = new Map<string, DivisionGroup>();
+  for (const t of tasks) {
+    let group = map.get(t.divisionId);
+    if (!group) {
+      group = {
+        divisionId: t.divisionId,
+        divisionName: t.division.name,
+        colour: t.division.avatarColour,
+        tasks: [],
+      };
+      map.set(t.divisionId, group);
+    }
+    group.tasks.push(t);
+  }
+  return Array.from(map.values());
 }
 
 function EmptyState({ filter }: { filter: TaskFilter }) {

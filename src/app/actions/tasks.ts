@@ -559,6 +559,7 @@ export async function toggleSubtaskAction(
 const postCommentSchema = z.object({
   taskId: z.string().uuid(),
   body: z.string().trim().min(1, 'Comment cannot be empty').max(4000),
+  parentCommentId: z.string().uuid().optional(),
 });
 
 /**
@@ -593,9 +594,11 @@ export async function postCommentAction(
   const me = await requireSession();
   if (!me) return fail('You are signed out.', epoch);
 
+  const rawParent = formData.get('parentCommentId');
   const parsed = postCommentSchema.safeParse({
     taskId: formData.get('taskId'),
     body: formData.get('body'),
+    parentCommentId: rawParent && rawParent !== '' ? String(rawParent) : undefined,
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -619,6 +622,7 @@ export async function postCommentAction(
         userId: me.id,
         body: parsed.data.body,
         mentions,
+        parentCommentId: parsed.data.parentCommentId ?? null,
       },
     });
   } catch (err) {

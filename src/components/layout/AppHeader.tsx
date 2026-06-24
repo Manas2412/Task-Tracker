@@ -1,5 +1,6 @@
 'use client';
 
+import { AnalyticsBadge } from '../AnalyticsBadge';
 import { NotificationsBell, type BellNotification } from './NotificationsBell';
 import { RoleSwitcher } from './RoleSwitcher';
 import { SearchField } from './SearchField';
@@ -58,6 +59,10 @@ export function AppHeader({ onOpenDrawer, notifications, user }: AppHeaderProps)
         <SearchField />
 
         {user.canSwitchRole ? <RoleSwitcher /> : null}
+
+        <div className="hidden md:block">
+          <AnalyticsBadge />
+        </div>
 
         <NotificationsBell
           unreadCount={notifications.unreadCount}

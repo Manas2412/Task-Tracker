@@ -119,6 +119,7 @@ export type VisibleTask = Task & {
 export async function fetchVisibleTasks(opts: {
   callerId: string;
   filter: TaskFilter;
+  divisionId?: string;
 }): Promise<VisibleTask[]> {
   const me = await prisma.user.findUnique({
     where: { id: opts.callerId },
@@ -135,11 +136,19 @@ export async function fetchVisibleTasks(opts: {
   const visibilityClauses = await buildVisibilityClauses(me);
   const filterClause = buildFilterClause(opts.filter, me.id);
 
+  const andClauses: Prisma.TaskWhereInput[] = [
+    { OR: visibilityClauses },
+    filterClause,
+  ];
+  if (opts.divisionId) {
+    andClauses.push({ divisionId: opts.divisionId });
+  }
+
   const tasks = await prisma.task.findMany({
     where: {
       archivedAt: null,
       parentTaskId: null,
-      AND: [{ OR: visibilityClauses }, filterClause],
+      AND: andClauses,
     },
     include: {
       owner: { include: { division: true } },

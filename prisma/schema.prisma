@@ -345,13 +345,17 @@ model TaskComment {
   body             String
   mentions         String[]    @default([]) @db.Uuid
   statusTransition TaskStatus? @map("status_transition")
+  parentCommentId  String?     @map("parent_comment_id") @db.Uuid
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   editedAt         DateTime?   @map("edited_at") @db.Timestamptz(6)
 
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id])
+  task          Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id])
+  parentComment TaskComment?  @relation("CommentThread", fields: [parentCommentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies       TaskComment[] @relation("CommentThread")
 
   @@index([taskId, createdAt(sort: Desc)])
+  @@index([parentCommentId])
   @@map("task_comments")
 }
 

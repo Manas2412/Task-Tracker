@@ -44,7 +44,14 @@ export default async function TaskDetailPage({ params }: PageProps) {
         orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
       },
       comments: {
-        include: { user: { include: { division: true } } },
+        where: { parentCommentId: null },
+        include: {
+          user: { include: { division: true } },
+          replies: {
+            include: { user: { include: { division: true } } },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
         orderBy: { createdAt: 'asc' },
       },
       activity: {
