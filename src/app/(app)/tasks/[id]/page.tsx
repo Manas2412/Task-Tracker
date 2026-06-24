@@ -309,6 +309,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         taskId={task.id}
         comments={task.comments}
         mentionables={mentionables}
+        currentUserId={session.user.id}
       />
 
       <SectionActivity

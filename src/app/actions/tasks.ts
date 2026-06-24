@@ -635,6 +635,108 @@ export async function postCommentAction(
 }
 
 // ============================================================
+// editComment + deleteComment — 5-minute window, own comments only
+// ============================================================
+
+const COMMENT_EDIT_WINDOW_MS = 5 * 60 * 1000;
+
+const editCommentSchema = z.object({
+  commentId: z.string().uuid(),
+  body: z.string().trim().min(1, 'Comment cannot be empty').max(4000),
+});
+
+export async function editCommentAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const parsed = editCommentSchema.safeParse({
+    commentId: formData.get('commentId'),
+    body: formData.get('body'),
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues)
+      fieldErrors[String(issue.path[0])] = issue.message;
+    return { ok: false, fieldErrors, epoch };
+  }
+
+  const comment = await prisma.taskComment.findUnique({
+    where: { id: parsed.data.commentId },
+    select: { id: true, userId: true, taskId: true, createdAt: true },
+  });
+  if (!comment) return fail('Comment not found.', epoch);
+  if (comment.userId !== me.id) return fail('You can only edit your own comments.', epoch);
+
+  const elapsed = Date.now() - comment.createdAt.getTime();
+  if (elapsed > COMMENT_EDIT_WINDOW_MS) {
+    return fail('Comments can only be edited within 5 minutes of posting.', epoch);
+  }
+
+  const mentions = await resolveMentions(parsed.data.body);
+
+  try {
+    await prisma.taskComment.update({
+      where: { id: comment.id },
+      data: {
+        body: parsed.data.body,
+        mentions,
+        editedAt: new Date(),
+      },
+    });
+  } catch (err) {
+    console.error('editCommentAction failed:', err);
+    return fail('Could not edit comment.', epoch);
+  }
+
+  revalidateTask(comment.taskId);
+  return ok(epoch);
+}
+
+const deleteCommentSchema = z.object({
+  commentId: z.string().uuid(),
+});
+
+export async function deleteCommentAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const parsed = deleteCommentSchema.safeParse({
+    commentId: formData.get('commentId'),
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const comment = await prisma.taskComment.findUnique({
+    where: { id: parsed.data.commentId },
+    select: { id: true, userId: true, taskId: true, createdAt: true },
+  });
+  if (!comment) return fail('Comment not found.', epoch);
+  if (comment.userId !== me.id) return fail('You can only delete your own comments.', epoch);
+
+  const elapsed = Date.now() - comment.createdAt.getTime();
+  if (elapsed > COMMENT_EDIT_WINDOW_MS) {
+    return fail('Comments can only be deleted within 5 minutes of posting.', epoch);
+  }
+
+  try {
+    await prisma.taskComment.delete({ where: { id: comment.id } });
+  } catch (err) {
+    console.error('deleteCommentAction failed:', err);
+    return fail('Could not delete comment.', epoch);
+  }
+
+  revalidateTask(comment.taskId);
+  return ok(epoch);
+}
+
+// ============================================================
 // archiveTask + deleteTask (solo-only) + restoreTask
 // ============================================================
 
