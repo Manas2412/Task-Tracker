@@ -3,7 +3,8 @@
  *
  * 1. Cleans all existing tasks, timeline files, and related data
  * 2. Creates new divisions (NSDF, SGM, Media & IT, HMAYS, KIM sub-division)
- * 3. Seeds all ~93 tasks from the PDF across correct divisions
+ * 3. Creates Director-level users for each new division
+ * 4. Seeds all ~93 tasks from the PDF across correct divisions with proper owners
  *
  * Run with:
  *   npx tsx prisma/seed-pdf-tasks.ts
@@ -11,7 +12,11 @@
 
 import { PrismaClient } from '@prisma/client';
 
+import { hashPassword } from '../src/lib/auth/password';
+
 const prisma = new PrismaClient();
+
+const DEFAULT_PASSWORD = 'Test1234!';
 
 // ---------------------------------------------------------------------------
 // Clean
@@ -65,6 +70,37 @@ async function findOrCreateDivision(
   });
 }
 
+async function findOrCreateUser(
+  name: string,
+  username: string,
+  designation: string,
+  hierarchySlot: 'js' | 'osd' | 'director' | 'deputy_secretary' | 'under_secretary' | 'section_officer' | 'aso',
+  divisionId: string,
+  createdById: string,
+  passwordHash: string,
+  opts?: { supervisorId?: string; isPmu?: boolean; pmuRole?: string },
+) {
+  const existing = await prisma.user.findFirst({ where: { username } });
+  if (existing) return existing;
+  return prisma.user.create({
+    data: {
+      name,
+      username,
+      passwordHash,
+      designation,
+      hierarchySlot,
+      divisionId,
+      isActive: true,
+      isSuperAdmin: false,
+      forcePasswordChange: true,
+      createdById,
+      supervisorId: opts?.supervisorId,
+      isPmu: opts?.isPmu ?? false,
+      pmuRole: opts?.pmuRole as any,
+    },
+  });
+}
+
 function createTask(
   name: string,
   divisionId: string,
@@ -92,6 +128,8 @@ function createTask(
 async function main() {
   await clean();
 
+  const passwordHash = await hashPassword(DEFAULT_PASSWORD);
+
   // Look up bootstrap data
   const osd = await prisma.user.findFirst({ where: { isSuperAdmin: true } });
   if (!osd) throw new Error('Bootstrap super admin not found. Run prisma/seed.ts first.');
@@ -106,18 +144,17 @@ async function main() {
   const abDiv = await prisma.division.findFirst({ where: { name: 'Autonomous Bodies' } });
   if (!abDiv) throw new Error('"Autonomous Bodies" not found.');
 
-  // Look up existing users
+  // Look up or use existing users
   const uDirKhi = await prisma.user.findFirst({ where: { username: 'ravi.kumar' } });
   const uDysKhi = await prisma.user.findFirst({ where: { username: 'suresh.s' } });
   const uDirAb = await prisma.user.findFirst({ where: { username: 'anita.m' } });
   const pTl = await prisma.user.findFirst({ where: { username: 'karan.v' } });
 
-  // Fallback owner for divisions without dedicated users
-  const fallback = osd.id;
-  const khiOwner = uDirKhi?.id ?? fallback;
-  const khiDys = uDysKhi?.id ?? fallback;
-  const abOwner = uDirAb?.id ?? fallback;
-  const pmuOwner = pTl?.id ?? fallback;
+  // Owners for existing divisions (fallback to OSD only for truly OSD-scoped tasks)
+  const khiOwner = uDirKhi?.id ?? osd.id;
+  const khiDys = uDysKhi?.id ?? osd.id;
+  const abOwner = uDirAb?.id ?? osd.id;
+  const pmuOwner = pTl?.id ?? osd.id;
 
   // -------------------------------------------------------------------------
   // Create new divisions
@@ -142,6 +179,42 @@ async function main() {
 
   const hmaysDiv = await findOrCreateDivision(
     'HMAYS', 'division', '#854d0e', 6, osd.id,
+  );
+
+  // -------------------------------------------------------------------------
+  // Create users for new divisions
+  // -------------------------------------------------------------------------
+  console.log('Creating users for new divisions…');
+
+  const uDirNsdf = await findOrCreateUser(
+    'Priya Sharma', 'priya.sharma', 'Director, NSDF',
+    'director', nsdfDiv.id, osd.id, passwordHash,
+    { supervisorId: osd.id },
+  );
+
+  const uDirSgm = await findOrCreateUser(
+    'Amit Verma', 'amit.verma', 'Director, SGM',
+    'director', sgmDiv.id, osd.id, passwordHash,
+    { supervisorId: osd.id },
+  );
+
+  const uDirMedia = await findOrCreateUser(
+    'Neha Gupta', 'neha.gupta', 'Director, Media & IT',
+    'director', mediaDiv.id, osd.id, passwordHash,
+    { supervisorId: osd.id },
+  );
+
+  const uDirHmays = await findOrCreateUser(
+    'Vikram Singh', 'vikram.singh', 'Director, HMAYS',
+    'director', hmaysDiv.id, osd.id, passwordHash,
+    { supervisorId: osd.id },
+  );
+
+  // Deputy Secretary for OSD office tasks
+  const uDsOsd = await findOrCreateUser(
+    'Sanjay Mehra', 'sanjay.mehra', 'Deputy Secretary, Office of JS',
+    'deputy_secretary', officeOfJs.id, osd.id, passwordHash,
+    { supervisorId: osd.id },
   );
 
   // -------------------------------------------------------------------------
@@ -204,7 +277,6 @@ async function main() {
   // -------------------------------------------------------------------------
   console.log('Seeding KI-EY-PMU tasks…');
 
-  // Use existing KIM PMU division if it exists, otherwise use khiDiv
   const kimPmu = await prisma.division.findFirst({ where: { name: 'KIM PMU' } });
   const pmuDivId = kimPmu?.id ?? khiDiv.id;
 
@@ -254,7 +326,7 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // NSDF tasks (11)
+  // NSDF tasks (11) — owned by Director NSDF
   // -------------------------------------------------------------------------
   console.log('Seeding NSDF tasks…');
 
@@ -273,11 +345,11 @@ async function main() {
   ];
 
   for (const name of nsdfTasks) {
-    await createTask(name, nsdfDiv.id, fallback, osd.id);
+    await createTask(name, nsdfDiv.id, uDirNsdf.id, osd.id);
   }
 
   // -------------------------------------------------------------------------
-  // SGM tasks (7)
+  // SGM tasks (7) — owned by Director SGM
   // -------------------------------------------------------------------------
   console.log('Seeding SGM tasks…');
 
@@ -292,11 +364,11 @@ async function main() {
   ];
 
   for (const name of sgmTasks) {
-    await createTask(name, sgmDiv.id, fallback, osd.id);
+    await createTask(name, sgmDiv.id, uDirSgm.id, osd.id);
   }
 
   // -------------------------------------------------------------------------
-  // Media & IT tasks (5)
+  // Media & IT tasks (5) — owned by Director Media & IT
   // -------------------------------------------------------------------------
   console.log('Seeding Media & IT tasks…');
 
@@ -309,11 +381,11 @@ async function main() {
   ];
 
   for (const name of mediaTasks) {
-    await createTask(name, mediaDiv.id, fallback, osd.id);
+    await createTask(name, mediaDiv.id, uDirMedia.id, osd.id);
   }
 
   // -------------------------------------------------------------------------
-  // OSD tasks (8)
+  // OSD tasks (8) — owned by Deputy Secretary in Office of JS
   // -------------------------------------------------------------------------
   console.log('Seeding OSD tasks…');
 
@@ -329,11 +401,11 @@ async function main() {
   ];
 
   for (const name of osdTasks) {
-    await createTask(name, officeOfJs.id, fallback, osd.id);
+    await createTask(name, officeOfJs.id, uDsOsd.id, osd.id);
   }
 
   // -------------------------------------------------------------------------
-  // HMAYS tasks (3)
+  // HMAYS tasks (3) — owned by Director HMAYS
   // -------------------------------------------------------------------------
   console.log('Seeding HMAYS tasks…');
 
@@ -344,24 +416,40 @@ async function main() {
   ];
 
   for (const name of hmaysTasks) {
-    await createTask(name, hmaysDiv.id, fallback, osd.id);
+    await createTask(name, hmaysDiv.id, uDirHmays.id, osd.id);
   }
 
   // -------------------------------------------------------------------------
-  // Other tasks (2)
+  // Other tasks (2) — owned by Deputy Secretary in Office of JS
   // -------------------------------------------------------------------------
   console.log('Seeding Other tasks…');
 
-  await createTask('Manikandan Coach — Odisha to Tamilnadu', officeOfJs.id, fallback, osd.id);
-  await createTask('International Yogasana Centre — Puri', officeOfJs.id, fallback, osd.id);
+  await createTask('Manikandan Coach — Odisha to Tamilnadu', officeOfJs.id, uDsOsd.id, osd.id);
+  await createTask('International Yogasana Centre — Puri', officeOfJs.id, uDsOsd.id, osd.id);
 
   // -------------------------------------------------------------------------
   // Summary
   // -------------------------------------------------------------------------
   const totalTasks = await prisma.task.count();
   const totalDivisions = await prisma.division.count();
+  const totalUsers = await prisma.user.count();
   console.log('');
-  console.log(`Seed complete: ${totalTasks} tasks across ${totalDivisions} divisions.`);
+  console.log(`Seed complete: ${totalTasks} tasks across ${totalDivisions} divisions with ${totalUsers} users.`);
+  console.log('');
+  console.log('New user accounts (password: Test1234!):');
+  console.log('  priya.sharma  — Director, NSDF');
+  console.log('  amit.verma    — Director, SGM');
+  console.log('  neha.gupta    — Director, Media & IT');
+  console.log('  vikram.singh  — Director, HMAYS');
+  console.log('  sanjay.mehra  — Deputy Secretary, Office of JS');
+  console.log('');
+  console.log('Existing users from mock seed (password: Test1234!):');
+  console.log('  ravi.kumar    — Director, Khelo India Division');
+  console.log('  anita.m       — Director, Autonomous Bodies');
+  console.log('  karan.v       — Team Leader, KIM PMU');
+  console.log('');
+  console.log('Each Director sees ONLY their division\'s tasks.');
+  console.log('OSD/Super Admin sees all division-visible tasks (by design).');
 }
 
 main()
