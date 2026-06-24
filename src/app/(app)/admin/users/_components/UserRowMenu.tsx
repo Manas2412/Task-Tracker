@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 
-import { Sheet } from '@/components/ui/Sheet';
 import { EditUserDialog } from './EditUserDialog';
 import { ResetPasswordDialog } from './ResetPasswordDialog';
 import {
@@ -69,7 +68,7 @@ export function UserRowMenu({ user, divisions, supervisors, isSelf }: UserRowMen
 
   return (
     <>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 justify-end">
         {/* Always-visible activate/deactivate toggle */}
         {!isSelf ? (
           <button
@@ -170,14 +169,15 @@ export function UserRowMenu({ user, divisions, supervisors, isSelf }: UserRowMen
         userName={user.name}
       />
 
-      <ChangeDivisionDialog
-        open={divisionOpen}
-        onClose={() => setDivisionOpen(false)}
-        userId={user.id}
-        userName={user.name}
-        currentDivisionId={user.divisionId}
-        divisions={topDivisions}
-      />
+      {divisionOpen ? (
+        <ChangeDivisionOverlay
+          onClose={() => setDivisionOpen(false)}
+          userId={user.id}
+          userName={user.name}
+          currentDivisionId={user.divisionId}
+          divisions={topDivisions}
+        />
+      ) : null}
     </>
   );
 }
@@ -216,18 +216,16 @@ function MenuButton({
 }
 
 // ------------------------------------------------------------
-// Change Division dialog
+// Lightweight overlay for changing division (no Sheet dependency)
 // ------------------------------------------------------------
 
-function ChangeDivisionDialog({
-  open,
+function ChangeDivisionOverlay({
   onClose,
   userId,
   userName,
   currentDivisionId,
   divisions,
 }: {
-  open: boolean;
   onClose: () => void;
   userId: string;
   userName: string;
@@ -239,11 +237,16 @@ function ChangeDivisionDialog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) {
-      setSelected(currentDivisionId);
-      setError(null);
-    }
-  }, [open, currentDivisionId]);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
 
   const handleSave = () => {
     if (selected === currentDivisionId) {
@@ -265,57 +268,62 @@ function ChangeDivisionDialog({
   };
 
   return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      title="Change division"
-      subtitle={`Reassign ${userName} to a different division.`}
-    >
-      {open ? (
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-medium text-ink-2">Division</span>
-            <select
-              value={selected}
-              onChange={(e) => setSelected(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-line bg-panel text-[13px] text-ink outline-none focus:border-ink"
-            >
-              {divisions.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/40"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      {/* Dialog */}
+      <div className="relative bg-panel rounded-2xl border border-line shadow-2xl w-full max-w-[420px] mx-4 p-5">
+        <h3 className="font-serif text-[18px] text-ink mb-1">Change division</h3>
+        <p className="text-[12px] text-ink-3 mb-4">
+          Reassign {userName} to a different division.
+        </p>
 
-          {error ? (
-            <p
-              role="alert"
-              className="text-[12px] text-urgent bg-urgent-soft border border-urgent/20 rounded-lg px-3 py-2"
-            >
-              {error}
-            </p>
-          ) : null}
+        <label className="flex flex-col gap-1 mb-3">
+          <span className="text-[11px] font-medium text-ink-2">Division</span>
+          <select
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-line bg-bg text-[13px] text-ink outline-none focus:border-ink"
+          >
+            {divisions.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </label>
 
-          <div className="flex gap-2 mt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2.5 rounded-lg border border-line text-[13px] font-medium text-ink-2 hover:bg-line-2"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
+        {error ? (
+          <p
+            role="alert"
+            className="text-[12px] text-urgent bg-urgent-soft border border-urgent/20 rounded-lg px-3 py-2 mb-3"
+          >
+            {error}
+          </p>
+        ) : null}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-lg border border-line text-[13px] font-medium text-ink-2 hover:bg-line-2"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
         </div>
-      ) : null}
-    </Sheet>
+      </div>
+    </div>
   );
 }
