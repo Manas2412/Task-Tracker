@@ -9,6 +9,7 @@ import {
   type SearchType,
 } from '@/lib/search';
 import { cn } from '@/lib/utils';
+import { SearchInput } from './_components/SearchInput';
 
 type PageProps = {
   searchParams?: { q?: string; type?: string };
@@ -70,9 +71,13 @@ export default async function SearchPage({ searchParams }: PageProps) {
         <h1 className="font-serif text-[22px] md:text-[28px] leading-tight text-ink">
           {rawQuery ? <>Results for &ldquo;{rawQuery}&rdquo;</> : 'Search'}
         </h1>
-        <p className="mt-1.5 text-[12px] text-ink-2">
+
+        {/* Search input — always visible on this page (mobile has no header input) */}
+        <SearchInput defaultValue={rawQuery} />
+
+        <p className="mt-3 text-[12px] text-ink-2">
           {!isQuerySearchable(rawQuery)
-            ? 'Type at least two characters in the top bar.'
+            ? 'Type at least two characters and press enter.'
             : `${grandTotal} ${grandTotal === 1 ? 'match' : 'matches'}.`}
         </p>
       </header>

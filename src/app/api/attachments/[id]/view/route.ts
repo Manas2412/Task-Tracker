@@ -84,9 +84,32 @@ export async function GET(
       filename: att.fileName,
       contentType: att.mimeType ?? undefined,
     });
+
+    if (isOfficeDocument(att.mimeType, att.fileName)) {
+      const viewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
+      return NextResponse.redirect(viewerUrl);
+    }
+
     return NextResponse.redirect(url);
   } catch (err) {
     console.error('presignView failed:', err);
     return NextResponse.json({ error: 'Could not generate URL' }, { status: 500 });
   }
+}
+
+const OFFICE_MIMES = new Set([
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+]);
+
+const OFFICE_EXTS = new Set(['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']);
+
+function isOfficeDocument(mimeType: string | null, fileName: string): boolean {
+  if (mimeType && OFFICE_MIMES.has(mimeType)) return true;
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+  return OFFICE_EXTS.has(ext);
 }
