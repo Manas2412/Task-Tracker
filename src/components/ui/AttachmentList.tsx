@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { useFormState, useFormStatus } from 'react-dom';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -307,36 +308,47 @@ function AttachmentRowCard({
           </p>
         </button>
       )}
-      {isDriveLink ? (
-        <a
-          href={row.fileUrl}
-          target="_blank"
-          rel="noreferrer"
-          aria-label="Open link"
-          className="w-8 h-8 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 shrink-0"
-        >
-          <i className="ti ti-external-link text-[14px]" aria-hidden="true" />
-        </a>
-      ) : (
-        <button
-          type="button"
-          onClick={onPreview}
-          aria-label="Preview attachment"
-          className="w-8 h-8 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 shrink-0"
-        >
-          <i className="ti ti-eye text-[14px]" aria-hidden="true" />
-        </button>
-      )}
-      {row.canDelete ? (
-        <button
-          type="button"
-          onClick={onDelete}
-          aria-label="Remove attachment"
-          className="w-8 h-8 grid place-items-center rounded-md text-ink-3 hover:bg-line-2 hover:text-urgent shrink-0"
-        >
-          <i className="ti ti-trash text-[14px]" aria-hidden="true" />
-        </button>
-      ) : null}
+      <div className="flex items-center gap-1 shrink-0">
+        {isDriveLink ? (
+          <a
+            href={row.fileUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Open link"
+            className="w-8 h-8 grid place-items-center rounded-lg border border-line text-ink-2 hover:bg-line-2"
+          >
+            <i className="ti ti-external-link text-[14px]" aria-hidden="true" />
+          </a>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={onPreview}
+              aria-label="Preview attachment"
+              className="w-8 h-8 grid place-items-center rounded-lg border border-line text-ink-2 hover:bg-line-2"
+            >
+              <i className="ti ti-eye text-[14px]" aria-hidden="true" />
+            </button>
+            <a
+              href={`/api/attachments/${row.id}/download`}
+              aria-label="Download file"
+              className="w-8 h-8 grid place-items-center rounded-lg border border-line text-ink-2 hover:bg-line-2"
+            >
+              <i className="ti ti-download text-[14px]" aria-hidden="true" />
+            </a>
+          </>
+        )}
+        {row.canDelete ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label="Remove attachment"
+            className="w-8 h-8 grid place-items-center rounded-lg border border-urgent/20 text-urgent hover:bg-urgent-soft"
+          >
+            <i className="ti ti-trash text-[14px]" aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -515,6 +527,7 @@ function AttachmentPreview({
   const viewUrl = `/api/attachments/${row.id}/view`;
   const downloadUrl = `/api/attachments/${row.id}/download`;
   const canPreview = isPreviewable(row.mimeType);
+  const [mounted, setMounted] = useState(false);
 
   const onEsc = useCallback(
     (e: KeyboardEvent) => {
@@ -524,6 +537,7 @@ function AttachmentPreview({
   );
 
   useEffect(() => {
+    setMounted(true);
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onEsc);
     return () => {
@@ -532,25 +546,30 @@ function AttachmentPreview({
     };
   }, [onEsc]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/80">
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
+      className="flex flex-col bg-black/90"
+    >
       {/* Header bar */}
-      <div className="flex items-center gap-3 px-4 py-3 bg-black/60 backdrop-blur-sm">
+      <div className="flex items-center gap-2 px-3 md:px-5 py-3 bg-black border-b border-white/10 shrink-0">
         <button
           type="button"
           onClick={onClose}
           aria-label="Close preview"
-          className="w-9 h-9 grid place-items-center rounded-full text-white/80 hover:text-white hover:bg-white/10"
+          className="w-10 h-10 grid place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
         >
-          <i className="ti ti-x text-[20px]" aria-hidden="true" />
+          <i className="ti ti-x text-[22px]" aria-hidden="true" />
         </button>
-        <p className="flex-1 min-w-0 text-[13px] font-medium text-white truncate">
+        <p className="flex-1 min-w-0 text-[14px] font-medium text-white truncate ml-1">
           {row.fileName}
         </p>
         <a
           href={downloadUrl}
           aria-label="Download file"
-          className="w-9 h-9 grid place-items-center rounded-full text-white/80 hover:text-white hover:bg-white/10"
+          className="w-10 h-10 grid place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
         >
           <i className="ti ti-download text-[20px]" aria-hidden="true" />
         </a>
@@ -559,14 +578,14 @@ function AttachmentPreview({
           target="_blank"
           rel="noreferrer"
           aria-label="Open in new tab"
-          className="w-9 h-9 grid place-items-center rounded-full text-white/80 hover:text-white hover:bg-white/10"
+          className="w-10 h-10 grid place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
         >
           <i className="ti ti-external-link text-[20px]" aria-hidden="true" />
         </a>
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex items-center justify-center overflow-auto p-4">
+      <div className="flex-1 flex items-center justify-center overflow-auto p-4 md:p-8">
         {canPreview ? (
           row.mimeType?.startsWith('image/') ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -583,27 +602,27 @@ function AttachmentPreview({
             />
           )
         ) : (
-          <div className="text-center">
-            <i className="ti ti-file text-[48px] text-white/40 block mb-3" aria-hidden="true" />
-            <p className="text-[14px] text-white/80 mb-1">{row.fileName}</p>
-            <p className="text-[12px] text-white/50 mb-4">
+          <div className="text-center max-w-sm mx-auto">
+            <i className="ti ti-file text-[56px] text-white/30 block mb-4" aria-hidden="true" />
+            <p className="text-[16px] font-medium text-white mb-2">{row.fileName}</p>
+            <p className="text-[13px] text-white/50 mb-6">
               {row.sizeBytes != null ? formatBytes(row.sizeBytes) : 'Unknown size'}
-              {row.mimeType ? ` · ${row.mimeType}` : ''}
             </p>
-            <p className="text-[12px] text-white/50 mb-4">
+            <p className="text-[13px] text-white/40 mb-6">
               Preview is not available for this file type.
             </p>
             <a
               href={downloadUrl}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white text-ink text-[13px] font-medium hover:bg-white/90 transition-colors"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-black text-[14px] font-medium hover:bg-white/90 transition-colors"
             >
-              <i className="ti ti-download text-[16px]" aria-hidden="true" />
+              <i className="ti ti-download text-[18px]" aria-hidden="true" />
               Download
             </a>
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
