@@ -13,18 +13,6 @@ import type {
 } from '@/lib/search';
 import { cn } from '@/lib/utils';
 
-/**
- * Global search field in the AppHeader. Debounced fetch to /api/search,
- * grouped dropdown of results, keyboard navigation.
- *
- * - Min query length: 2
- * - Debounce: 200 ms
- * - Enter inside the input → navigate to /search?q=...
- * - Click a dropdown row → navigate to that entity
- * - Esc → close dropdown
- * - Outside click → close dropdown
- */
-
 const DEBOUNCE_MS = 200;
 const MIN_LENGTH = 2;
 
@@ -41,10 +29,12 @@ export function SearchField() {
   const router = useRouter();
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const mobileInputRef = useRef<HTMLInputElement>(null);
 
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [open, setOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResults>(EMPTY);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -82,7 +72,7 @@ export function SearchField() {
     return () => ctl.abort();
   }, [debounced]);
 
-  // Close on outside click + Esc
+  // Close desktop dropdown on outside click + Esc
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
@@ -104,12 +94,26 @@ export function SearchField() {
     };
   }, [open]);
 
+  // Mobile overlay: lock scroll, focus input, close on Esc
+  useEffect(() => {
+    if (!mobileOpen) return;
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => mobileInputRef.current?.focus(), 50);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeMobile();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [mobileOpen]);
+
   // Reset active highlight when results change
   useEffect(() => {
     setActiveIndex(0);
   }, [results.query]);
 
-  // Flattened list for keyboard navigation
   const flat = [
     ...results.tasks.map((r) => ({ ...r, kind: 'task' as const })),
     ...results.timelineFiles.map((r) => ({ ...r, kind: 'tf' as const })),
@@ -127,27 +131,37 @@ export function SearchField() {
     const value = (q ?? query).trim();
     if (value.length < MIN_LENGTH) return;
     setOpen(false);
+    closeMobile();
     router.push(`/search?q=${encodeURIComponent(value)}`);
+  };
+
+  const navigateToResult = (href: string) => {
+    setOpen(false);
+    closeMobile();
+    router.push(href);
+  };
+
+  const closeMobile = () => {
+    setMobileOpen(false);
+    setQuery('');
+    setResults(EMPTY);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (open && totalShown > 0) {
+      if (totalShown > 0) {
         const item = flat[activeIndex];
         if (item) {
-          setOpen(false);
-          router.push(item.href);
+          navigateToResult(item.href);
           return;
         }
       }
       goToResultsPage();
     } else if (e.key === 'ArrowDown') {
-      if (!open) return;
       e.preventDefault();
       setActiveIndex((i) => (totalShown > 0 ? (i + 1) % totalShown : 0));
     } else if (e.key === 'ArrowUp') {
-      if (!open) return;
       e.preventDefault();
       setActiveIndex((i) =>
         totalShown > 0 ? (i - 1 + totalShown) % totalShown : 0,
@@ -159,71 +173,153 @@ export function SearchField() {
   const showDropdown = open && isQuerying;
 
   return (
-    <div
-      className="hidden md:flex relative flex-1 max-w-[340px] lg:max-w-[380px]"
-      ref={wrapRef}
-    >
-      <i
-        className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-ink-3 pointer-events-none"
-        aria-hidden="true"
-      />
-      <input
-        ref={inputRef}
-        type="search"
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={onKeyDown}
-        placeholder="Search tasks, files, people, tags…"
-        className="w-full pl-9 pr-3 py-2 rounded-lg border border-line bg-bg text-[13px] text-ink placeholder:text-ink-3 outline-none focus:border-ink"
-        aria-label="Global search"
-        aria-expanded={showDropdown}
-        aria-controls="search-dropdown"
-        role="combobox"
-        autoComplete="off"
-      />
+    <>
+      {/* ---- Mobile trigger button ---- */}
+      <button
+        type="button"
+        onClick={() => setMobileOpen(true)}
+        className="md:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-bg text-[12px] text-ink-3"
+      >
+        <i className="ti ti-search text-[14px]" aria-hidden="true" />
+        <span>Search</span>
+      </button>
 
-      {showDropdown ? (
-        <div
-          id="search-dropdown"
-          role="listbox"
-          className="absolute left-0 right-0 top-full mt-2 w-[440px] max-w-[calc(100vw-32px)] rounded-xl border border-line bg-panel shadow-xl z-40 overflow-hidden"
-        >
-          <div className="max-h-[60dvh] overflow-y-auto">
-            {loading && totalShown === 0 ? (
-              <p className="px-4 py-6 text-center text-[12px] text-ink-3">
+      {/* ---- Desktop inline input ---- */}
+      <div
+        className="hidden md:flex relative flex-1 max-w-[340px] lg:max-w-[380px]"
+        ref={wrapRef}
+      >
+        <i
+          className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-ink-3 pointer-events-none"
+          aria-hidden="true"
+        />
+        <input
+          ref={inputRef}
+          type="search"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+          placeholder="Search tasks, files, people, tags…"
+          className="w-full pl-9 pr-3 py-2 rounded-lg border border-line bg-bg text-[13px] text-ink placeholder:text-ink-3 outline-none focus:border-ink"
+          aria-label="Global search"
+          aria-expanded={showDropdown}
+          aria-controls="search-dropdown"
+          role="combobox"
+          autoComplete="off"
+        />
+
+        {showDropdown ? (
+          <div
+            id="search-dropdown"
+            role="listbox"
+            className="absolute left-0 right-0 top-full mt-2 w-[440px] max-w-[calc(100vw-32px)] rounded-xl border border-line bg-panel shadow-xl z-40 overflow-hidden"
+          >
+            <div className="max-h-[60dvh] overflow-y-auto">
+              {loading && totalShown === 0 ? (
+                <p className="px-4 py-6 text-center text-[12px] text-ink-3">
+                  Searching…
+                </p>
+              ) : totalShown === 0 ? (
+                <p className="px-4 py-6 text-center text-[12px] text-ink-2">
+                  No matches for &ldquo;{debounced}&rdquo;.
+                </p>
+              ) : (
+                <DropdownGroups
+                  results={results}
+                  activeIndex={activeIndex}
+                  onSelect={(href) => navigateToResult(href)}
+                  onHoverIndex={setActiveIndex}
+                />
+              )}
+            </div>
+            {isQuerying ? (
+              <button
+                type="button"
+                onClick={() => goToResultsPage()}
+                className="block w-full px-3 py-2.5 border-t border-line-2 bg-bg text-center text-[12px] font-medium text-primary hover:bg-primary-soft transition-colors"
+              >
+                {totalAll > totalShown
+                  ? `See all ${totalAll} results for "${debounced}" →`
+                  : `See full results for "${debounced}" →`}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {/* ---- Mobile full-screen overlay ---- */}
+      {mobileOpen ? (
+        <div className="fixed inset-0 z-50 bg-bg flex flex-col md:hidden">
+          {/* Header bar with close + input */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-line-2 shrink-0">
+            <button
+              type="button"
+              onClick={closeMobile}
+              aria-label="Close search"
+              className="w-9 h-9 grid place-items-center rounded-full text-ink-2 hover:bg-line-2 shrink-0"
+            >
+              <i className="ti ti-arrow-left text-[20px]" aria-hidden="true" />
+            </button>
+            <div className="relative flex-1">
+              <i
+                className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[15px] text-ink-3 pointer-events-none"
+                aria-hidden="true"
+              />
+              <input
+                ref={mobileInputRef}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder="Search tasks, files, people…"
+                className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-line bg-panel text-[14px] text-ink placeholder:text-ink-3 outline-none focus:border-ink"
+                aria-label="Search"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          {/* Results area */}
+          <div className="flex-1 overflow-y-auto">
+            {!isQuerying ? (
+              <p className="px-4 py-8 text-center text-[13px] text-ink-3">
+                Type at least two characters to search.
+              </p>
+            ) : loading && totalShown === 0 ? (
+              <p className="px-4 py-8 text-center text-[13px] text-ink-3">
                 Searching…
               </p>
-            ) : totalShown === 0 ? (
-              <p className="px-4 py-6 text-center text-[12px] text-ink-2">
+            ) : isQuerying && totalShown === 0 && !loading ? (
+              <p className="px-4 py-8 text-center text-[13px] text-ink-2">
                 No matches for &ldquo;{debounced}&rdquo;.
               </p>
             ) : (
-              <DropdownGroups
-                results={results}
-                activeIndex={activeIndex}
-                onSelect={() => setOpen(false)}
-                onHoverIndex={setActiveIndex}
-              />
+              <>
+                <DropdownGroups
+                  results={results}
+                  activeIndex={activeIndex}
+                  onSelect={(href) => navigateToResult(href)}
+                  onHoverIndex={setActiveIndex}
+                />
+                {isQuerying ? (
+                  <button
+                    type="button"
+                    onClick={() => goToResultsPage()}
+                    className="block w-full px-3 py-3 border-t border-line-2 bg-bg text-center text-[13px] font-medium text-primary"
+                  >
+                    See full results for &ldquo;{debounced}&rdquo; →
+                  </button>
+                ) : null}
+              </>
             )}
           </div>
-          {isQuerying ? (
-            <button
-              type="button"
-              onClick={() => goToResultsPage()}
-              className="block w-full px-3 py-2.5 border-t border-line-2 bg-bg text-center text-[12px] font-medium text-primary hover:bg-primary-soft transition-colors"
-            >
-              {totalAll > totalShown
-                ? `See all ${totalAll} results for “${debounced}” →`
-                : `See full results for “${debounced}” →`}
-            </button>
-          ) : null}
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -239,7 +335,7 @@ function DropdownGroups({
 }: {
   results: SearchResults;
   activeIndex: number;
-  onSelect: () => void;
+  onSelect: (href: string) => void;
   onHoverIndex: (i: number) => void;
 }) {
   let runningIndex = 0;
@@ -261,7 +357,7 @@ function DropdownGroups({
                 row={r}
                 active={idx === activeIndex}
                 onMouseEnter={() => onHoverIndex(idx)}
-                onSelect={onSelect}
+                onSelect={() => onSelect(r.href)}
               />
             );
           })}
@@ -278,7 +374,7 @@ function DropdownGroups({
                 row={r}
                 active={idx === activeIndex}
                 onMouseEnter={() => onHoverIndex(idx)}
-                onSelect={onSelect}
+                onSelect={() => onSelect(r.href)}
               />
             );
           })}
@@ -295,7 +391,7 @@ function DropdownGroups({
                 row={r}
                 active={idx === activeIndex}
                 onMouseEnter={() => onHoverIndex(idx)}
-                onSelect={onSelect}
+                onSelect={() => onSelect(r.href)}
               />
             );
           })}
@@ -312,7 +408,7 @@ function DropdownGroups({
                 row={r}
                 active={idx === activeIndex}
                 onMouseEnter={() => onHoverIndex(idx)}
-                onSelect={onSelect}
+                onSelect={() => onSelect(r.href)}
               />
             );
           })}
@@ -380,7 +476,6 @@ function RowLink({
         aria-selected={active}
         onMouseEnter={onMouseEnter}
         onMouseDown={(e) => {
-          // Prevent the input losing focus before navigation runs
           e.preventDefault();
         }}
         onClick={onSelect}

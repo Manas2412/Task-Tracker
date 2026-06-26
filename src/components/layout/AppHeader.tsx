@@ -1,7 +1,5 @@
 'use client';
 
-import Link from 'next/link';
-
 import { AnalyticsBadge } from '../AnalyticsBadge';
 import { NotificationsBell, type BellNotification } from './NotificationsBell';
 import { RoleSwitcher } from './RoleSwitcher';
@@ -47,16 +45,7 @@ export function AppHeader({ onOpenDrawer, notifications, user }: AppHeaderProps)
           </span>
         </div>
 
-        {/* Mobile search — pill button with text so it's visible even if icon font fails */}
-        <Link
-          href="/search"
-          className="md:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-bg text-[12px] text-ink-3"
-        >
-          <i className="ti ti-search text-[14px]" aria-hidden="true" />
-          <span>Search</span>
-        </Link>
-
-        {/* Global search — tablet+ */}
+        {/* Search — mobile trigger + desktop inline input in one component */}
         <SearchField />
 
         {user.canSwitchRole ? <RoleSwitcher /> : null}
