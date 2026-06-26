@@ -264,13 +264,14 @@ export function SearchField() {
                   aria-label="Close search"
                   className="w-9 h-9 grid place-items-center rounded-full text-ink-2 hover:bg-line-2 shrink-0"
                 >
-                  <i className="ti ti-arrow-left text-[20px]" aria-hidden="true" />
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M5 12h14" /><path d="M5 12l6-6" /><path d="M5 12l6 6" />
+                  </svg>
                 </button>
                 <div className="relative flex-1">
-                  <i
-                    className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[15px] text-ink-3 pointer-events-none"
-                    aria-hidden="true"
-                  />
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 pointer-events-none" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+                  </svg>
                   <input
                     ref={mobileInputRef}
                     type="search"
