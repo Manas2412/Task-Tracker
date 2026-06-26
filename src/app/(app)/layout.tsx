@@ -4,17 +4,13 @@ import { AppShell, type BellNotification } from '@/components/layout';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { initialsOf } from '@/lib/format';
+import { isS3Configured } from '@/lib/s3';
 
-/**
- * In-app route-group layout.
- * Wraps every Phase 1/2/3 user-facing screen in the responsive AppShell.
- * The Super Admin Console lives at admin/ and adds its own sub-chrome on top.
- *
- * Why this is a Server Component: it needs the caller's profile (name,
- * designation, division) plus their unread-notification count + recent
- * notifications for the bell. AppShell itself is a client component for
- * state (drawer open/closed); we pass the snapshot in.
- */
+import {
+  QuickCreateFab,
+  QuickCreateProvider,
+} from './tasks/_components/QuickCreate';
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -52,7 +48,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const isOsd = me.hierarchySlot === 'osd' || me.isSuperAdmin;
   const isJs = me.hierarchySlot === 'js' || isOsd;
-  // Role switcher appears only when both surfaces are accessible.
   const canSwitchRole = isOsd && me.isSuperAdmin;
 
   return (
@@ -69,7 +64,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       }}
       notifications={{ unreadCount, recent }}
     >
-      {children}
+      <QuickCreateProvider defaultDivisionId={me.divisionId} s3Configured={isS3Configured()}>
+        {children}
+        <QuickCreateFab />
+      </QuickCreateProvider>
     </AppShell>
   );
 }

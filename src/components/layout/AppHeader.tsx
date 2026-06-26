@@ -1,19 +1,12 @@
 'use client';
 
+import Link from 'next/link';
+
 import { AnalyticsBadge } from '../AnalyticsBadge';
 import { NotificationsBell, type BellNotification } from './NotificationsBell';
 import { RoleSwitcher } from './RoleSwitcher';
 import { SearchField } from './SearchField';
 import { UserMenu } from './UserMenu';
-
-/**
- * Responsive app header.
- *
- *   - mobile (< md) : hamburger + brand + bell + avatar (menu)
- *   - tablet+ (md+) : brand + search + role-switcher (admins) + bell + avatar (menu)
- *
- * Phase 2: bell wired, role switcher visible for Super Admins. Search inert.
- */
 
 type AppHeaderProps = {
   onOpenDrawer: () => void;
@@ -26,7 +19,6 @@ type AppHeaderProps = {
     initials: string;
     colour: string;
     designation: string;
-    /** Show RoleSwitcher only when the caller has both surfaces. */
     canSwitchRole: boolean;
   };
 };
@@ -54,6 +46,15 @@ export function AppHeader({ onOpenDrawer, notifications, user }: AppHeaderProps)
             Ministry of Y. A. &amp; Sports
           </span>
         </div>
+
+        {/* Mobile search icon */}
+        <Link
+          href="/search"
+          aria-label="Search"
+          className="md:hidden w-9 h-9 grid place-items-center rounded-full text-ink-2 hover:bg-line-2"
+        >
+          <i className="ti ti-search text-[20px]" aria-hidden="true" />
+        </Link>
 
         {/* Global search — tablet+ */}
         <SearchField />

@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation';
 import { PullToRefresh } from '@/components/ui';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { isS3Configured } from '@/lib/s3';
 import { formatDue, initialsOf } from '@/lib/format';
 import { fetchTaskCounts, fetchVisibleTasks, type TaskFilter } from '@/lib/visibility';
 
@@ -12,11 +11,7 @@ import { DivisionControls } from './_components/DivisionControls';
 import { FilterChips } from './_components/FilterChips';
 import { StatsStrip } from './_components/StatsStrip';
 import { TaskListItem } from './_components/TaskListItem';
-import {
-  QuickCreateFab,
-  QuickCreatePrimary,
-  QuickCreateProvider,
-} from './_components/QuickCreate';
+import { QuickCreatePrimary } from './_components/QuickCreate';
 
 import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/ui/Pill';
 
@@ -65,7 +60,6 @@ export default async function TasksPage({ searchParams }: PageProps) {
   const grouped = groupByDivision ? groupTasksByDivision(tasks) : null;
 
   return (
-    <QuickCreateProvider defaultDivisionId={me.divisionId} s3Configured={isS3Configured()}>
       <PullToRefresh>
       <div className="pb-24 md:pb-10">
         {/* Page header */}
@@ -135,11 +129,8 @@ export default async function TasksPage({ searchParams }: PageProps) {
           )}
         </div>
 
-        {/* Mobile-only FAB */}
-        <QuickCreateFab />
       </div>
       </PullToRefresh>
-    </QuickCreateProvider>
   );
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -63,6 +63,7 @@ export function AttachmentList({
   const [driveOpen, setDriveOpen] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [previewRow, setPreviewRow] = useState<AttachmentRow | null>(null);
   const [, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -212,7 +213,11 @@ export function AttachmentList({
         <ul className="flex flex-col gap-2">
           {visible.map((a) => (
             <li key={a.id}>
-              <AttachmentRow row={a} onDelete={() => onDelete(a.id)} />
+              <AttachmentRowCard
+                row={a}
+                onDelete={() => onDelete(a.id)}
+                onPreview={() => setPreviewRow(a)}
+              />
             </li>
           ))}
         </ul>
@@ -224,6 +229,13 @@ export function AttachmentList({
         scope={scope}
         parentId={parentId}
       />
+
+      {previewRow ? (
+        <AttachmentPreview
+          row={previewRow}
+          onClose={() => setPreviewRow(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -241,15 +253,17 @@ const TONE_BG: Record<string, string> = {
   file: 'bg-low',
 };
 
-function AttachmentRow({
+function AttachmentRowCard({
   row,
   onDelete,
+  onPreview,
 }: {
   row: AttachmentRow;
   onDelete: () => void;
+  onPreview: () => void;
 }) {
   const badge = fileBadgeFor(row.fileName, row.source);
-  const href = `/api/attachments/${row.id}/download`;
+  const isDriveLink = row.source === 'drive_link';
   return (
     <div className="flex items-center gap-3 p-3 bg-bg border border-line rounded-xl hover:border-ink-4 transition-colors">
       <span
@@ -265,37 +279,54 @@ function AttachmentRow({
           <span>{badge.label}</span>
         )}
       </span>
-      <a
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        className="flex-1 min-w-0 text-left hover:underline"
-      >
-        <p className="text-[13px] font-medium text-ink truncate">{row.fileName}</p>
-        <p className="text-[11px] text-ink-3 truncate" title={format(row.uploadedAt, 'd LLL yyyy, h:mm a')}>
-          {row.uploaderName} ·{' '}
-          {formatDistanceToNow(row.uploadedAt, { addSuffix: true })}
-          {row.source === 'uploaded' && row.sizeBytes != null
-            ? ` · ${formatBytes(row.sizeBytes)}`
-            : null}
-          {row.source === 'drive_link' ? ' · Drive link' : null}
-        </p>
-      </a>
-      <a
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        aria-label="Open attachment"
-        className="w-8 h-8 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 shrink-0"
-      >
-        <i
-          className={cn(
-            'ti text-[14px]',
-            row.source === 'drive_link' ? 'ti-external-link' : 'ti-eye',
-          )}
-          aria-hidden="true"
-        />
-      </a>
+      {isDriveLink ? (
+        <a
+          href={row.fileUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="flex-1 min-w-0 text-left hover:underline"
+        >
+          <p className="text-[13px] font-medium text-ink truncate">{row.fileName}</p>
+          <p className="text-[11px] text-ink-3 truncate" title={format(row.uploadedAt, 'd LLL yyyy, h:mm a')}>
+            {row.uploaderName} ·{' '}
+            {formatDistanceToNow(row.uploadedAt, { addSuffix: true })}
+            {' · Drive link'}
+          </p>
+        </a>
+      ) : (
+        <button
+          type="button"
+          onClick={onPreview}
+          className="flex-1 min-w-0 text-left hover:underline"
+        >
+          <p className="text-[13px] font-medium text-ink truncate">{row.fileName}</p>
+          <p className="text-[11px] text-ink-3 truncate" title={format(row.uploadedAt, 'd LLL yyyy, h:mm a')}>
+            {row.uploaderName} ·{' '}
+            {formatDistanceToNow(row.uploadedAt, { addSuffix: true })}
+            {row.sizeBytes != null ? ` · ${formatBytes(row.sizeBytes)}` : null}
+          </p>
+        </button>
+      )}
+      {isDriveLink ? (
+        <a
+          href={row.fileUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Open link"
+          className="w-8 h-8 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 shrink-0"
+        >
+          <i className="ti ti-external-link text-[14px]" aria-hidden="true" />
+        </a>
+      ) : (
+        <button
+          type="button"
+          onClick={onPreview}
+          aria-label="Preview attachment"
+          className="w-8 h-8 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 shrink-0"
+        >
+          <i className="ti ti-eye text-[14px]" aria-hidden="true" />
+        </button>
+      )}
       {row.canDelete ? (
         <button
           type="button"
@@ -453,6 +484,126 @@ function SaveButton() {
     >
       {pending ? 'Adding…' : 'Add link'}
     </button>
+  );
+}
+
+// ------------------------------------------------------------
+// Full-screen attachment preview
+// ------------------------------------------------------------
+
+const PREVIEWABLE_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+]);
+
+function isPreviewable(mimeType: string | null): boolean {
+  if (!mimeType) return false;
+  return PREVIEWABLE_TYPES.has(mimeType) || mimeType.startsWith('image/');
+}
+
+function AttachmentPreview({
+  row,
+  onClose,
+}: {
+  row: AttachmentRow;
+  onClose: () => void;
+}) {
+  const viewUrl = `/api/attachments/${row.id}/view`;
+  const downloadUrl = `/api/attachments/${row.id}/download`;
+  const canPreview = isPreviewable(row.mimeType);
+
+  const onEsc = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    },
+    [onClose],
+  );
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onEsc);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onEsc);
+    };
+  }, [onEsc]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/80">
+      {/* Header bar */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-black/60 backdrop-blur-sm">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close preview"
+          className="w-9 h-9 grid place-items-center rounded-full text-white/80 hover:text-white hover:bg-white/10"
+        >
+          <i className="ti ti-x text-[20px]" aria-hidden="true" />
+        </button>
+        <p className="flex-1 min-w-0 text-[13px] font-medium text-white truncate">
+          {row.fileName}
+        </p>
+        <a
+          href={downloadUrl}
+          aria-label="Download file"
+          className="w-9 h-9 grid place-items-center rounded-full text-white/80 hover:text-white hover:bg-white/10"
+        >
+          <i className="ti ti-download text-[20px]" aria-hidden="true" />
+        </a>
+        <a
+          href={viewUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Open in new tab"
+          className="w-9 h-9 grid place-items-center rounded-full text-white/80 hover:text-white hover:bg-white/10"
+        >
+          <i className="ti ti-external-link text-[20px]" aria-hidden="true" />
+        </a>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 flex items-center justify-center overflow-auto p-4">
+        {canPreview ? (
+          row.mimeType?.startsWith('image/') ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={viewUrl}
+              alt={row.fileName}
+              className="max-w-full max-h-full object-contain rounded-lg"
+            />
+          ) : (
+            <iframe
+              src={viewUrl}
+              title={row.fileName}
+              className="w-full h-full rounded-lg bg-white"
+            />
+          )
+        ) : (
+          <div className="text-center">
+            <i className="ti ti-file text-[48px] text-white/40 block mb-3" aria-hidden="true" />
+            <p className="text-[14px] text-white/80 mb-1">{row.fileName}</p>
+            <p className="text-[12px] text-white/50 mb-4">
+              {row.sizeBytes != null ? formatBytes(row.sizeBytes) : 'Unknown size'}
+              {row.mimeType ? ` · ${row.mimeType}` : ''}
+            </p>
+            <p className="text-[12px] text-white/50 mb-4">
+              Preview is not available for this file type.
+            </p>
+            <a
+              href={downloadUrl}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white text-ink text-[13px] font-medium hover:bg-white/90 transition-colors"
+            >
+              <i className="ti ti-download text-[16px]" aria-hidden="true" />
+              Download
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

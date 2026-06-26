@@ -131,6 +131,22 @@ export async function presignDownload(opts: {
   return getSignedUrl(s3Client(), cmd, { expiresIn: downloadTtl() });
 }
 
+export async function presignView(opts: {
+  key: string;
+  filename?: string;
+  contentType?: string;
+}): Promise<string> {
+  const cmd = new GetObjectCommand({
+    Bucket: s3Bucket(),
+    Key: opts.key,
+    ResponseContentDisposition: opts.filename
+      ? `inline; filename="${sanitizeFilename(opts.filename)}"`
+      : 'inline',
+    ResponseContentType: opts.contentType || undefined,
+  });
+  return getSignedUrl(s3Client(), cmd, { expiresIn: downloadTtl() });
+}
+
 export async function deleteObject(key: string): Promise<void> {
   await s3Client().send(new DeleteObjectCommand({ Bucket: s3Bucket(), Key: key }));
 }
