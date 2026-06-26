@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -251,74 +252,77 @@ export function SearchField() {
         ) : null}
       </div>
 
-      {/* ---- Mobile full-screen overlay ---- */}
-      {mobileOpen ? (
-        <div className="fixed inset-0 z-50 bg-bg flex flex-col md:hidden">
-          {/* Header bar with close + input */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-line-2 shrink-0">
-            <button
-              type="button"
-              onClick={closeMobile}
-              aria-label="Close search"
-              className="w-9 h-9 grid place-items-center rounded-full text-ink-2 hover:bg-line-2 shrink-0"
-            >
-              <i className="ti ti-arrow-left text-[20px]" aria-hidden="true" />
-            </button>
-            <div className="relative flex-1">
-              <i
-                className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[15px] text-ink-3 pointer-events-none"
-                aria-hidden="true"
-              />
-              <input
-                ref={mobileInputRef}
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder="Search tasks, files, people…"
-                className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-line bg-panel text-[14px] text-ink placeholder:text-ink-3 outline-none focus:border-ink"
-                aria-label="Search"
-                autoComplete="off"
-              />
-            </div>
-          </div>
+      {/* ---- Mobile full-screen overlay (portaled to body to escape header stacking context) ---- */}
+      {mobileOpen
+        ? createPortal(
+            <div className="fixed inset-0 z-50 bg-bg flex flex-col md:hidden">
+              {/* Header bar with close + input */}
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-line-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={closeMobile}
+                  aria-label="Close search"
+                  className="w-9 h-9 grid place-items-center rounded-full text-ink-2 hover:bg-line-2 shrink-0"
+                >
+                  <i className="ti ti-arrow-left text-[20px]" aria-hidden="true" />
+                </button>
+                <div className="relative flex-1">
+                  <i
+                    className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[15px] text-ink-3 pointer-events-none"
+                    aria-hidden="true"
+                  />
+                  <input
+                    ref={mobileInputRef}
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={onKeyDown}
+                    placeholder="Search tasks, files, people…"
+                    className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-line bg-panel text-[14px] text-ink placeholder:text-ink-3 outline-none focus:border-ink"
+                    aria-label="Search"
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
 
-          {/* Results area */}
-          <div className="flex-1 overflow-y-auto">
-            {!isQuerying ? (
-              <p className="px-4 py-8 text-center text-[13px] text-ink-3">
-                Type at least two characters to search.
-              </p>
-            ) : loading && totalShown === 0 ? (
-              <p className="px-4 py-8 text-center text-[13px] text-ink-3">
-                Searching…
-              </p>
-            ) : isQuerying && totalShown === 0 && !loading ? (
-              <p className="px-4 py-8 text-center text-[13px] text-ink-2">
-                No matches for &ldquo;{debounced}&rdquo;.
-              </p>
-            ) : (
-              <>
-                <DropdownGroups
-                  results={results}
-                  activeIndex={activeIndex}
-                  onSelect={(href) => navigateToResult(href)}
-                  onHoverIndex={setActiveIndex}
-                />
-                {isQuerying ? (
-                  <button
-                    type="button"
-                    onClick={() => goToResultsPage()}
-                    className="block w-full px-3 py-3 border-t border-line-2 bg-bg text-center text-[13px] font-medium text-primary"
-                  >
-                    See full results for &ldquo;{debounced}&rdquo; →
-                  </button>
-                ) : null}
-              </>
-            )}
-          </div>
-        </div>
-      ) : null}
+              {/* Results area */}
+              <div className="flex-1 overflow-y-auto">
+                {!isQuerying ? (
+                  <p className="px-4 py-8 text-center text-[13px] text-ink-3">
+                    Type at least two characters to search.
+                  </p>
+                ) : loading && totalShown === 0 ? (
+                  <p className="px-4 py-8 text-center text-[13px] text-ink-3">
+                    Searching…
+                  </p>
+                ) : isQuerying && totalShown === 0 && !loading ? (
+                  <p className="px-4 py-8 text-center text-[13px] text-ink-2">
+                    No matches for &ldquo;{debounced}&rdquo;.
+                  </p>
+                ) : (
+                  <>
+                    <DropdownGroups
+                      results={results}
+                      activeIndex={activeIndex}
+                      onSelect={(href) => navigateToResult(href)}
+                      onHoverIndex={setActiveIndex}
+                    />
+                    {isQuerying ? (
+                      <button
+                        type="button"
+                        onClick={() => goToResultsPage()}
+                        className="block w-full px-3 py-3 border-t border-line-2 bg-bg text-center text-[13px] font-medium text-primary"
+                      >
+                        See full results for &ldquo;{debounced}&rdquo; →
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }
