@@ -47,13 +47,13 @@ export function AppHeader({ onOpenDrawer, notifications, user }: AppHeaderProps)
           </span>
         </div>
 
-        {/* Mobile search icon */}
+        {/* Mobile search — pill button with text so it's visible even if icon font fails */}
         <Link
           href="/search"
-          aria-label="Search"
-          className="md:hidden w-9 h-9 grid place-items-center rounded-full text-ink-2 hover:bg-line-2"
+          className="md:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-bg text-[12px] text-ink-3"
         >
-          <i className="ti ti-search text-[20px]" aria-hidden="true" />
+          <i className="ti ti-search text-[14px]" aria-hidden="true" />
+          <span>Search</span>
         </Link>
 
         {/* Global search — tablet+ */}
