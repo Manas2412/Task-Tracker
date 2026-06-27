@@ -70,6 +70,16 @@ export type SearchResults = {
 
 export type SearchType = 'all' | 'tasks' | 'timeline_files' | 'users' | 'tags';
 
+export type SearchTaskFilters = {
+  status?: string;
+  priority?: string;
+  divisionId?: string;
+  dueFrom?: string;
+  dueTo?: string;
+  jsPriority?: boolean;
+  milestone?: boolean;
+};
+
 // ============================================================
 // Helpers
 // ============================================================
@@ -100,6 +110,7 @@ export async function searchTasksFor(
   callerId: string,
   query: string,
   take: number,
+  filters?: SearchTaskFilters,
 ): Promise<{ rows: SearchTaskResult[]; total: number }> {
   const q = normaliseQuery(query);
   if (!isQuerySearchable(q)) return { rows: [], total: 0 };
@@ -126,8 +137,28 @@ export async function searchTasksFor(
       { owner: { name: { contains: q, mode: 'insensitive' } } },
     ],
   };
+  const andClauses: Prisma.TaskWhereInput[] = [{ OR: visibility }, filter];
+
+  if (filters) {
+    if (filters.status) andClauses.push({ status: filters.status });
+    if (filters.priority) andClauses.push({ priority: filters.priority });
+    if (filters.divisionId) andClauses.push({ divisionId: filters.divisionId });
+    if (filters.jsPriority) andClauses.push({ jsPriorityLane: { not: null } });
+    if (filters.milestone) andClauses.push({ milestone: true });
+    if (filters.dueFrom || filters.dueTo) {
+      const dueDateClause: Prisma.DateTimeNullableFilter = {};
+      if (filters.dueFrom) dueDateClause.gte = new Date(filters.dueFrom);
+      if (filters.dueTo) {
+        const end = new Date(filters.dueTo);
+        end.setHours(23, 59, 59, 999);
+        dueDateClause.lte = end;
+      }
+      andClauses.push({ dueDate: dueDateClause });
+    }
+  }
+
   const where: Prisma.TaskWhereInput = {
-    AND: [{ OR: visibility }, filter],
+    AND: andClauses,
   };
 
   const [rowsRaw, total] = await Promise.all([
@@ -332,6 +363,7 @@ export async function searchFull(
   callerId: string,
   query: string,
   type: SearchType,
+  taskFilters?: SearchTaskFilters,
 ): Promise<SearchResults> {
   const include = {
     tasks: type === 'all' || type === 'tasks',
@@ -342,7 +374,7 @@ export async function searchFull(
 
   const [tasks, timelineFiles, users, tags] = await Promise.all([
     include.tasks
-      ? searchTasksFor(callerId, query, FULL_PER_GROUP)
+      ? searchTasksFor(callerId, query, FULL_PER_GROUP, taskFilters)
       : Promise.resolve({ rows: [], total: 0 }),
     include.timelineFiles
       ? searchTimelineFilesFor(callerId, query, FULL_PER_GROUP)

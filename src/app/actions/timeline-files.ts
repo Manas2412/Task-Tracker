@@ -346,17 +346,32 @@ export async function updateTimelineFileFieldsAction(
 
   try {
     await prisma.timelineFile.update({ where: { id: parsed.data.id }, data });
+
+    const isSecretaryComment = parsed.data.secretaryComments !== undefined;
     await prisma.timelineFileActivity.create({
       data: {
         timelineFileId: parsed.data.id,
         actorId: guard.userId,
-        eventType:
-          parsed.data.secretaryComments !== undefined
-            ? 'secretary_comment_added'
-            : 'fields_updated',
+        eventType: isSecretaryComment ? 'secretary_comment_added' : 'fields_updated',
         payload: { fields: Object.keys(data) },
       },
     });
+
+    if (isSecretaryComment) {
+      const tf = await prisma.timelineFile.findUnique({
+        where: { id: parsed.data.id },
+        select: { createdById: true, refNo: true },
+      });
+      if (tf && tf.createdById !== guard.userId) {
+        await prisma.notification.create({
+          data: {
+            userId: tf.createdById,
+            type: 'secretary_comment_on_timeline_file',
+            payload: { timelineFileId: parsed.data.id, refNo: tf.refNo },
+          },
+        });
+      }
+    }
   } catch (err) {
     console.error('updateTimelineFileFieldsAction failed:', err);
     return fail('Could not save changes.', epoch);
@@ -404,6 +419,29 @@ export async function addMarkedToAction(
         payload: { divisionId: parsed.data.divisionId },
       },
     });
+
+    const tf = await prisma.timelineFile.findUnique({
+      where: { id: parsed.data.id },
+      select: { refNo: true },
+    });
+    const directors = await prisma.user.findMany({
+      where: {
+        divisionId: parsed.data.divisionId,
+        hierarchySlot: 'director',
+        isActive: true,
+        id: { not: guard.userId },
+      },
+      select: { id: true },
+    });
+    if (directors.length > 0) {
+      await prisma.notification.createMany({
+        data: directors.map((d) => ({
+          userId: d.id,
+          type: 'timeline_file_marked_to_division',
+          payload: { timelineFileId: parsed.data.id, refNo: tf?.refNo ?? '' },
+        })),
+      });
+    }
   } catch (err: unknown) {
     if (
       err &&

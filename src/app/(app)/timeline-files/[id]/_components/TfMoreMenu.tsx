@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import {
@@ -63,8 +64,16 @@ export function TfMoreMenu({ tfId, refNo, canArchive, canDelete }: TfMoreMenuPro
     });
   };
 
-  // Nothing to surface if the caller can do neither
-  if (!canArchive && !canDelete) return null;
+  const [copied, setCopied] = useState(false);
+
+  const copyLink = () => {
+    const url = `${window.location.origin}/timeline-files/${tfId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+    setOpen(false);
+  };
 
   return (
     <div className="relative" ref={wrapRef}>
@@ -78,6 +87,12 @@ export function TfMoreMenu({ tfId, refNo, canArchive, canDelete }: TfMoreMenuPro
       >
         <i className="ti ti-dots-vertical text-[18px]" aria-hidden="true" />
       </button>
+
+      {copied ? (
+        <span className="absolute right-0 top-full mt-2 px-3 py-1.5 rounded-lg bg-ink text-white text-[12px] whitespace-nowrap z-40">
+          Link copied
+        </span>
+      ) : null}
 
       <div
         role="menu"
@@ -116,6 +131,19 @@ export function TfMoreMenu({ tfId, refNo, canArchive, canDelete }: TfMoreMenuPro
           </div>
         ) : (
           <>
+            <MenuButton
+              icon="ti-link"
+              label="Share link"
+              onClick={copyLink}
+            />
+            {canArchive || canDelete ? (
+              <MenuLink
+                icon="ti-history"
+                label="View audit trail"
+                href={`/admin/audit?entity=timeline_file&entityId=${tfId}`}
+                onClick={() => setOpen(false)}
+              />
+            ) : null}
             {canArchive ? (
               <MenuButton
                 icon="ti-archive"
@@ -173,5 +201,29 @@ function MenuButton({
       />
       {label}
     </button>
+  );
+}
+
+function MenuLink({
+  icon,
+  label,
+  href,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  href: string;
+  onClick?: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      role="menuitem"
+      onClick={onClick}
+      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-ink hover:bg-bg transition-colors"
+    >
+      <i className={cn('ti', icon, 'text-[16px] text-ink-2')} aria-hidden="true" />
+      {label}
+    </Link>
   );
 }

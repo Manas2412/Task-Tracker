@@ -242,3 +242,77 @@ export function shiftMonth(year: number, monthIndex: number, delta: number): {
 export function monthParam(year: number, monthIndex: number): string {
   return `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
 }
+
+// ============================================================
+// Week grid (7 days, Mon–Sun, containing the given date)
+// ============================================================
+
+export type WeekDay = {
+  date: Date;
+  isToday: boolean;
+};
+
+/**
+ * Returns the 7 days (Mon–Sun) of the ISO week containing the given date,
+ * each annotated with `isToday`.
+ */
+export function buildWeekGrid(year: number, month: number, day: number): WeekDay[] {
+  const target = new Date(year, month, day);
+  const weekday = target.getDay(); // 0 = Sun
+  const mondayOffset = (weekday + 6) % 7; // how many days back to Monday
+
+  const monday = new Date(target);
+  monday.setDate(target.getDate() - mondayOffset);
+
+  const todayIso = isoDay(new Date());
+
+  const days: WeekDay[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push({
+      date: d,
+      isToday: isoDay(d) === todayIso,
+    });
+  }
+  return days;
+}
+
+export function weekBounds(grid: WeekDay[]): { from: Date; to: Date } {
+  const from = new Date(grid[0].date);
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(grid[grid.length - 1].date);
+  to.setHours(23, 59, 59, 999);
+  return { from, to };
+}
+
+/** Shift a date by `deltaDays` and return { year, month (0-based), day }. */
+export function shiftDay(
+  year: number,
+  month: number,
+  day: number,
+  deltaDays: number,
+): { year: number; month: number; day: number } {
+  const d = new Date(year, month, day + deltaDays);
+  return { year: d.getFullYear(), month: d.getMonth(), day: d.getDate() };
+}
+
+/** Format a date as YYYY-MM-DD for URL params. */
+export function dayParam(year: number, month: number, day: number): string {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+export function parseDayParam(raw: string | undefined): {
+  year: number;
+  month: number;
+  day: number;
+} {
+  if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, m, d] = raw.split('-').map(Number);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return { year: y, month: m - 1, day: d };
+    }
+  }
+  const now = new Date();
+  return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
+}

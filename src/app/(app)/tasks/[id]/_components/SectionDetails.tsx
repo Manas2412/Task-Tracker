@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
 import { Avatar, Sheet, Switch } from '@/components/ui';
-import { updateTaskFieldsAction } from '@/app/actions/tasks';
+import {
+  updateTaskFieldsAction,
+  reassignTaskAction,
+  resolveReassignmentAction,
+} from '@/app/actions/tasks';
 import {
   INITIAL_FIELDS_STATE,
   type UpdateFieldsState,
@@ -14,6 +18,23 @@ import { cn } from '@/lib/utils';
 
 import { RecurrencePicker, humanRecurrence } from './RecurrencePicker';
 
+type ReassignCandidate = {
+  id: string;
+  name: string;
+  designation: string;
+  divisionName: string;
+  divisionColour: string;
+};
+
+type PendingReassignment = {
+  id: string;
+  proposedOwnerName: string;
+  requestedByName: string;
+  approverName: string;
+  approverId: string;
+  isApprover: boolean;
+};
+
 type SectionDetailsProps = {
   taskId: string;
   owner: { name: string; division: { avatarColour: string } };
@@ -22,6 +43,9 @@ type SectionDetailsProps = {
   visibility: 'division' | 'personal';
   recurrence: string | null;
   milestone: boolean;
+  reassignCandidates: ReassignCandidate[];
+  pendingReassignment: PendingReassignment | null;
+  canReassign: boolean;
 };
 
 const VISIBILITY_OPTIONS = [
@@ -36,18 +60,20 @@ export function SectionDetails(props: SectionDetailsProps) {
         Details
       </h2>
 
+      {props.pendingReassignment ? (
+        <PendingReassignmentBanner
+          taskId={props.taskId}
+          pending={props.pendingReassignment}
+        />
+      ) : null}
+
       <div className="flex flex-col">
-        <Row icon="ti-user" label="Owner">
-          <div className="inline-flex items-center gap-2">
-            <Avatar
-              initials={initialsOf(props.owner.name)}
-              colour={props.owner.division.avatarColour}
-              size="xs"
-              ariaLabel={`Owner ${props.owner.name}`}
-            />
-            <span>{props.owner.name}</span>
-          </div>
-        </Row>
+        <OwnerRow
+          taskId={props.taskId}
+          owner={props.owner}
+          candidates={props.reassignCandidates}
+          canReassign={props.canReassign && !props.pendingReassignment}
+        />
 
         <DueRow taskId={props.taskId} due={props.due} />
 
@@ -83,6 +109,201 @@ function RecurrenceRow({
         </Row>
       }
     />
+  );
+}
+
+// ------------------------------------------------------------
+// Owner row — clickable if canReassign; opens a user picker sheet
+// ------------------------------------------------------------
+
+function OwnerRow({
+  taskId,
+  owner,
+  candidates,
+  canReassign,
+}: {
+  taskId: string;
+  owner: { name: string; division: { avatarColour: string } };
+  candidates: ReassignCandidate[];
+  canReassign: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [state, formAction] = useFormState(reassignTaskAction, INITIAL_FIELDS_STATE);
+
+  useEffect(() => {
+    if (state.ok) {
+      setOpen(false);
+      setSearch('');
+    }
+  }, [state.ok, state.epoch]);
+
+  const filtered = search
+    ? candidates.filter(
+        (c) =>
+          c.name.toLowerCase().includes(search.toLowerCase()) ||
+          c.designation.toLowerCase().includes(search.toLowerCase()) ||
+          c.divisionName.toLowerCase().includes(search.toLowerCase()),
+      )
+    : candidates;
+
+  if (!canReassign) {
+    return (
+      <Row icon="ti-user" label="Owner">
+        <div className="inline-flex items-center gap-2">
+          <Avatar
+            initials={initialsOf(owner.name)}
+            colour={owner.division.avatarColour}
+            size="xs"
+            ariaLabel={`Owner ${owner.name}`}
+          />
+          <span>{owner.name}</span>
+        </div>
+      </Row>
+    );
+  }
+
+  return (
+    <>
+      <Row icon="ti-user" label="Owner" onClick={() => setOpen(true)}>
+        <div className="inline-flex items-center gap-2">
+          <Avatar
+            initials={initialsOf(owner.name)}
+            colour={owner.division.avatarColour}
+            size="xs"
+            ariaLabel={`Owner ${owner.name}`}
+          />
+          <span>{owner.name}</span>
+        </div>
+      </Row>
+
+      <Sheet open={open} onClose={() => { setOpen(false); setSearch(''); }} title="Reassign task">
+        <div className="flex flex-col gap-3">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search people…"
+            autoFocus
+            className="w-full px-3 py-2.5 rounded-lg border border-line bg-panel text-[14px] outline-none focus:border-ink"
+          />
+
+          {state.error ? (
+            <p className="text-[12px] text-urgent">{state.error}</p>
+          ) : null}
+
+          <p className="text-[11px] text-ink-3">
+            Downward reassignment is instant. Sideways or upward requires your supervisor&apos;s approval.
+          </p>
+
+          <ul className="max-h-[320px] overflow-y-auto flex flex-col gap-0.5">
+            {filtered.length === 0 ? (
+              <li className="py-6 text-center text-[13px] text-ink-3">No matches</li>
+            ) : (
+              filtered.map((c) => (
+                <li key={c.id}>
+                  <form action={formAction}>
+                    <input type="hidden" name="taskId" value={taskId} />
+                    <input type="hidden" name="newOwnerId" value={c.id} />
+                    <button
+                      type="submit"
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left hover:bg-bg transition-colors"
+                    >
+                      <Avatar
+                        initials={initialsOf(c.name)}
+                        colour={c.divisionColour}
+                        size="xs"
+                        ariaLabel={c.name}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-medium text-ink truncate">{c.name}</p>
+                        <p className="text-[11px] text-ink-3 truncate">{c.designation} · {c.divisionName}</p>
+                      </div>
+                    </button>
+                  </form>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      </Sheet>
+    </>
+  );
+}
+
+// ------------------------------------------------------------
+// Pending reassignment banner — amber accent per the two-accent rule
+// ------------------------------------------------------------
+
+function PendingReassignmentBanner({
+  taskId,
+  pending,
+}: {
+  taskId: string;
+  pending: PendingReassignment;
+}) {
+  const [state, formAction] = useFormState(resolveReassignmentAction, INITIAL_FIELDS_STATE);
+
+  return (
+    <div className="mb-3 p-3 rounded-lg border border-accent/30 bg-accent/5">
+      <div className="flex items-start gap-2.5">
+        <i className="ti ti-arrows-shuffle text-[16px] text-accent mt-0.5 shrink-0" aria-hidden="true" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-medium text-ink">
+            Reassignment pending
+          </p>
+          <p className="text-[12px] text-ink-2 mt-0.5">
+            {pending.requestedByName} requested to reassign to {pending.proposedOwnerName}.
+            Waiting for {pending.approverName}&apos;s approval.
+          </p>
+
+          {state.error ? (
+            <p className="text-[12px] text-urgent mt-1">{state.error}</p>
+          ) : null}
+
+          {pending.isApprover ? (
+            <div className="flex gap-2 mt-2.5">
+              <form action={formAction}>
+                <input type="hidden" name="requestId" value={pending.id} />
+                <input type="hidden" name="action" value="approve" />
+                <ApproveBtn />
+              </form>
+              <form action={formAction}>
+                <input type="hidden" name="requestId" value={pending.id} />
+                <input type="hidden" name="action" value="reject" />
+                <RejectBtn />
+              </form>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ApproveBtn() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="px-3 py-1.5 rounded-md bg-ink text-white text-[12px] font-medium disabled:opacity-60"
+    >
+      {pending ? 'Approving…' : 'Approve'}
+    </button>
+  );
+}
+
+function RejectBtn() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="px-3 py-1.5 rounded-md border border-line text-[12px] font-medium text-ink-2 disabled:opacity-60"
+    >
+      {pending ? 'Rejecting…' : 'Reject'}
+    </button>
   );
 }
 

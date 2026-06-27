@@ -58,6 +58,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         include: { actor: true },
         orderBy: { createdAt: 'desc' },
       },
+      parentTask: { select: { id: true, name: true } },
       linkedTimelineFile: true,
       tags: { include: { tag: { select: { id: true, name: true } } } },
     },
@@ -186,18 +187,68 @@ export default async function TaskDetailPage({ params }: PageProps) {
       )
     : [];
 
+  const canReassign =
+    task.ownerId === session.user.id ||
+    task.createdById === session.user.id ||
+    session.user.isSuperAdmin ||
+    session.user.hierarchySlot === 'osd';
+
+  const [reassignCandidateRows, pendingReassignmentRow] = await Promise.all([
+    canReassign
+      ? prisma.user.findMany({
+          where: { isActive: true, id: { not: task.ownerId } },
+          select: {
+            id: true,
+            name: true,
+            designation: true,
+            division: { select: { name: true, avatarColour: true } },
+          },
+          orderBy: { name: 'asc' },
+        })
+      : Promise.resolve([]),
+    prisma.reassignmentRequest.findFirst({
+      where: { taskId: task.id, status: 'pending' },
+      include: {
+        proposedOwner: { select: { name: true } },
+        requestedBy: { select: { name: true } },
+        approver: { select: { name: true } },
+      },
+    }),
+  ]);
+
+  const reassignCandidates = reassignCandidateRows.map((u) => ({
+    id: u.id,
+    name: u.name,
+    designation: u.designation,
+    divisionName: u.division.name,
+    divisionColour: u.division.avatarColour,
+  }));
+
+  const pendingReassignment = pendingReassignmentRow
+    ? {
+        id: pendingReassignmentRow.id,
+        proposedOwnerName: pendingReassignmentRow.proposedOwner.name,
+        requestedByName: pendingReassignmentRow.requestedBy.name,
+        approverName: pendingReassignmentRow.approver.name,
+        approverId: pendingReassignmentRow.approverId,
+        isApprover: pendingReassignmentRow.approverId === session.user.id,
+      }
+    : null;
+
   return (
     <div className="max-w-3xl xl:max-w-4xl mx-auto pb-16">
       {/* Header bar */}
       <header className="sticky top-14 md:top-16 z-10 bg-bg/90 backdrop-blur-sm border-b border-line-2">
         <div className="flex items-center justify-between gap-3 px-4 md:px-6 h-12">
           <Link
-            href="/tasks"
-            aria-label="Back to tasks"
+            href={task.parentTaskId ? `/tasks/${task.parentTaskId}` : '/tasks'}
+            aria-label={task.parentTaskId ? 'Back to parent task' : 'Back to tasks'}
             className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-2 hover:text-ink"
           >
             <i className="ti ti-arrow-left text-[16px]" aria-hidden="true" />
-            <span className="hidden md:inline">Back to tasks</span>
+            <span className="hidden md:inline">
+              {task.parentTaskId ? 'Parent task' : 'Back to tasks'}
+            </span>
           </Link>
           <MoreMenu
             taskId={task.id}
@@ -216,6 +267,16 @@ export default async function TaskDetailPage({ params }: PageProps) {
         aria-labelledby="task-title"
         className="px-4 md:px-6 py-5 border-b border-line-2"
       >
+        {task.parentTaskId ? (
+          <p className="text-[11px] text-ink-3 mb-2 inline-flex items-center gap-1">
+            <i className="ti ti-subtask text-[12px]" aria-hidden="true" />
+            Subtask of{' '}
+            <Link href={`/tasks/${task.parentTaskId}`} className="text-primary hover:underline font-medium">
+              {task.parentTask?.name ?? 'parent task'}
+            </Link>
+          </p>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
           <StatusPicker taskId={task.id} current={task.status as PillStatusTone} />
           <PriorityPicker taskId={task.id} current={task.priority as PillPriorityTone} />
@@ -268,6 +329,9 @@ export default async function TaskDetailPage({ params }: PageProps) {
         visibility={task.visibility as 'division' | 'personal'}
         recurrence={task.recurrenceRule}
         milestone={task.milestone}
+        reassignCandidates={reassignCandidates}
+        pendingReassignment={pendingReassignment}
+        canReassign={canReassign}
       />
 
       <CollaboratorsSection

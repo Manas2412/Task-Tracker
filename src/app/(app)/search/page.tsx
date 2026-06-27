@@ -1,18 +1,32 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/db';
 import {
   isQuerySearchable,
   searchFull,
   type SearchResults,
+  type SearchTaskFilters,
   type SearchType,
 } from '@/lib/search';
 import { cn } from '@/lib/utils';
+import { SearchAdvancedFilters } from './_components/SearchAdvancedFilters';
 import { SearchInput } from './_components/SearchInput';
 
 type PageProps = {
-  searchParams?: { q?: string; type?: string };
+  searchParams?: {
+    q?: string;
+    type?: string;
+    status?: string;
+    priority?: string;
+    division?: string;
+    dueFrom?: string;
+    dueTo?: string;
+    jsP?: string;
+    milestone?: string;
+  };
 };
 
 const TYPES: { id: SearchType; label: string }[] = [
@@ -41,16 +55,36 @@ export default async function SearchPage({ searchParams }: PageProps) {
   const rawQuery = (searchParams?.q ?? '').trim();
   const type: SearchType = isType(searchParams?.type) ? searchParams!.type : 'all';
 
-  const results: SearchResults = isQuerySearchable(rawQuery)
-    ? await searchFull(session.user.id, rawQuery, type)
-    : {
-        query: rawQuery,
-        tasks: [],
-        timelineFiles: [],
-        users: [],
-        tags: [],
-        totals: { tasks: 0, timelineFiles: 0, users: 0, tags: 0 },
-      };
+  const taskFilters: SearchTaskFilters = {};
+  if (searchParams?.status) taskFilters.status = searchParams.status;
+  if (searchParams?.priority) taskFilters.priority = searchParams.priority;
+  if (searchParams?.division) taskFilters.divisionId = searchParams.division;
+  if (searchParams?.dueFrom) taskFilters.dueFrom = searchParams.dueFrom;
+  if (searchParams?.dueTo) taskFilters.dueTo = searchParams.dueTo;
+  if (searchParams?.jsP === '1') taskFilters.jsPriority = true;
+  if (searchParams?.milestone === '1') taskFilters.milestone = true;
+
+  const showTaskFilters = type === 'all' || type === 'tasks';
+
+  const [results, divisions] = await Promise.all([
+    isQuerySearchable(rawQuery)
+      ? searchFull(session.user.id, rawQuery, type, taskFilters)
+      : Promise.resolve({
+          query: rawQuery,
+          tasks: [] as SearchResults['tasks'],
+          timelineFiles: [] as SearchResults['timelineFiles'],
+          users: [] as SearchResults['users'],
+          tags: [] as SearchResults['tags'],
+          totals: { tasks: 0, timelineFiles: 0, users: 0, tags: 0 },
+        } as SearchResults),
+    showTaskFilters
+      ? prisma.division.findMany({
+          where: { kind: 'division' },
+          select: { id: true, name: true },
+          orderBy: { displayOrder: 'asc' },
+        })
+      : Promise.resolve([]),
+  ]);
 
   const grandTotal =
     results.totals.tasks +
@@ -119,6 +153,13 @@ export default async function SearchPage({ searchParams }: PageProps) {
           );
         })}
       </nav>
+
+      {/* Advanced task filters */}
+      {showTaskFilters && isQuerySearchable(rawQuery) ? (
+        <Suspense fallback={null}>
+          <SearchAdvancedFilters divisions={divisions} />
+        </Suspense>
+      ) : null}
 
       {/* Result groups */}
       {!isQuerySearchable(rawQuery) ? null : grandTotal === 0 ? (

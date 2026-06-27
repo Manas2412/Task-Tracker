@@ -3,13 +3,14 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
 type ViewTabsProps = {
-  active: 'month' | 'list';
+  active: 'month' | 'week' | 'list';
   /** Preserve other params (e.g. ?date=) across the switch */
   date?: string;
 };
 
 const TABS = [
   { value: 'month' as const, label: 'Month', icon: 'ti-calendar-month' },
+  { value: 'week' as const, label: 'Week', icon: 'ti-calendar-event' },
   { value: 'list' as const, label: 'List', icon: 'ti-list-details' },
 ];
 

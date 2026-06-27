@@ -4,17 +4,23 @@ import { format } from 'date-fns';
 
 import { auth } from '@/lib/auth';
 import {
+  buildWeekGrid,
+  dayParam,
   fetchCalendarEvents,
   getMonthGrid,
   monthBounds,
   monthParam,
+  parseDayParam,
   parseMonthParam,
+  shiftDay,
   shiftMonth,
+  weekBounds,
 } from '@/lib/calendar';
 
 import { ListView } from './_components/ListView';
 import { MonthView } from './_components/MonthView';
 import { ViewTabs } from './_components/ViewTabs';
+import { WeekView } from './_components/WeekView';
 
 type PageProps = {
   searchParams?: { view?: string; date?: string };
@@ -24,10 +30,15 @@ export default async function CalendarPage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user) redirect('/login');
 
-  const view: 'month' | 'list' = searchParams?.view === 'list' ? 'list' : 'month';
+  const rawView = searchParams?.view;
+  const view: 'month' | 'week' | 'list' =
+    rawView === 'week' ? 'week' : rawView === 'list' ? 'list' : 'month';
 
   if (view === 'month') {
     return <MonthShell callerId={session.user.id} dateParam={searchParams?.date} />;
+  }
+  if (view === 'week') {
+    return <WeekShell callerId={session.user.id} dateParam={searchParams?.date} />;
   }
   return <ListShell callerId={session.user.id} dateParam={searchParams?.date} />;
 }
@@ -66,6 +77,47 @@ async function MonthShell({
       />
       <Legend />
       <MonthView grid={grid} events={events} />
+    </Frame>
+  );
+}
+
+// ============================================================
+// Week shell
+// ============================================================
+
+async function WeekShell({
+  callerId,
+  dateParam: rawDate,
+}: {
+  callerId: string;
+  dateParam?: string;
+}) {
+  const { year, month, day } = parseDayParam(rawDate);
+  const grid = buildWeekGrid(year, month, day);
+  const { from, to } = weekBounds(grid);
+  const events = await fetchCalendarEvents({ callerId, from, to });
+
+  const prev = shiftDay(year, month, day, -7);
+  const next = shiftDay(year, month, day, +7);
+  const today = new Date();
+  const todayParam = dayParam(today.getFullYear(), today.getMonth(), today.getDate());
+  const currentParam = dayParam(year, month, day);
+  const isViewingThisWeek = grid.some((d) => d.isToday);
+
+  const weekLabel = `${format(grid[0].date, 'd MMM')} – ${format(grid[6].date, 'd MMM yyyy')}`;
+
+  return (
+    <Frame view="week" date={currentParam} title={weekLabel}>
+      <NavStrip
+        prevHref={`/calendar?view=week&date=${dayParam(prev.year, prev.month, prev.day)}`}
+        nextHref={`/calendar?view=week&date=${dayParam(next.year, next.month, next.day)}`}
+        title={weekLabel}
+        todayHref={isViewingThisWeek ? null : `/calendar?view=week&date=${todayParam}`}
+        prevLabel="Previous week"
+        nextLabel="Next week"
+      />
+      <Legend />
+      <WeekView grid={grid} events={events} />
     </Frame>
   );
 }
@@ -126,7 +178,7 @@ function Frame({
   title,
   children,
 }: {
-  view: 'month' | 'list';
+  view: 'month' | 'week' | 'list';
   date: string | undefined;
   title: string;
   children: React.ReactNode;
@@ -163,18 +215,22 @@ function NavStrip({
   nextHref,
   title,
   todayHref,
+  prevLabel = 'Previous month',
+  nextLabel = 'Next month',
 }: {
   prevHref: string;
   nextHref: string;
   title: string;
   todayHref: string | null;
+  prevLabel?: string;
+  nextLabel?: string;
 }) {
   return (
     <div className="flex items-center justify-between mb-3 gap-3">
       <div className="inline-flex items-center gap-1">
         <Link
           href={prevHref}
-          aria-label="Previous month"
+          aria-label={prevLabel}
           className="w-8 h-8 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 transition-colors"
         >
           <i className="ti ti-chevron-left text-[16px]" aria-hidden="true" />
@@ -184,7 +240,7 @@ function NavStrip({
         </span>
         <Link
           href={nextHref}
-          aria-label="Next month"
+          aria-label={nextLabel}
           className="w-8 h-8 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 transition-colors"
         >
           <i className="ti ti-chevron-right text-[16px]" aria-hidden="true" />

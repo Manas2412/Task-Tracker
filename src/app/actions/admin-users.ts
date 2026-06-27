@@ -393,6 +393,14 @@ export async function resetUserPasswordAction(
       { forceChange },
     );
 
+    await prisma.notification.create({
+      data: {
+        userId: target.id,
+        type: 'password_reset_by_admin',
+        payload: { forceChange },
+      },
+    });
+
     revalidatePath('/admin/users');
     return ok(epoch);
   } catch (err) {

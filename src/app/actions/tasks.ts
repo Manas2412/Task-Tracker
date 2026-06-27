@@ -247,7 +247,10 @@ export async function updateTaskStatusAction(
   });
   if (!parsed.success) return fail('Invalid input.', epoch);
 
-  const task = await prisma.task.findUnique({ where: { id: parsed.data.taskId } });
+  const task = await prisma.task.findUnique({
+    where: { id: parsed.data.taskId },
+    select: { id: true, name: true, status: true, ownerId: true },
+  });
   if (!task) return fail('Task not found.', epoch);
 
   const noChange = task.status === parsed.data.status;
@@ -281,6 +284,36 @@ export async function updateTaskStatusAction(
         });
       }
     });
+
+    if (!noChange) {
+      const notifs: { userId: string; type: string; payload: Record<string, unknown> }[] = [];
+
+      if (task.ownerId !== me.id) {
+        notifs.push({
+          userId: task.ownerId,
+          type: 'status_changed_on_my_task',
+          payload: { taskId: task.id, taskName: task.name, from: task.status, to: parsed.data.status, actorId: me.id },
+        });
+      }
+
+      const divLeads = await prisma.taskCollaborator.findMany({
+        where: { taskId: task.id, role: 'division_lead' },
+        select: { userId: true },
+      });
+      for (const dl of divLeads) {
+        if (dl.userId !== me.id) {
+          notifs.push({
+            userId: dl.userId,
+            type: 'cross_division_status_change',
+            payload: { taskId: task.id, taskName: task.name, from: task.status, to: parsed.data.status },
+          });
+        }
+      }
+
+      if (notifs.length > 0) {
+        await prisma.notification.createMany({ data: notifs });
+      }
+    }
   } catch (err) {
     console.error('updateTaskStatusAction failed:', err);
     return fail('Could not change status.', epoch);
@@ -652,7 +685,7 @@ export async function postCommentAction(
   const mentions = await resolveMentions(parsed.data.body);
 
   try {
-    await prisma.taskComment.create({
+    const comment = await prisma.taskComment.create({
       data: {
         taskId: task.id,
         userId: me.id,
@@ -661,6 +694,17 @@ export async function postCommentAction(
         parentCommentId: parsed.data.parentCommentId ?? null,
       },
     });
+
+    const mentionNotifs = mentions
+      .filter((uid) => uid !== me.id)
+      .map((uid) => ({
+        userId: uid,
+        type: 'mention' as const,
+        payload: { taskId: task.id, commentId: comment.id, actorId: me.id },
+      }));
+    if (mentionNotifs.length > 0) {
+      await prisma.notification.createMany({ data: mentionNotifs });
+    }
   } catch (err) {
     console.error('postCommentAction failed:', err);
     return fail('Could not post comment.', epoch);
@@ -973,16 +1017,32 @@ export async function setJsPriorityLaneAction(
         },
       });
 
-      // Phase 2 notifications — owner only for now; Director/Section
-      // Officer fan-out per PRD §5.3 lands when the notification bell ships.
-      if (parsed.data.lane && task.ownerId !== me.id) {
-        await tx.notification.create({
-          data: {
-            userId: task.ownerId,
-            type: 'js_priority_added',
-            payload: { taskId: task.id, lane: parsed.data.lane },
-          },
-        });
+      if (parsed.data.lane) {
+        const notifTargets: string[] = [];
+        if (task.ownerId !== me.id) notifTargets.push(task.ownerId);
+
+        if (task.owner.divisionId) {
+          const chainOfficers = await tx.user.findMany({
+            where: {
+              divisionId: task.owner.divisionId,
+              hierarchySlot: { in: ['director', 'section_officer'] },
+              isActive: true,
+              id: { notIn: [me.id, task.ownerId] },
+            },
+            select: { id: true },
+          });
+          for (const u of chainOfficers) notifTargets.push(u.id);
+        }
+
+        if (notifTargets.length > 0) {
+          await tx.notification.createMany({
+            data: notifTargets.map((uid) => ({
+              userId: uid,
+              type: 'js_priority_added',
+              payload: { taskId: task.id, lane: parsed.data.lane },
+            })),
+          });
+        }
       }
     });
   } catch (err) {
@@ -1153,5 +1213,226 @@ export async function removeCollaboratorAction(
   }
 
   revalidateTask(parsed.data.taskId);
+  return ok(epoch);
+}
+
+// ============================================================
+// Reassignment — request + resolve (approve / reject)
+// ============================================================
+
+const reassignSchema = z.object({
+  taskId: z.string().uuid(),
+  newOwnerId: z.string().uuid(),
+});
+
+async function isSubordinateOf(userId: string, superiorId: string): Promise<boolean> {
+  let current = userId;
+  for (let depth = 0; depth < 20; depth++) {
+    const user = await prisma.user.findUnique({
+      where: { id: current },
+      select: { supervisorId: true },
+    });
+    if (!user?.supervisorId) return false;
+    if (user.supervisorId === superiorId) return true;
+    current = user.supervisorId;
+  }
+  return false;
+}
+
+export async function reassignTaskAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const parsed = reassignSchema.safeParse({
+    taskId: formData.get('taskId'),
+    newOwnerId: formData.get('newOwnerId'),
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const task = await prisma.task.findUnique({
+    where: { id: parsed.data.taskId },
+    select: { id: true, name: true, ownerId: true },
+  });
+  if (!task) return fail('Task not found.', epoch);
+  if (task.ownerId === parsed.data.newOwnerId) return fail('Already the owner.', epoch);
+
+  const newOwner = await prisma.user.findUnique({
+    where: { id: parsed.data.newOwnerId, isActive: true },
+    select: { id: true, name: true },
+  });
+  if (!newOwner) return fail('User not found.', epoch);
+
+  const meRow = await prisma.user.findUnique({
+    where: { id: me.id },
+    select: { id: true, supervisorId: true, isSuperAdmin: true, hierarchySlot: true },
+  });
+  if (!meRow) return fail('User not found.', epoch);
+
+  const isDownward = await isSubordinateOf(parsed.data.newOwnerId, me.id);
+  const isFree = isDownward || meRow.isSuperAdmin || meRow.hierarchySlot === 'osd';
+
+  if (isFree) {
+    await prisma.$transaction([
+      prisma.task.update({
+        where: { id: task.id },
+        data: { ownerId: parsed.data.newOwnerId },
+      }),
+      prisma.taskActivity.create({
+        data: {
+          taskId: task.id,
+          actorId: me.id,
+          eventType: 'owner_changed',
+          payload: { from: task.ownerId, to: parsed.data.newOwnerId, toName: newOwner.name },
+        },
+      }),
+    ]);
+    if (parsed.data.newOwnerId !== me.id) {
+      await prisma.notification.create({
+        data: {
+          userId: parsed.data.newOwnerId,
+          type: 'task_assigned',
+          payload: { taskId: task.id, actorId: me.id },
+        },
+      });
+    }
+  } else {
+    const approverId = meRow.supervisorId;
+    if (!approverId) return fail('No supervisor found to approve this reassignment.', epoch);
+
+    const existing = await prisma.reassignmentRequest.findFirst({
+      where: { taskId: task.id, status: 'pending' },
+    });
+    if (existing) return fail('A reassignment is already pending approval.', epoch);
+
+    await prisma.reassignmentRequest.create({
+      data: {
+        taskId: task.id,
+        requestedById: me.id,
+        proposedOwnerId: parsed.data.newOwnerId,
+        approverId,
+      },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: approverId,
+        type: 'reassignment_approval_requested',
+        payload: { taskId: task.id, actorId: me.id, proposedOwnerId: parsed.data.newOwnerId },
+      },
+    });
+    await prisma.taskActivity.create({
+      data: {
+        taskId: task.id,
+        actorId: me.id,
+        eventType: 'reassignment_requested',
+        payload: { proposedOwnerId: parsed.data.newOwnerId, proposedOwnerName: newOwner.name },
+      },
+    });
+  }
+
+  revalidateTask(task.id);
+  return ok(epoch);
+}
+
+const resolveReassignmentSchema = z.object({
+  requestId: z.string().uuid(),
+  action: z.enum(['approve', 'reject']),
+});
+
+export async function resolveReassignmentAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const parsed = resolveReassignmentSchema.safeParse({
+    requestId: formData.get('requestId'),
+    action: formData.get('action'),
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const request = await prisma.reassignmentRequest.findUnique({
+    where: { id: parsed.data.requestId },
+    include: {
+      task: { select: { id: true, name: true, ownerId: true } },
+      proposedOwner: { select: { id: true, name: true } },
+    },
+  });
+  if (!request) return fail('Request not found.', epoch);
+  if (request.status !== 'pending') return fail('This request has already been resolved.', epoch);
+  if (request.approverId !== me.id) return fail('You are not the approver for this request.', epoch);
+
+  const approved = parsed.data.action === 'approve';
+
+  if (approved) {
+    await prisma.$transaction([
+      prisma.reassignmentRequest.update({
+        where: { id: request.id },
+        data: { status: 'approved', resolvedAt: new Date() },
+      }),
+      prisma.task.update({
+        where: { id: request.taskId },
+        data: { ownerId: request.proposedOwnerId },
+      }),
+      prisma.taskActivity.create({
+        data: {
+          taskId: request.taskId,
+          actorId: me.id,
+          eventType: 'owner_changed',
+          payload: {
+            from: request.task.ownerId,
+            to: request.proposedOwnerId,
+            toName: request.proposedOwner.name,
+            viaApproval: true,
+          },
+        },
+      }),
+    ]);
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId: request.requestedById,
+          type: 'reassignment_approved',
+          payload: { taskId: request.taskId, actorId: me.id },
+        },
+        ...(request.proposedOwnerId !== request.requestedById
+          ? [{
+              userId: request.proposedOwnerId,
+              type: 'task_assigned' as const,
+              payload: { taskId: request.taskId, actorId: me.id },
+            }]
+          : []),
+      ],
+    });
+  } else {
+    await prisma.$transaction([
+      prisma.reassignmentRequest.update({
+        where: { id: request.id },
+        data: { status: 'rejected', resolvedAt: new Date() },
+      }),
+      prisma.taskActivity.create({
+        data: {
+          taskId: request.taskId,
+          actorId: me.id,
+          eventType: 'reassignment_rejected',
+          payload: { proposedOwnerId: request.proposedOwnerId, proposedOwnerName: request.proposedOwner.name },
+        },
+      }),
+    ]);
+    await prisma.notification.create({
+      data: {
+        userId: request.requestedById,
+        type: 'reassignment_rejected',
+        payload: { taskId: request.taskId, actorId: me.id },
+      },
+    });
+  }
+
+  revalidateTask(request.taskId);
   return ok(epoch);
 }
