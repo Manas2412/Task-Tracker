@@ -4,8 +4,9 @@
  * Creates the full organisational structure from the Work Activities Excel:
  *   6 divisions, ~65 users with real Ministry data.
  *
- * Bootstrap OSD reads credentials from .env (password is never overwritten).
- * All other users get password "TaskTracker@123" with forcePasswordChange.
+ * Bootstrap OSD preserves its existing password if already in the DB;
+ * falls back to .env BOOTSTRAP_PASSWORD on a fresh database.
+ * All other users get division-wise passwords with forcePasswordChange.
  *
  * Idempotent: clears all rows and re-inserts so re-running gives a fresh
  * known state. Safe to run every time the schema changes.
@@ -20,7 +21,15 @@ const prisma = new PrismaClient();
 const BOOTSTRAP_USERNAME = process.env.BOOTSTRAP_USERNAME ?? 'osd.myas';
 const BOOTSTRAP_PASSWORD = process.env.BOOTSTRAP_PASSWORD ?? 'ChangeMeImmediately!';
 const BOOTSTRAP_NAME = process.env.BOOTSTRAP_NAME ?? 'OSD';
-const DEFAULT_PASSWORD = 'TaskTracker@123';
+
+const PASSWORD_BY_DIVISION: Record<string, string> = {
+  'Office of JS': 'officeojs_26',
+  'Khelo India': 'kheloindia_26',
+  'NSDF': 'nsdf_26',
+  'SGM': 'sgm_26',
+  'Media & IT': 'mediait_26',
+  'Autonomous Bodies': 'autonomousbodies_26',
+};
 
 async function wipe() {
   console.log('Clearing tables…');
@@ -823,7 +832,7 @@ const USERS: UserSeed[] = [
 
 async function main() {
   console.log(`Bootstrap user: ${BOOTSTRAP_USERNAME}`);
-  console.log(`Default password for all others: ${DEFAULT_PASSWORD}\n`);
+  console.log(`Division-wise passwords enabled\n`);
 
   await wipe();
 
@@ -844,12 +853,32 @@ async function main() {
     divMap[d.name] = created.id;
   }
 
-  // ── Hash passwords ──────────────────────────────────────
+  // ── Preserve existing OSD credentials if already set ────
+  // Read BEFORE wipe so we can restore the password the user changed
+  const existingOsd = await prisma.user.findUnique({
+    where: { username: BOOTSTRAP_USERNAME },
+    select: { passwordHash: true, forcePasswordChange: true },
+  });
+
+  // ── Hash passwords (one per division) ──────────────────
   console.log('Hashing passwords…');
-  const [bootstrapHash, defaultHash] = await Promise.all([
-    hashPassword(BOOTSTRAP_PASSWORD),
-    hashPassword(DEFAULT_PASSWORD),
-  ]);
+  const divNames = Object.keys(PASSWORD_BY_DIVISION);
+  const divHashes = await Promise.all(
+    divNames.map((d) => hashPassword(PASSWORD_BY_DIVISION[d])),
+  );
+  const hashByDivision: Record<string, string> = {};
+  divNames.forEach((d, i) => { hashByDivision[d] = divHashes[i]; });
+
+  const bootstrapHash = existingOsd
+    ? existingOsd.passwordHash
+    : await hashPassword(BOOTSTRAP_PASSWORD);
+  const bootstrapForceChange = existingOsd
+    ? existingOsd.forcePasswordChange
+    : false;
+
+  if (existingOsd) {
+    console.log('Preserving existing OSD password…');
+  }
 
   // ── Create bootstrap user (OSD) ─────────────────────────
   console.log('Creating bootstrap user…');
@@ -863,6 +892,7 @@ async function main() {
       divisionId: divMap[DIV.OFFICE],
       isActive: true,
       isSuperAdmin: true,
+      forcePasswordChange: bootstrapForceChange,
     },
   });
 
@@ -873,7 +903,7 @@ async function main() {
       data: {
         name: u.name,
         username: u.username,
-        passwordHash: defaultHash,
+        passwordHash: hashByDivision[u.division],
         designation: u.designation,
         hierarchySlot: u.hierarchySlot as any,
         divisionId: divMap[u.division],
@@ -906,7 +936,7 @@ async function main() {
 
   console.log('\nSeed complete.');
   console.log(`Created ${Object.keys(divMap).length} divisions, ${USERS.length + 1} users.`);
-  console.log(`Sign in at /login. OSD: use .env credentials. Others: ${DEFAULT_PASSWORD}`);
+  console.log(`Sign in at /login. OSD: existing password preserved. Others: division-wise passwords.`);
 }
 
 main()
