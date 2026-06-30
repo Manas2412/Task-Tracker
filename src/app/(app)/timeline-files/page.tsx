@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { TimelineFileCard } from '@/components/ui';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { isS3Configured } from '@/lib/s3';
 import {
   fetchTfCounts,
   fetchVisibleTimelineFiles,
@@ -88,6 +89,7 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
             <CreateTimelineFileDialog
               divisions={divisions}
               defaultReceivedDate={todayIso}
+              s3Configured={isS3Configured()}
             />
           ) : null}
         </div>
