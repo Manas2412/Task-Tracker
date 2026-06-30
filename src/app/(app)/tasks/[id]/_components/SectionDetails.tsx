@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
+import Link from 'next/link';
 
 import { Avatar, Sheet, Switch } from '@/components/ui';
 import {
@@ -43,7 +44,7 @@ type DivisionOption = {
 
 type SectionDetailsProps = {
   taskId: string;
-  owner: { name: string; division: { avatarColour: string } };
+  owner: { id: string; name: string; division: { avatarColour: string } };
   due: Date | null;
   divisionId: string;
   divisionName: string;
@@ -55,6 +56,7 @@ type SectionDetailsProps = {
   canReassign: boolean;
   canChangeDivision: boolean;
   divisions: DivisionOption[];
+  canViewProfiles: boolean;
 };
 
 const VISIBILITY_OPTIONS = [
@@ -82,6 +84,7 @@ export function SectionDetails(props: SectionDetailsProps) {
           owner={props.owner}
           candidates={props.reassignCandidates}
           canReassign={props.canReassign && !props.pendingReassignment}
+          canViewProfile={props.canViewProfiles}
         />
 
         <DueRow taskId={props.taskId} due={props.due} />
@@ -134,11 +137,13 @@ function OwnerRow({
   owner,
   candidates,
   canReassign,
+  canViewProfile,
 }: {
   taskId: string;
-  owner: { name: string; division: { avatarColour: string } };
+  owner: { id: string; name: string; division: { avatarColour: string } };
   candidates: ReassignCandidate[];
   canReassign: boolean;
+  canViewProfile: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -161,17 +166,24 @@ function OwnerRow({
     : candidates;
 
   if (!canReassign) {
+    const display = (
+      <div className="inline-flex items-center gap-2">
+        <Avatar
+          initials={initialsOf(owner.name)}
+          colour={owner.division.avatarColour}
+          size="xs"
+          ariaLabel={`Owner ${owner.name}`}
+        />
+        <span>{owner.name}</span>
+      </div>
+    );
     return (
       <Row icon="ti-user" label="Owner">
-        <div className="inline-flex items-center gap-2">
-          <Avatar
-            initials={initialsOf(owner.name)}
-            colour={owner.division.avatarColour}
-            size="xs"
-            ariaLabel={`Owner ${owner.name}`}
-          />
-          <span>{owner.name}</span>
-        </div>
+        {canViewProfile ? (
+          <Link href={`/users/${owner.id}`} className="hover:opacity-80">
+            {display}
+          </Link>
+        ) : display}
       </Row>
     );
   }
@@ -186,7 +198,17 @@ function OwnerRow({
             size="xs"
             ariaLabel={`Owner ${owner.name}`}
           />
-          <span>{owner.name}</span>
+          {canViewProfile ? (
+            <Link
+              href={`/users/${owner.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="hover:underline"
+            >
+              {owner.name}
+            </Link>
+          ) : (
+            <span>{owner.name}</span>
+          )}
         </div>
       </Row>
 

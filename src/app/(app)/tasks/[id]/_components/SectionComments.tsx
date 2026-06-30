@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { formatDistanceToNow } from 'date-fns';
 
+import Link from 'next/link';
+
 import { Avatar, Pill } from '@/components/ui';
 import { deleteCommentAction, editCommentAction, postCommentAction } from '@/app/actions/tasks';
 import { initialsOf } from '@/lib/format';
@@ -52,6 +54,7 @@ type SectionCommentsProps = {
   comments: Comment[];
   mentionables: Mentionable[];
   currentUserId: string;
+  canViewProfiles: boolean;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -69,6 +72,7 @@ export function SectionComments({
   comments,
   mentionables,
   currentUserId,
+  canViewProfiles,
 }: SectionCommentsProps) {
   const totalCount = comments.reduce((sum, c) => sum + 1 + c.replies.length, 0);
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -97,6 +101,7 @@ export function SectionComments({
               taskId={taskId}
               mentionables={mentionables}
               currentUserId={currentUserId}
+              canViewProfiles={canViewProfiles}
             />
           ))}
         </ul>
@@ -116,6 +121,7 @@ function CommentThread({
   taskId,
   mentionables,
   currentUserId,
+  canViewProfiles,
 }: {
   comment: Comment;
   replyTo: string | null;
@@ -123,6 +129,7 @@ function CommentThread({
   taskId: string;
   mentionables: Mentionable[];
   currentUserId: string;
+  canViewProfiles: boolean;
 }) {
   const [showAllReplies, setShowAllReplies] = useState(false);
   const hasReplies = comment.replies.length > 0;
@@ -131,7 +138,7 @@ function CommentThread({
 
   return (
     <li className="py-3 border-b border-line-2 last:border-b-0">
-      <CommentRow comment={comment} currentUserId={currentUserId} mentionables={mentionables} taskId={taskId} />
+      <CommentRow comment={comment} currentUserId={currentUserId} mentionables={mentionables} taskId={taskId} canViewProfiles={canViewProfiles} />
 
       <div className="ml-9 mt-1.5 flex items-center gap-3">
         <button
@@ -163,7 +170,7 @@ function CommentThread({
           <ul className="flex flex-col">
             {visibleReplies.map((r) => (
               <li key={r.id} className="py-2 border-b border-line-2 last:border-b-0">
-                <CommentRow comment={r} compact currentUserId={currentUserId} mentionables={mentionables} taskId={taskId} />
+                <CommentRow comment={r} compact currentUserId={currentUserId} mentionables={mentionables} taskId={taskId} canViewProfiles={canViewProfiles} />
               </li>
             ))}
           </ul>
@@ -192,6 +199,7 @@ function CommentRow({
   mentionables,
   taskId,
   showActions,
+  canViewProfiles,
 }: {
   comment: Reply;
   compact?: boolean;
@@ -199,6 +207,7 @@ function CommentRow({
   mentionables: Mentionable[];
   taskId: string;
   showActions?: boolean;
+  canViewProfiles: boolean;
 }) {
   const isOwn = String(comment.userId) === String(currentUserId);
   const [windowOpen, setWindowOpen] = useState(() => {
@@ -250,9 +259,15 @@ function CommentRow({
       />
       <div className="flex-1 min-w-0">
         <header className="flex items-baseline gap-1.5 mb-1 flex-wrap">
-          <span className={cn('font-medium text-ink', compact ? 'text-[11px]' : 'text-[12px]')}>
-            {comment.user.name}
-          </span>
+          {canViewProfiles && comment.user.id ? (
+            <Link href={`/users/${comment.user.id}`} className={cn('font-medium text-ink hover:underline', compact ? 'text-[11px]' : 'text-[12px]')}>
+              {comment.user.name}
+            </Link>
+          ) : (
+            <span className={cn('font-medium text-ink', compact ? 'text-[11px]' : 'text-[12px]')}>
+              {comment.user.name}
+            </span>
+          )}
           {!compact ? (
             <span className="text-[10px] text-ink-3">· {comment.user.designation}</span>
           ) : null}

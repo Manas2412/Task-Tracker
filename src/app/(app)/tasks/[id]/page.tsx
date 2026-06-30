@@ -345,6 +345,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         canReassign={canReassign}
         canChangeDivision={canChangeDivision}
         divisions={allDivisions}
+        canViewProfiles={canChangeDivision}
       />
 
       <CollaboratorsSection
@@ -352,6 +353,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         collaborators={collaboratorRows}
         candidates={candidates}
         canEdit={canEditCollaborators}
+        canViewProfiles={canChangeDivision}
       />
 
       <TagsSection
@@ -385,6 +387,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         comments={task.comments}
         mentionables={mentionables}
         currentUserId={session.user.id}
+        canViewProfiles={canChangeDivision}
       />
 
       <SectionActivity

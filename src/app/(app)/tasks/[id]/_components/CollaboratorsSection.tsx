@@ -3,6 +3,8 @@
 import { useEffect, useState, useTransition } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
+import Link from 'next/link';
+
 import { Avatar, Sheet } from '@/components/ui';
 import {
   addCollaboratorAction,
@@ -31,8 +33,8 @@ type CollaboratorsSectionProps = {
   taskId: string;
   collaborators: CollaboratorRow[];
   candidates: Candidate[];
-  /** Caller can edit collaborators (owner, creator, or OSD/Super Admin) */
   canEdit: boolean;
+  canViewProfiles: boolean;
 };
 
 const ROLE_LABEL: Record<CollaboratorRow['role'], string> = {
@@ -52,6 +54,7 @@ export function CollaboratorsSection({
   collaborators,
   candidates,
   canEdit,
+  canViewProfiles,
 }: CollaboratorsSectionProps) {
   const [addOpen, setAddOpen] = useState(false);
 
@@ -92,6 +95,7 @@ export function CollaboratorsSection({
               taskId={taskId}
               row={c}
               canEdit={canEdit}
+              canViewProfile={canViewProfiles}
             />
           ))}
         </ul>
@@ -118,10 +122,12 @@ function CollaboratorChip({
   taskId,
   row,
   canEdit,
+  canViewProfile,
 }: {
   taskId: string;
   row: CollaboratorRow;
   canEdit: boolean;
+  canViewProfile: boolean;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -149,7 +155,13 @@ function CollaboratorChip({
         size="xs"
         ariaLabel={row.name}
       />
-      <span className="text-[11px] text-ink">{row.name}</span>
+      {canViewProfile ? (
+        <Link href={`/users/${row.userId}`} className="text-[11px] text-ink hover:underline">
+          {row.name}
+        </Link>
+      ) : (
+        <span className="text-[11px] text-ink">{row.name}</span>
+      )}
       <span className={cn('text-[10px]', ROLE_TONE[row.role])}>
         · {ROLE_LABEL[row.role]}
       </span>
