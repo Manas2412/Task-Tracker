@@ -135,6 +135,18 @@ const createUserSchema = z.object({
     .string()
     .optional()
     .transform((v) => v === 'on'),
+  phone: z
+    .string()
+    .trim()
+    .max(20)
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
+  workActivities: z
+    .string()
+    .trim()
+    .max(5000)
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
 });
 
 type AdminUserState = ActionState;
@@ -160,6 +172,8 @@ export async function createUserAction(
     subDivisionId: formData.get('subDivisionId'),
     supervisorId: formData.get('supervisorId'),
     isSuperAdmin: formData.get('isSuperAdmin'),
+    phone: formData.get('phone'),
+    workActivities: formData.get('workActivities'),
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -203,6 +217,8 @@ export async function createUserAction(
         isSuperAdmin: parsed.data.isSuperAdmin ?? false,
         forcePasswordChange: parsed.data.forcePasswordChange ?? true,
         createdById: guard.userId,
+        phone: parsed.data.phone ?? null,
+        workActivities: parsed.data.workActivities ?? null,
       },
     });
 
@@ -244,6 +260,14 @@ const updateUserSchema = z.object({
     .union([z.literal(''), z.string().uuid()])
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null)),
+  phone: z
+    .union([z.literal(''), z.string().trim().max(20)])
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+  workActivities: z
+    .union([z.literal(''), z.string().trim().max(5000)])
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null)),
 });
 
 export async function updateUserAction(
@@ -263,6 +287,8 @@ export async function updateUserAction(
     divisionId: formData.get('divisionId'),
     subDivisionId: formData.get('subDivisionId'),
     supervisorId: formData.get('supervisorId'),
+    phone: formData.get('phone'),
+    workActivities: formData.get('workActivities'),
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -304,6 +330,8 @@ export async function updateUserAction(
         divisionId: parsed.data.divisionId,
         subDivisionId: parsed.data.subDivisionId,
         supervisorId: parsed.data.supervisorId,
+        phone: parsed.data.phone,
+        workActivities: parsed.data.workActivities,
       },
     });
 

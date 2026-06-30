@@ -123,6 +123,14 @@ export default async function ProfilePage() {
             </DetailRow>
           ) : null}
 
+          {me.phone ? (
+            <DetailRow icon="ti-phone" label="Phone" muted>
+              <a href={`tel:+91${me.phone}`} className="hover:underline">
+                {me.phone}
+              </a>
+            </DetailRow>
+          ) : null}
+
           {me.supervisor ? (
             <DetailRow icon="ti-arrow-up" label="Reports to">
               <span className="inline-flex items-center gap-2">
@@ -153,6 +161,18 @@ export default async function ProfilePage() {
           </DetailRow>
         </dl>
       </section>
+
+      {/* Work activities */}
+      {me.workActivities ? (
+        <section className="mt-4 bg-panel border border-line rounded-2xl">
+          <h3 className="px-5 md:px-6 pt-5 pb-2 section-label">Work activities</h3>
+          <div className="px-5 md:px-6 pb-5">
+            <p className="text-[13px] text-ink-2 leading-relaxed whitespace-pre-wrap">
+              {me.workActivities}
+            </p>
+          </div>
+        </section>
+      ) : null}
 
       {/* Actions */}
       <section className="mt-4 bg-panel border border-line rounded-2xl p-2">

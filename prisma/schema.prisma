@@ -160,6 +160,8 @@ model User {
   name                  String
   username              String         @unique
   email                 String?        @unique
+  phone                 String?        @map("phone")
+  workActivities        String?        @map("work_activities")
   passwordHash          String         @map("password_hash")
   designation           String
   hierarchySlot         HierarchySlot  @map("hierarchy_slot")
