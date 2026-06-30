@@ -405,6 +405,7 @@ const updateFieldsSchema = z.object({
     ])
     .optional()
     .transform((v) => (v === undefined ? undefined : v === '' ? null : v)),
+  divisionId: z.string().uuid().optional(),
 });
 
 type UpdateFieldsState = ActionState;
@@ -429,6 +430,7 @@ export async function updateTaskFieldsAction(
     recurrenceRule: formData.has('recurrenceRule')
       ? (formData.get('recurrenceRule') as string)
       : undefined,
+    divisionId: formData.has('divisionId') ? (formData.get('divisionId') as string) : undefined,
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -479,6 +481,22 @@ export async function updateTaskFieldsAction(
     events.push({
       eventType: 'recurrence_changed',
       payload: { from: task.recurrenceRule, to: parsed.data.recurrenceRule },
+    });
+  }
+  if (parsed.data.divisionId !== undefined && parsed.data.divisionId !== task.divisionId) {
+    const meRow = await prisma.user.findUnique({
+      where: { id: me.id },
+      select: { isSuperAdmin: true, hierarchySlot: true },
+    });
+    if (!meRow?.isSuperAdmin && meRow?.hierarchySlot !== 'osd') {
+      return fail('Only OSD or Super Admin can change the division.', epoch);
+    }
+    data.divisionId = parsed.data.divisionId;
+    const oldDiv = await prisma.division.findUnique({ where: { id: task.divisionId }, select: { name: true } });
+    const newDiv = await prisma.division.findUnique({ where: { id: parsed.data.divisionId }, select: { name: true } });
+    events.push({
+      eventType: 'division_changed',
+      payload: { from: oldDiv?.name ?? task.divisionId, to: newDiv?.name ?? parsed.data.divisionId },
     });
   }
 

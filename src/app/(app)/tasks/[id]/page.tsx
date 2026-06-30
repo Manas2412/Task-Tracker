@@ -193,7 +193,10 @@ export default async function TaskDetailPage({ params }: PageProps) {
     session.user.isSuperAdmin ||
     session.user.hierarchySlot === 'osd';
 
-  const [reassignCandidateRows, pendingReassignmentRow] = await Promise.all([
+  const canChangeDivision =
+    session.user.isSuperAdmin || session.user.hierarchySlot === 'osd';
+
+  const [reassignCandidateRows, pendingReassignmentRow, allDivisions] = await Promise.all([
     canReassign
       ? prisma.user.findMany({
           where: { isActive: true, id: { not: task.ownerId } },
@@ -214,6 +217,13 @@ export default async function TaskDetailPage({ params }: PageProps) {
         approver: { select: { name: true } },
       },
     }),
+    canChangeDivision
+      ? prisma.division.findMany({
+          where: { kind: 'division' },
+          orderBy: { displayOrder: 'asc' },
+          select: { id: true, name: true, avatarColour: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const reassignCandidates = reassignCandidateRows.map((u) => ({
@@ -325,6 +335,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         taskId={task.id}
         owner={task.owner}
         due={task.dueDate}
+        divisionId={task.divisionId}
         divisionName={task.division.name}
         visibility={task.visibility as 'division' | 'personal'}
         recurrence={task.recurrenceRule}
@@ -332,6 +343,8 @@ export default async function TaskDetailPage({ params }: PageProps) {
         reassignCandidates={reassignCandidates}
         pendingReassignment={pendingReassignment}
         canReassign={canReassign}
+        canChangeDivision={canChangeDivision}
+        divisions={allDivisions}
       />
 
       <CollaboratorsSection

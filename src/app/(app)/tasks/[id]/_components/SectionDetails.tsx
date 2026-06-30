@@ -35,10 +35,17 @@ type PendingReassignment = {
   isApprover: boolean;
 };
 
+type DivisionOption = {
+  id: string;
+  name: string;
+  avatarColour: string;
+};
+
 type SectionDetailsProps = {
   taskId: string;
   owner: { name: string; division: { avatarColour: string } };
   due: Date | null;
+  divisionId: string;
   divisionName: string;
   visibility: 'division' | 'personal';
   recurrence: string | null;
@@ -46,6 +53,8 @@ type SectionDetailsProps = {
   reassignCandidates: ReassignCandidate[];
   pendingReassignment: PendingReassignment | null;
   canReassign: boolean;
+  canChangeDivision: boolean;
+  divisions: DivisionOption[];
 };
 
 const VISIBILITY_OPTIONS = [
@@ -77,9 +86,13 @@ export function SectionDetails(props: SectionDetailsProps) {
 
         <DueRow taskId={props.taskId} due={props.due} />
 
-        <Row icon="ti-building" label="Division">
-          <span>{props.divisionName}</span>
-        </Row>
+        <DivisionRow
+          taskId={props.taskId}
+          divisionId={props.divisionId}
+          divisionName={props.divisionName}
+          canChange={props.canChangeDivision}
+          divisions={props.divisions}
+        />
 
         <VisibilityRow taskId={props.taskId} visibility={props.visibility} />
 
@@ -439,6 +452,107 @@ function DueForm({
         <SaveBtn />
       </div>
     </form>
+  );
+}
+
+// ------------------------------------------------------------
+// Division row — editable by OSD / Super Admin only
+// ------------------------------------------------------------
+
+function DivisionRow({
+  taskId,
+  divisionId,
+  divisionName,
+  canChange,
+  divisions,
+}: {
+  taskId: string;
+  divisionId: string;
+  divisionName: string;
+  canChange: boolean;
+  divisions: DivisionOption[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [chosen, setChosen] = useState(divisionId);
+  const [state, formAction] = useFormState<UpdateFieldsState, FormData>(
+    updateTaskFieldsAction,
+    INITIAL_FIELDS_STATE,
+  );
+
+  useEffect(() => {
+    if (state.ok) setOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.ok, state.epoch]);
+
+  useEffect(() => {
+    if (open) setChosen(divisionId);
+  }, [open, divisionId]);
+
+  if (!canChange) {
+    return (
+      <Row icon="ti-building" label="Division">
+        <span>{divisionName}</span>
+      </Row>
+    );
+  }
+
+  return (
+    <>
+      <Row icon="ti-building" label="Division" onClick={() => setOpen(true)}>
+        <span>{divisionName}</span>
+      </Row>
+
+      <Sheet open={open} onClose={() => setOpen(false)} title="Change division">
+        <form action={formAction} className="flex flex-col gap-3">
+          <input type="hidden" name="taskId" value={taskId} />
+          <input type="hidden" name="divisionId" value={chosen} />
+
+          <div className="flex flex-col gap-1" role="radiogroup">
+            {divisions.map((d) => {
+              const active = chosen === d.id;
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setChosen(d.id)}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-colors',
+                    active ? 'bg-primary-soft' : 'hover:bg-bg',
+                  )}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: d.avatarColour }}
+                    aria-hidden="true"
+                  />
+                  <span className="flex-1 text-[14px] font-medium text-ink">{d.name}</span>
+                  {active ? (
+                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-white shrink-0">
+                      <i className="ti ti-check text-[12px]" aria-hidden="true" />
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          {state.error ? <p className="text-[12px] text-urgent">{state.error}</p> : null}
+
+          <div className="flex gap-2 mt-1">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="flex-1 py-3 rounded-lg border border-line text-[14px] font-medium text-ink-2 hover:bg-line-2"
+            >
+              Cancel
+            </button>
+            <SaveBtn />
+          </div>
+        </form>
+      </Sheet>
+    </>
   );
 }
 
