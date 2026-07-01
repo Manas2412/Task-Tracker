@@ -94,11 +94,11 @@ export function UserRowMenu({ user, divisions, supervisors, isSelf }: UserRowMen
         <div className="relative" ref={wrapRef}>
           <button
             type="button"
-            aria-label={`Actions for ${user.name}`}
             onClick={() => setOpen((v) => !v)}
-            className="w-8 h-8 grid place-items-center rounded-full text-ink-2 hover:bg-line-2"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-medium text-ink-2 hover:text-ink hover:bg-line-2 transition-colors"
           >
-            <i className="ti ti-dots-vertical text-[16px]" aria-hidden="true" />
+            <i className="ti ti-pencil text-[14px]" aria-hidden="true" />
+            Edit
           </button>
 
           <div
