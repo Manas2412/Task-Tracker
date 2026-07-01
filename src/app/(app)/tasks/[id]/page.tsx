@@ -41,7 +41,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         include: { user: { include: { division: true } } },
       },
       subtasks: {
-        include: { owner: { include: { division: true } } },
+        include: { owner: { select: { id: true, name: true, division: { select: { avatarColour: true } } } } },
         orderBy: [{ status: 'asc' }, { createdAt: 'asc' }],
       },
       comments: {
@@ -186,6 +186,26 @@ export default async function TaskDetailPage({ params }: PageProps) {
   // Cross-division marker — a task is "cross-division" if at least one
   // collaborator carries the division_lead role.
   const isCrossDivision = collaboratorRows.some((c) => c.role === 'division_lead');
+
+  // Subtask assignee candidates: active users in the task's division.
+  const subtaskAssigneeRows = canEditFields
+    ? await prisma.user.findMany({
+        where: { isActive: true, divisionId: task.divisionId },
+        select: {
+          id: true,
+          name: true,
+          designation: true,
+          division: { select: { avatarColour: true } },
+        },
+        orderBy: { name: 'asc' },
+      })
+    : [];
+  const subtaskAssignees = subtaskAssigneeRows.map((u) => ({
+    id: u.id,
+    name: u.name,
+    designation: u.designation,
+    divisionColour: u.division.avatarColour,
+  }));
 
   // Attachment editing — share the same permission as task tags.
   const canEditAttachments = await canEditTaskAttachments(session.user.id, task.id);
@@ -357,7 +377,13 @@ export default async function TaskDetailPage({ params }: PageProps) {
 
       <SectionContext taskId={task.id} description={task.description} canEdit={canEditFields} />
 
-      <SectionSubtasks taskId={task.id} subtasks={task.subtasks} canEdit={canEditFields} />
+      <SectionSubtasks
+        taskId={task.id}
+        subtasks={task.subtasks}
+        canEdit={canEditFields}
+        assignees={subtaskAssignees}
+        parentDueDate={task.dueDate}
+      />
 
       {task.linkedTimelineFile ? (
         <section className="px-4 md:px-6 py-5 border-b border-line-2">

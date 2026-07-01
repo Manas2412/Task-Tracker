@@ -29,6 +29,8 @@ export function formatDue(due: Date | null | undefined, now: Date = new Date()):
   if (!due) return { label: 'No due date', tone: 'none' };
 
   const diff = differenceInCalendarDays(due, now);
+  const hasTime = due.getHours() !== 0 || due.getMinutes() !== 0;
+  const timeSuffix = hasTime ? `, ${format(due, 'h:mm a').toLowerCase()}` : '';
 
   if (diff < 0) {
     const abs = Math.abs(diff);
@@ -38,21 +40,19 @@ export function formatDue(due: Date | null | undefined, now: Date = new Date()):
     };
   }
   if (isToday(due)) {
-    // Include the time-of-day if it's set to something other than midnight.
-    const hasTime = due.getHours() !== 0 || due.getMinutes() !== 0;
     return {
-      label: hasTime ? `Today, ${format(due, 'h:mm a').toLowerCase()}` : 'Today',
+      label: `Today${timeSuffix}`,
       tone: 'today',
     };
   }
-  if (isTomorrow(due)) return { label: 'Tomorrow', tone: 'soon' };
+  if (isTomorrow(due)) return { label: `Tomorrow${timeSuffix}`, tone: 'soon' };
   if (isYesterday(due)) return { label: 'Yesterday', tone: 'overdue' };
 
   // Within the next 7 days → "Mon, 9 Jun"; further out → "9 Jun".
   if (diff > 0 && diff <= 7) {
-    return { label: format(due, 'EEE, d LLL'), tone: 'soon' };
+    return { label: `${format(due, 'EEE, d LLL')}${timeSuffix}`, tone: 'soon' };
   }
-  return { label: format(due, 'd LLL'), tone: 'future' };
+  return { label: `${format(due, 'd LLL')}${timeSuffix}`, tone: 'future' };
 }
 
 /**

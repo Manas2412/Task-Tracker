@@ -556,6 +556,7 @@ export async function updateTaskFieldsAction(
 const addSubtaskSchema = z.object({
   parentTaskId: z.string().uuid(),
   name: z.string().trim().min(1, 'Subtask name is required').max(200),
+  assigneeId: z.string().uuid().optional(),
   dueDate: z
     .string()
     .optional()
@@ -574,6 +575,7 @@ export async function addSubtaskAction(
   const parsed = addSubtaskSchema.safeParse({
     parentTaskId: formData.get('parentTaskId'),
     name: formData.get('name'),
+    assigneeId: formData.get('assigneeId') || undefined,
     dueDate: formData.get('dueDate'),
   });
   if (!parsed.success) {
@@ -585,15 +587,26 @@ export async function addSubtaskAction(
 
   const parent = await prisma.task.findUnique({
     where: { id: parsed.data.parentTaskId },
-    select: { id: true, divisionId: true, visibility: true, ownerId: true },
+    select: { id: true, divisionId: true, visibility: true, ownerId: true, dueDate: true },
   });
   if (!parent) return fail('Parent task not found.', epoch);
+
+  if (parsed.data.dueDate && parent.dueDate) {
+    const subtaskDue = new Date(parsed.data.dueDate);
+    const parentEndOfDay = new Date(parent.dueDate);
+    parentEndOfDay.setHours(23, 59, 59, 999);
+    if (subtaskDue > parentEndOfDay) {
+      return { ok: false, fieldErrors: { dueDate: 'Subtask deadline cannot exceed the parent task deadline' }, epoch };
+    }
+  }
+
+  const assigneeId = parsed.data.assigneeId ?? me.id;
 
   try {
     const subtask = await prisma.task.create({
       data: {
         name: parsed.data.name,
-        ownerId: me.id,
+        ownerId: assigneeId,
         divisionId: parent.divisionId,
         status: 'not_started',
         priority: 'low',
@@ -608,9 +621,18 @@ export async function addSubtaskAction(
         taskId: parent.id,
         actorId: me.id,
         eventType: 'subtask_added',
-        payload: { name: subtask.name, subtaskId: subtask.id },
+        payload: { name: subtask.name, subtaskId: subtask.id, assigneeId: assigneeId !== me.id ? assigneeId : undefined },
       },
     });
+    if (assigneeId !== me.id) {
+      await prisma.notification.create({
+        data: {
+          userId: assigneeId,
+          type: 'task_assigned',
+          payload: { taskId: subtask.id, taskName: subtask.name, parentTaskId: parent.id },
+        },
+      });
+    }
   } catch (err) {
     console.error('addSubtaskAction failed:', err);
     return fail('Could not add subtask.', epoch);
@@ -665,6 +687,109 @@ export async function toggleSubtaskAction(
 
   if (subtask.parentTaskId) revalidateTask(subtask.parentTaskId);
   revalidatePath('/tasks');
+  return ok(epoch);
+}
+
+// ============================================================
+// updateSubtask — reassign + deadline
+// ============================================================
+
+const updateSubtaskSchema = z.object({
+  subtaskId: z.string().uuid(),
+  assigneeId: z.string().uuid().optional(),
+  dueDate: z
+    .string()
+    .optional()
+    .transform((s) => (s && s.length > 0 ? s : undefined))
+    .refine((s) => !s || !Number.isNaN(Date.parse(s)), 'Due date is invalid'),
+});
+
+export async function updateSubtaskAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const parsed = updateSubtaskSchema.safeParse({
+    subtaskId: formData.get('subtaskId'),
+    assigneeId: formData.get('assigneeId') || undefined,
+    dueDate: formData.get('dueDate') || undefined,
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues)
+      fieldErrors[String(issue.path[0])] = issue.message;
+    return { ok: false, fieldErrors, epoch };
+  }
+
+  const subtask = await prisma.task.findUnique({
+    where: { id: parsed.data.subtaskId },
+    select: { id: true, parentTaskId: true, ownerId: true, name: true },
+  });
+  if (!subtask || !subtask.parentTaskId) return fail('Subtask not found.', epoch);
+
+  const parent = await prisma.task.findUnique({
+    where: { id: subtask.parentTaskId },
+    select: { id: true, ownerId: true, createdById: true, divisionId: true, dueDate: true },
+  });
+  if (!parent) return fail('Parent task not found.', epoch);
+
+  const allowed = await canEditTask(me.id, parent);
+  if (!allowed) return fail('You do not have permission to edit this subtask.', epoch);
+
+  if (parsed.data.dueDate && parent.dueDate) {
+    const subtaskDue = new Date(parsed.data.dueDate);
+    const parentEndOfDay = new Date(parent.dueDate);
+    parentEndOfDay.setHours(23, 59, 59, 999);
+    if (subtaskDue > parentEndOfDay) {
+      return { ok: false, fieldErrors: { dueDate: 'Subtask deadline cannot exceed the parent task deadline' }, epoch };
+    }
+  }
+
+  const updates: Record<string, unknown> = {};
+  const activityChanges: string[] = [];
+
+  if (parsed.data.assigneeId && parsed.data.assigneeId !== subtask.ownerId) {
+    updates.ownerId = parsed.data.assigneeId;
+    activityChanges.push('reassigned');
+  }
+  if (parsed.data.dueDate !== undefined) {
+    updates.dueDate = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null;
+    activityChanges.push('deadline updated');
+  }
+
+  if (Object.keys(updates).length === 0) return ok(epoch);
+
+  try {
+    await prisma.$transaction([
+      prisma.task.update({ where: { id: subtask.id }, data: updates }),
+      prisma.taskActivity.create({
+        data: {
+          taskId: parent.id,
+          actorId: me.id,
+          eventType: 'subtask_updated',
+          payload: { subtaskId: subtask.id, name: subtask.name, changes: activityChanges },
+        },
+      }),
+    ]);
+
+    if (parsed.data.assigneeId && parsed.data.assigneeId !== subtask.ownerId && parsed.data.assigneeId !== me.id) {
+      await prisma.notification.create({
+        data: {
+          userId: parsed.data.assigneeId,
+          type: 'task_assigned',
+          payload: { taskId: subtask.id, taskName: subtask.name, parentTaskId: parent.id },
+        },
+      });
+    }
+  } catch (err) {
+    console.error('updateSubtaskAction failed:', err);
+    return fail('Could not update subtask.', epoch);
+  }
+
+  revalidateTask(parent.id);
   return ok(epoch);
 }
 

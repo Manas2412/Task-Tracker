@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useFormState, useFormStatus } from 'react-dom';
 
 import { Avatar } from '@/components/ui';
-import { addSubtaskAction, toggleSubtaskAction } from '@/app/actions/tasks';
+import { addSubtaskAction, toggleSubtaskAction, updateSubtaskAction } from '@/app/actions/tasks';
 import { initialsOf, formatDue } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -14,16 +14,25 @@ type Subtask = {
   name: string;
   status: string;
   dueDate: Date | null;
-  owner: { name: string; division: { avatarColour: string } };
+  owner: { id: string; name: string; division: { avatarColour: string } };
+};
+
+type AssigneeOption = {
+  id: string;
+  name: string;
+  designation: string;
+  divisionColour: string;
 };
 
 type SectionSubtasksProps = {
   taskId: string;
   subtasks: Subtask[];
   canEdit: boolean;
+  assignees: AssigneeOption[];
+  parentDueDate: Date | null;
 };
 
-export function SectionSubtasks({ taskId, subtasks, canEdit }: SectionSubtasksProps) {
+export function SectionSubtasks({ taskId, subtasks, canEdit, assignees, parentDueDate }: SectionSubtasksProps) {
   const [showAdd, setShowAdd] = useState(false);
   const total = subtasks.length;
   const done = subtasks.filter((s) => s.status === 'completed').length;
@@ -70,12 +79,23 @@ export function SectionSubtasks({ taskId, subtasks, canEdit }: SectionSubtasksPr
 
       <ul className="flex flex-col">
         {subtasks.map((s) => (
-          <SubtaskRow key={s.id} subtask={s} />
+          <SubtaskRow
+            key={s.id}
+            subtask={s}
+            canEdit={canEdit}
+            assignees={assignees}
+            parentDueDate={parentDueDate}
+          />
         ))}
       </ul>
 
       {showAdd ? (
-        <AddSubtaskForm taskId={taskId} onDone={() => setShowAdd(false)} />
+        <AddSubtaskForm
+          taskId={taskId}
+          assignees={assignees}
+          parentDueDate={parentDueDate}
+          onDone={() => setShowAdd(false)}
+        />
       ) : total === 0 ? (
         <p className="text-[13px] text-ink-3 italic">No subtasks yet.</p>
       ) : null}
@@ -83,8 +103,19 @@ export function SectionSubtasks({ taskId, subtasks, canEdit }: SectionSubtasksPr
   );
 }
 
-function SubtaskRow({ subtask }: { subtask: Subtask }) {
+function SubtaskRow({
+  subtask,
+  canEdit,
+  assignees,
+  parentDueDate,
+}: {
+  subtask: Subtask;
+  canEdit: boolean;
+  assignees: AssigneeOption[];
+  parentDueDate: Date | null;
+}) {
   const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState(false);
   const isDone = subtask.status === 'completed';
   const due = formatDue(subtask.dueDate);
 
@@ -97,56 +128,104 @@ function SubtaskRow({ subtask }: { subtask: Subtask }) {
   };
 
   return (
-    <li className="flex items-center gap-2.5 py-2.5 border-b border-line-2 last:border-b-0">
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={isDone}
-        onClick={toggle}
-        disabled={pending}
-        className={cn(
-          'w-[18px] h-[18px] grid place-items-center rounded-[5px] border-[1.5px] shrink-0 transition-colors',
-          isDone ? 'bg-success border-success text-white' : 'border-ink-4 hover:border-ink',
-        )}
-      >
-        {isDone ? <i className="ti ti-check text-[12px]" aria-hidden="true" /> : null}
-      </button>
+    <li className="border-b border-line-2 last:border-b-0">
+      <div className="flex items-center gap-2.5 py-2.5">
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={isDone}
+          onClick={toggle}
+          disabled={pending}
+          className={cn(
+            'w-[18px] h-[18px] grid place-items-center rounded-[5px] border-[1.5px] shrink-0 transition-colors',
+            isDone ? 'bg-success border-success text-white' : 'border-ink-4 hover:border-ink',
+          )}
+        >
+          {isDone ? <i className="ti ti-check text-[12px]" aria-hidden="true" /> : null}
+        </button>
 
-      <Link
-        href={`/tasks/${subtask.id}`}
-        className={cn(
-          'flex-1 text-[13px] leading-snug min-w-0 truncate',
-          isDone ? 'text-ink-3 line-through' : 'text-ink hover:underline',
-        )}
-      >
-        {subtask.name}
-      </Link>
+        <Link
+          href={`/tasks/${subtask.id}`}
+          className={cn(
+            'flex-1 text-[13px] leading-snug min-w-0 truncate',
+            isDone ? 'text-ink-3 line-through' : 'text-ink hover:underline',
+          )}
+        >
+          {subtask.name}
+        </Link>
 
-      <div className="flex items-center gap-2 shrink-0">
-        {due.tone !== 'none' ? (
-          <span
-            className={cn(
-              'text-[11px]',
-              due.tone === 'overdue' && 'text-urgent font-medium',
-              due.tone === 'today' && 'text-accent font-medium',
-              (due.tone === 'soon' || due.tone === 'future') && 'text-ink-3',
-            )}
-          >
-            {due.label}
-          </span>
-        ) : null}
-        <Avatar
-          initials={initialsOf(subtask.owner.name)}
-          colour={subtask.owner.division.avatarColour}
-          size="xs"
-          ariaLabel={`Owner ${subtask.owner.name}`}
-        />
+        <div className="flex items-center gap-2 shrink-0">
+          {due.tone !== 'none' ? (
+            <span
+              className={cn(
+                'text-[11px]',
+                due.tone === 'overdue' && 'text-urgent font-medium',
+                due.tone === 'today' && 'text-accent font-medium',
+                (due.tone === 'soon' || due.tone === 'future') && 'text-ink-3',
+              )}
+            >
+              {due.label}
+            </span>
+          ) : null}
+          <Avatar
+            initials={initialsOf(subtask.owner.name)}
+            colour={subtask.owner.division.avatarColour}
+            size="xs"
+            ariaLabel={`Assigned to ${subtask.owner.name}`}
+          />
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={() => setEditing((v) => !v)}
+              className="text-[11px] text-ink-3 hover:text-ink px-1"
+              aria-label="Edit subtask"
+            >
+              <i className="ti ti-pencil text-[13px]" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {editing ? (
+        <EditSubtaskForm
+          subtask={subtask}
+          assignees={assignees}
+          parentDueDate={parentDueDate}
+          onDone={() => setEditing(false)}
+        />
+      ) : null}
     </li>
   );
 }
 
-function AddSubtaskForm({ taskId, onDone }: { taskId: string; onDone: () => void }) {
+function toDatetimeLocalValue(d: Date | null): string {
+  if (!d) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function parentDueDateMax(parentDueDate: Date | null): string | undefined {
+  if (!parentDueDate) return undefined;
+  const end = new Date(parentDueDate);
+  end.setHours(23, 59);
+  return toDatetimeLocalValue(end);
+}
+
+function AddSubtaskForm({
+  taskId,
+  assignees,
+  parentDueDate,
+  onDone,
+}: {
+  taskId: string;
+  assignees: AssigneeOption[];
+  parentDueDate: Date | null;
+  onDone: () => void;
+}) {
   const ref = useRef<HTMLFormElement>(null);
   const [state, formAction] = useFormState(addSubtaskAction, { ok: false, epoch: 0 });
 
@@ -158,30 +237,55 @@ function AddSubtaskForm({ taskId, onDone }: { taskId: string; onDone: () => void
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, state.epoch]);
 
+  const maxDue = parentDueDateMax(parentDueDate);
+
   return (
     <form ref={ref} action={formAction} className="mt-3 flex flex-col gap-2">
       <input type="hidden" name="parentTaskId" value={taskId} />
+
+      <input
+        name="name"
+        autoFocus
+        required
+        maxLength={200}
+        placeholder="Subtask name…"
+        className="w-full px-3 py-2 rounded-lg border border-line bg-panel text-[13px] outline-none focus:border-ink"
+      />
+
       <div className="flex gap-2">
-        <input
-          name="name"
-          autoFocus
-          required
-          maxLength={200}
-          placeholder="Subtask name…"
-          className="flex-1 px-3 py-2 rounded-lg border border-line bg-panel text-[13px] outline-none focus:border-ink"
-        />
-        <input
-          name="dueDate"
-          type="date"
-          className="px-2 py-2 rounded-lg border border-line bg-panel text-[12px] outline-none focus:border-ink"
-        />
+        <label className="flex-1 flex flex-col gap-1">
+          <span className="text-[10px] font-medium text-ink-3">Assign to</span>
+          <select
+            name="assigneeId"
+            className="w-full px-2 py-2 rounded-lg border border-line bg-panel text-[12px] text-ink outline-none focus:border-ink"
+          >
+            <option value="">Myself</option>
+            {assignees.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} — {u.designation}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex-1 flex flex-col gap-1">
+          <span className="text-[10px] font-medium text-ink-3">Deadline</span>
+          <input
+            name="dueDate"
+            type="datetime-local"
+            max={maxDue}
+            className="w-full px-2 py-2 rounded-lg border border-line bg-panel text-[12px] outline-none focus:border-ink"
+          />
+        </label>
       </div>
+
       {state.fieldErrors?.name ? (
         <p className="text-[11px] text-urgent">{state.fieldErrors.name}</p>
       ) : null}
       {state.fieldErrors?.dueDate ? (
         <p className="text-[11px] text-urgent">{state.fieldErrors.dueDate}</p>
       ) : null}
+
       <div className="flex gap-2 justify-end">
         <button
           type="button"
@@ -205,6 +309,93 @@ function AddButton() {
       className="px-3 py-1.5 rounded-md bg-ink text-white text-[12px] font-medium disabled:opacity-60"
     >
       {pending ? 'Adding…' : 'Add'}
+    </button>
+  );
+}
+
+function EditSubtaskForm({
+  subtask,
+  assignees,
+  parentDueDate,
+  onDone,
+}: {
+  subtask: Subtask;
+  assignees: AssigneeOption[];
+  parentDueDate: Date | null;
+  onDone: () => void;
+}) {
+  const ref = useRef<HTMLFormElement>(null);
+  const [state, formAction] = useFormState(updateSubtaskAction, { ok: false, epoch: 0 });
+
+  useEffect(() => {
+    if (state.ok) onDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.ok, state.epoch]);
+
+  const maxDue = parentDueDateMax(parentDueDate);
+
+  return (
+    <form ref={ref} action={formAction} className="pb-3 flex flex-col gap-2 pl-[30px]">
+      <input type="hidden" name="subtaskId" value={subtask.id} />
+
+      <div className="flex gap-2">
+        <label className="flex-1 flex flex-col gap-1">
+          <span className="text-[10px] font-medium text-ink-3">Assigned to</span>
+          <select
+            name="assigneeId"
+            defaultValue={subtask.owner.id}
+            className="w-full px-2 py-2 rounded-lg border border-line bg-panel text-[12px] text-ink outline-none focus:border-ink"
+          >
+            {assignees.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} — {u.designation}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex-1 flex flex-col gap-1">
+          <span className="text-[10px] font-medium text-ink-3">Deadline</span>
+          <input
+            name="dueDate"
+            type="datetime-local"
+            defaultValue={toDatetimeLocalValue(subtask.dueDate)}
+            max={maxDue}
+            className="w-full px-2 py-2 rounded-lg border border-line bg-panel text-[12px] outline-none focus:border-ink"
+          />
+        </label>
+      </div>
+
+      {state.fieldErrors?.dueDate ? (
+        <p className="text-[11px] text-urgent">{state.fieldErrors.dueDate}</p>
+      ) : null}
+      {state.error ? (
+        <p className="text-[11px] text-urgent">{state.error}</p>
+      ) : null}
+
+      <div className="flex gap-2 justify-end">
+        <button
+          type="button"
+          onClick={onDone}
+          className="px-3 py-1.5 rounded-md border border-line text-[12px] font-medium text-ink-2 hover:bg-line-2"
+        >
+          Cancel
+        </button>
+        <SaveButton />
+      </div>
+    </form>
+  );
+}
+
+function SaveButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="px-3 py-1.5 rounded-md bg-ink text-white text-[12px] font-medium disabled:opacity-60"
+    >
+      {pending ? 'Saving…' : 'Save'}
     </button>
   );
 }
