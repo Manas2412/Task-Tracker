@@ -24,10 +24,15 @@ const LABEL: Record<string, string> = Object.fromEntries(OPTIONS.map((o) => [o.v
 type PriorityPickerProps = {
   taskId: string;
   current: PillPriorityTone;
+  canEdit: boolean;
 };
 
-export function PriorityPicker({ taskId, current }: PriorityPickerProps) {
+export function PriorityPicker({ taskId, current, canEdit }: PriorityPickerProps) {
   const [open, setOpen] = useState(false);
+
+  if (!canEdit) {
+    return <Pill variant="priority" tone={current} label={LABEL[current] ?? current} />;
+  }
   const [chosen, setChosen] = useState<PillPriorityTone>(current);
   const [state, formAction] = useFormState<UpdatePriorityState, FormData>(
     updateTaskPriorityAction,

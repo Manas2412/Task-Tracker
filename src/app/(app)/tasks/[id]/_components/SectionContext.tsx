@@ -13,14 +13,10 @@ import { cn } from '@/lib/utils';
 type SectionContextProps = {
   taskId: string;
   description: string | null;
+  canEdit: boolean;
 };
 
-/**
- * Description / context section with inline edit.
- * Default: view mode (Read more on long copy).
- * Edit mode: textarea + Save / Cancel; uses updateTaskFieldsAction.
- */
-export function SectionContext({ taskId, description }: SectionContextProps) {
+export function SectionContext({ taskId, description, canEdit }: SectionContextProps) {
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [state, formAction] = useFormState<UpdateFieldsState, FormData>(
@@ -39,7 +35,7 @@ export function SectionContext({ taskId, description }: SectionContextProps) {
         <h2 id="sec-context" className="section-label">
           Context
         </h2>
-        {!editing ? (
+        {canEdit && !editing ? (
           <button
             type="button"
             onClick={() => setEditing(true)}

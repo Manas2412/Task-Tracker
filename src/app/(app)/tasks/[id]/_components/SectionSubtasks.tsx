@@ -20,9 +20,10 @@ type Subtask = {
 type SectionSubtasksProps = {
   taskId: string;
   subtasks: Subtask[];
+  canEdit: boolean;
 };
 
-export function SectionSubtasks({ taskId, subtasks }: SectionSubtasksProps) {
+export function SectionSubtasks({ taskId, subtasks, canEdit }: SectionSubtasksProps) {
   const [showAdd, setShowAdd] = useState(false);
   const total = subtasks.length;
   const done = subtasks.filter((s) => s.status === 'completed').length;
@@ -39,7 +40,7 @@ export function SectionSubtasks({ taskId, subtasks }: SectionSubtasksProps) {
             </span>
           ) : null}
         </h2>
-        {!showAdd ? (
+        {canEdit && !showAdd ? (
           <button
             type="button"
             onClick={() => setShowAdd(true)}

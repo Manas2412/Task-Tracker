@@ -54,6 +54,7 @@ type SectionDetailsProps = {
   reassignCandidates: ReassignCandidate[];
   pendingReassignment: PendingReassignment | null;
   canReassign: boolean;
+  canEditFields: boolean;
   canChangeDivision: boolean;
   divisions: DivisionOption[];
   canViewProfiles: boolean;
@@ -87,7 +88,7 @@ export function SectionDetails(props: SectionDetailsProps) {
           canViewProfile={props.canViewProfiles}
         />
 
-        <DueRow taskId={props.taskId} due={props.due} />
+        <DueRow taskId={props.taskId} due={props.due} canEdit={props.canEditFields} />
 
         <DivisionRow
           taskId={props.taskId}
@@ -97,11 +98,11 @@ export function SectionDetails(props: SectionDetailsProps) {
           divisions={props.divisions}
         />
 
-        <VisibilityRow taskId={props.taskId} visibility={props.visibility} />
+        <VisibilityRow taskId={props.taskId} visibility={props.visibility} canEdit={props.canEditFields} />
 
-        <MilestoneRow taskId={props.taskId} milestone={props.milestone} />
+        <MilestoneRow taskId={props.taskId} milestone={props.milestone} canEdit={props.canEditFields} />
 
-        <RecurrenceRow taskId={props.taskId} recurrence={props.recurrence} />
+        <RecurrenceRow taskId={props.taskId} recurrence={props.recurrence} canEdit={props.canEditFields} />
       </div>
     </section>
   );
@@ -110,11 +111,22 @@ export function SectionDetails(props: SectionDetailsProps) {
 function RecurrenceRow({
   taskId,
   recurrence,
+  canEdit,
 }: {
   taskId: string;
   recurrence: string | null;
+  canEdit: boolean;
 }) {
   const label = humanRecurrence(recurrence);
+
+  if (!canEdit) {
+    return (
+      <Row icon="ti-repeat" label="Recurrence">
+        <span className={cn(!recurrence && 'text-ink-3 font-normal')}>{label}</span>
+      </Row>
+    );
+  }
+
   return (
     <RecurrencePicker
       taskId={taskId}
@@ -386,10 +398,26 @@ function Row({ icon, label, muted, children, onClick }: RowProps) {
 // Due row — inline date input in a small popover (uses Sheet)
 // ------------------------------------------------------------
 
-function DueRow({ taskId, due }: { taskId: string; due: Date | null }) {
+function DueRow({ taskId, due, canEdit }: { taskId: string; due: Date | null; canEdit: boolean }) {
   const [open, setOpen] = useState(false);
   const display = formatDue(due);
   const dateStr = due ? due.toISOString().slice(0, 10) : '';
+
+  if (!canEdit) {
+    return (
+      <Row icon="ti-calendar-event" label="Due">
+        <span
+          className={cn(
+            display.tone === 'overdue' && 'text-urgent',
+            display.tone === 'today' && 'text-accent',
+            display.tone === 'none' && 'text-ink-3 font-normal',
+          )}
+        >
+          {display.tone === 'none' ? 'No due date' : display.label}
+        </span>
+      </Row>
+    );
+  }
 
   return (
     <>
@@ -585,12 +613,25 @@ function DivisionRow({
 function VisibilityRow({
   taskId,
   visibility,
+  canEdit,
 }: {
   taskId: string;
   visibility: 'division' | 'personal';
+  canEdit: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const current = VISIBILITY_OPTIONS.find((v) => v.value === visibility)!;
+
+  if (!canEdit) {
+    return (
+      <Row icon="ti-users" label="Visibility">
+        <span className="inline-flex items-center gap-1.5">
+          <i className={cn('ti', current.icon, 'text-[13px]')} aria-hidden="true" />
+          {current.label}
+        </span>
+      </Row>
+    );
+  }
   const [chosen, setChosen] = useState(visibility);
   const [state, formAction] = useFormState<UpdateFieldsState, FormData>(
     updateTaskFieldsAction,
@@ -680,7 +721,7 @@ function VisibilityRow({
 // Milestone row — inline switch fires its own action
 // ------------------------------------------------------------
 
-function MilestoneRow({ taskId, milestone }: { taskId: string; milestone: boolean }) {
+function MilestoneRow({ taskId, milestone, canEdit }: { taskId: string; milestone: boolean; canEdit: boolean }) {
   const [state, formAction] = useFormState<UpdateFieldsState, FormData>(
     updateTaskFieldsAction,
     INITIAL_FIELDS_STATE,
@@ -691,6 +732,14 @@ function MilestoneRow({ taskId, milestone }: { taskId: string; milestone: boolea
   useEffect(() => {
     setOptimistic(milestone);
   }, [milestone]);
+
+  if (!canEdit) {
+    return (
+      <Row icon="ti-flag-3" label="Milestone">
+        <span className={milestone ? 'text-accent' : 'text-ink-3 font-normal'}>{milestone ? 'Yes' : 'No'}</span>
+      </Row>
+    );
+  }
 
   return (
     <form action={formAction} ref={formRef} className="flex items-center gap-3 py-2.5">
@@ -705,7 +754,6 @@ function MilestoneRow({ taskId, milestone }: { taskId: string; milestone: boolea
           ariaLabel="Mark as milestone"
           onChange={(next) => {
             setOptimistic(next);
-            // Submit immediately.
             queueMicrotask(() => formRef.current?.requestSubmit());
           }}
         />

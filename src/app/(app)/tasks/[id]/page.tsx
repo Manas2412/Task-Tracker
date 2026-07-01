@@ -109,6 +109,15 @@ export default async function TaskDetailPage({ params }: PageProps) {
     task.createdById === session.user.id ||
     task.ownerId === session.user.id;
 
+  // Field editing: owner, creator, Director+ in same division, OSD, JS, Super Admin.
+  const canEditFields =
+    task.ownerId === session.user.id ||
+    task.createdById === session.user.id ||
+    session.user.isSuperAdmin ||
+    session.user.hierarchySlot === 'osd' ||
+    session.user.hierarchySlot === 'js' ||
+    (session.user.hierarchySlot === 'director' && session.user.divisionId === task.divisionId);
+
   // Collaborator editing: owner, creator, or OSD / Super Admin can manage.
   const canEditCollaborators =
     task.ownerId === session.user.id ||
@@ -321,8 +330,8 @@ export default async function TaskDetailPage({ params }: PageProps) {
         ) : null}
 
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          <StatusPicker taskId={task.id} current={task.status as PillStatusTone} />
-          <PriorityPicker taskId={task.id} current={task.priority as PillPriorityTone} />
+          <StatusPicker taskId={task.id} current={task.status as PillStatusTone} canEdit={canEditFields} />
+          <PriorityPicker taskId={task.id} current={task.priority as PillPriorityTone} canEdit={canEditFields} />
           <JsLanePicker
             taskId={task.id}
             current={task.jsPriorityLane as PillJsLane | null}
@@ -346,9 +355,9 @@ export default async function TaskDetailPage({ params }: PageProps) {
         </p>
       </section>
 
-      <SectionContext taskId={task.id} description={task.description} />
+      <SectionContext taskId={task.id} description={task.description} canEdit={canEditFields} />
 
-      <SectionSubtasks taskId={task.id} subtasks={task.subtasks} />
+      <SectionSubtasks taskId={task.id} subtasks={task.subtasks} canEdit={canEditFields} />
 
       {task.linkedTimelineFile ? (
         <section className="px-4 md:px-6 py-5 border-b border-line-2">
@@ -376,6 +385,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         reassignCandidates={reassignCandidates}
         pendingReassignment={pendingReassignment}
         canReassign={canReassign}
+        canEditFields={canEditFields}
         canChangeDivision={canChangeDivision}
         divisions={allDivisions}
         canViewProfiles={canChangeDivision}

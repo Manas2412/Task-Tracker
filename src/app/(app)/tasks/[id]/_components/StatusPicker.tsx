@@ -26,15 +26,15 @@ const LABEL: Record<string, string> = Object.fromEntries(OPTIONS.map((o) => [o.v
 type StatusPickerProps = {
   taskId: string;
   current: PillStatusTone;
+  canEdit: boolean;
 };
 
-/**
- * Clickable status pill. Opens a sheet listing every status option plus an
- * optional "Add a note" textarea — when the note is provided, a comment is
- * created with the inline status-update card pattern (Design Tokens §6.5).
- */
-export function StatusPicker({ taskId, current }: StatusPickerProps) {
+export function StatusPicker({ taskId, current, canEdit }: StatusPickerProps) {
   const [open, setOpen] = useState(false);
+
+  if (!canEdit) {
+    return <Pill variant="status" tone={current} label={LABEL[current]} />;
+  }
   const [chosen, setChosen] = useState<PillStatusTone>(current);
   const [state, formAction] = useFormState<UpdateStatusState, FormData>(
     updateTaskStatusAction,

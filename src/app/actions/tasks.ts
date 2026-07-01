@@ -56,6 +56,22 @@ function revalidateTask(taskId: string) {
   revalidatePath('/tasks');
 }
 
+async function canEditTask(
+  callerId: string,
+  task: { ownerId: string; createdById: string; divisionId: string },
+): Promise<boolean> {
+  if (task.ownerId === callerId || task.createdById === callerId) return true;
+  const caller = await prisma.user.findUnique({
+    where: { id: callerId },
+    select: { isSuperAdmin: true, hierarchySlot: true, divisionId: true },
+  });
+  if (!caller) return false;
+  if (caller.isSuperAdmin) return true;
+  if (caller.hierarchySlot === 'js' || caller.hierarchySlot === 'osd') return true;
+  if (caller.hierarchySlot === 'director' && caller.divisionId === task.divisionId) return true;
+  return false;
+}
+
 // ============================================================
 // createTask — turn B
 // ============================================================
@@ -249,9 +265,13 @@ export async function updateTaskStatusAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, status: true, ownerId: true },
+    select: { id: true, name: true, status: true, ownerId: true, createdById: true, divisionId: true },
   });
   if (!task) return fail('Task not found.', epoch);
+
+  if (!(await canEditTask(me.id, task))) {
+    return fail('Only the task owner, creator, or head of division can change status.', epoch);
+  }
 
   const noChange = task.status === parsed.data.status;
   if (noChange && !parsed.data.note) return ok(epoch);
@@ -351,6 +371,11 @@ export async function updateTaskPriorityAction(
 
   const task = await prisma.task.findUnique({ where: { id: parsed.data.taskId } });
   if (!task) return fail('Task not found.', epoch);
+
+  if (!(await canEditTask(me.id, task))) {
+    return fail('Only the task owner, creator, or head of division can change priority.', epoch);
+  }
+
   if (task.priority === parsed.data.priority) return ok(epoch);
 
   try {
@@ -442,6 +467,10 @@ export async function updateTaskFieldsAction(
 
   const task = await prisma.task.findUnique({ where: { id: parsed.data.taskId } });
   if (!task) return fail('Task not found.', epoch);
+
+  if (!(await canEditTask(me.id, task))) {
+    return fail('Only the task owner, creator, or head of division can edit this task.', epoch);
+  }
 
   const data: Record<string, unknown> = {};
   const events: { eventType: string; payload: Record<string, unknown> }[] = [];
