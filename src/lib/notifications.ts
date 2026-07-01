@@ -140,6 +140,17 @@ export function describeNotification(
         text: 'Reassignment rejected',
         href: taskHref,
       };
+    case 'task_transferred': {
+      const from = String(p.fromName ?? '');
+      const to = String(p.toName ?? '');
+      return {
+        icon: 'ti-transfer',
+        iconClass: 'text-info',
+        text: `${from} transferred a task to ${to}`,
+        href: taskHref,
+        accent: 'info',
+      };
+    }
     case 'password_reset_by_admin':
       return {
         icon: 'ti-lock-cog',

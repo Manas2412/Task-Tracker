@@ -129,6 +129,7 @@ enum NotificationType {
   reassignment_approved
   reassignment_rejected
   password_reset_by_admin
+  task_transferred
 }
 
 enum AuditAction {

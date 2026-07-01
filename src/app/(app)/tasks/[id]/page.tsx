@@ -20,6 +20,7 @@ import { SectionContext } from './_components/SectionContext';
 import { SectionDetails } from './_components/SectionDetails';
 import { SectionSubtasks } from './_components/SectionSubtasks';
 import { StatusPicker } from './_components/StatusPicker';
+import { TransferTaskButton } from './_components/TransferTaskButton';
 
 import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/ui/Pill';
 
@@ -105,9 +106,10 @@ export default async function TaskDetailPage({ params }: PageProps) {
     );
   }
 
+  const isOwner = task.ownerId === session.user.id;
+
   const canDelete =
-    task.createdById === session.user.id ||
-    task.ownerId === session.user.id;
+    task.createdById === session.user.id || isOwner;
 
   // Field editing: owner, creator, Director+ in same division, OSD, JS, Super Admin.
   const canEditFields =
@@ -206,6 +208,24 @@ export default async function TaskDetailPage({ params }: PageProps) {
     designation: u.designation,
     divisionColour: u.division.avatarColour,
   }));
+
+  const transferCandidates = isOwner
+    ? (await prisma.user.findMany({
+        where: { isActive: true, divisionId: task.divisionId, id: { not: task.ownerId } },
+        select: {
+          id: true,
+          name: true,
+          designation: true,
+          division: { select: { avatarColour: true } },
+        },
+        orderBy: { name: 'asc' },
+      })).map((u) => ({
+        id: u.id,
+        name: u.name,
+        designation: u.designation,
+        divisionColour: u.division.avatarColour,
+      }))
+    : [];
 
   // Attachment editing — share the same permission as task tags.
   const canEditAttachments = await canEditTaskAttachments(session.user.id, task.id);
@@ -416,6 +436,12 @@ export default async function TaskDetailPage({ params }: PageProps) {
         divisions={allDivisions}
         canViewProfiles={canChangeDivision}
       />
+
+      {isOwner && !task.parentTaskId && transferCandidates.length > 0 ? (
+        <div className="px-4 md:px-6 py-3 border-b border-line-2">
+          <TransferTaskButton taskId={task.id} candidates={transferCandidates} />
+        </div>
+      ) : null}
 
       <CollaboratorsSection
         taskId={task.id}

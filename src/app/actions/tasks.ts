@@ -1608,3 +1608,90 @@ export async function resolveReassignmentAction(
   revalidateTask(request.taskId);
   return ok(epoch);
 }
+
+// ============================================================
+// transferTask — owner transfers task to another same-division user
+// ============================================================
+
+const transferTaskSchema = z.object({
+  taskId: z.string().uuid(),
+  targetUserId: z.string().uuid(),
+});
+
+export async function transferTaskAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out. Refresh and try again.', epoch);
+
+  const parsed = transferTaskSchema.safeParse({
+    taskId: formData.get('taskId'),
+    targetUserId: formData.get('targetUserId'),
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const task = await prisma.task.findUnique({
+    where: { id: parsed.data.taskId },
+    select: { id: true, name: true, ownerId: true, createdById: true, divisionId: true, visibility: true },
+  });
+  if (!task) return fail('Task not found.', epoch);
+
+  if (task.ownerId !== me.id) return fail('Only the current owner can transfer a task.', epoch);
+
+  if (parsed.data.targetUserId === me.id) return fail('You already own this task.', epoch);
+
+  const target = await prisma.user.findUnique({
+    where: { id: parsed.data.targetUserId },
+    select: { id: true, name: true, isActive: true, divisionId: true },
+  });
+  if (!target || !target.isActive) return fail('Target user not found or inactive.', epoch);
+  if (target.divisionId !== task.divisionId) return fail('You can only transfer to a user in the same division.', epoch);
+
+  const updates: Parameters<typeof prisma.task.update>[0]['data'] = {
+    ownerId: target.id,
+  };
+  if (task.visibility === 'personal') {
+    updates.visibility = 'division';
+  }
+
+  await prisma.$transaction([
+    prisma.task.update({ where: { id: task.id }, data: updates }),
+    prisma.taskActivity.create({
+      data: {
+        taskId: task.id,
+        actorId: me.id,
+        eventType: 'task_transferred',
+        payload: { from: me.id, fromName: me.name, to: target.id, toName: target.name },
+      },
+    }),
+  ]);
+
+  const notifications = [
+    prisma.notification.create({
+      data: {
+        userId: target.id,
+        type: 'task_assigned',
+        payload: { taskId: task.id, taskName: task.name },
+      },
+    }),
+  ];
+
+  if (task.createdById !== me.id && task.createdById !== target.id) {
+    notifications.push(
+      prisma.notification.create({
+        data: {
+          userId: task.createdById,
+          type: 'task_transferred',
+          payload: { taskId: task.id, taskName: task.name, fromName: me.name, toName: target.name },
+        },
+      }),
+    );
+  }
+
+  await Promise.all(notifications);
+
+  revalidateTask(task.id);
+  return ok(epoch);
+}

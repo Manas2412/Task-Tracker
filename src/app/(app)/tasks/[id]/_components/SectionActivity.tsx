@@ -123,6 +123,8 @@ function describeEvent(type: string, payload: Record<string, unknown> | null): s
       return `reopened subtask "${String(payload.name ?? '')}"`;
     case 'task_archived':
       return 'archived this task';
+    case 'task_transferred':
+      return `transferred this task to ${String(payload.toName ?? '')}`;
     default:
       return type.replace(/_/g, ' ');
   }
