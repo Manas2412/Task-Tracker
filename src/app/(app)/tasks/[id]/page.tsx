@@ -8,6 +8,7 @@ import { isS3Configured } from '@/lib/s3';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { initialsOf } from '@/lib/format';
+import { buildVisibilityClauses } from '@/lib/visibility';
 import { CollaboratorsSection, type Candidate, type CollaboratorRow } from './_components/CollaboratorsSection';
 import { JsLanePicker } from './_components/JsLanePicker';
 import { TagsSection, type TaskTagRow } from './_components/TagsSection';
@@ -66,10 +67,42 @@ export default async function TaskDetailPage({ params }: PageProps) {
 
   if (!task || task.archivedAt) notFound();
 
-  // TODO: Phase 1 follow-up — full visibility check before render.
-  // For now: anyone signed in can view. Owner-only Personal tasks honoured.
-  if (task.visibility === 'personal' && task.ownerId !== session.user.id) {
-    notFound();
+  // Visibility guard — reuses the same scoper as the tasks list page.
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, hierarchySlot: true, isSuperAdmin: true, divisionId: true, isPmu: true },
+  });
+  if (!me) redirect('/login');
+
+  const visibilityClauses = await buildVisibilityClauses(me);
+  const canView = await prisma.task.count({
+    where: { id: task.id, OR: visibilityClauses },
+  });
+  if (!canView) {
+    return (
+      <div className="max-w-3xl xl:max-w-4xl mx-auto pb-16">
+        <header className="sticky top-14 md:top-16 z-10 bg-bg/90 backdrop-blur-sm border-b border-line-2">
+          <div className="flex items-center gap-3 px-4 md:px-6 h-12">
+            <Link
+              href="/tasks"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-2 hover:text-ink"
+            >
+              <i className="ti ti-arrow-left text-[16px]" aria-hidden="true" />
+              <span className="hidden md:inline">Back to tasks</span>
+            </Link>
+          </div>
+        </header>
+        <div className="px-4 md:px-6 py-16 flex flex-col items-center text-center gap-3">
+          <div className="w-14 h-14 rounded-full bg-line grid place-items-center">
+            <i className="ti ti-lock text-[24px] text-ink-3" aria-hidden="true" />
+          </div>
+          <h1 className="font-serif text-[20px] text-ink">You don't have access to this task</h1>
+          <p className="text-[13px] text-ink-3 max-w-sm">
+            Ask the task owner to add you on the task as a collaborator.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   const canDelete =
