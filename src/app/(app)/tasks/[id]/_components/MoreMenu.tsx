@@ -60,13 +60,13 @@ export function MoreMenu({ taskId, canDelete, reasonNoDelete }: MoreMenuProps) {
     <div className="relative" ref={wrapRef}>
       <button
         type="button"
-        aria-label="More actions"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="w-9 h-9 grid place-items-center rounded-full text-ink-2 hover:bg-line-2"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-medium text-ink-2 hover:text-ink hover:bg-line-2 transition-colors"
       >
-        <i className="ti ti-dots-vertical text-[18px]" aria-hidden="true" />
+        <i className="ti ti-pencil text-[14px]" aria-hidden="true" />
+        Edit
       </button>
 
       <div
