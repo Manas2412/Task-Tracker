@@ -155,6 +155,7 @@ function TaskRow({
       <TaskListItem
         canArchive={canArchive}
         taskId={t.id}
+        refNumber={t.refNumber}
         name={t.name}
         division={{ name: t.division.name }}
         status={t.status as PillStatusTone}

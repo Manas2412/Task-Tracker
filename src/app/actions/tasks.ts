@@ -3,9 +3,24 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
+import { Prisma } from '@prisma/client';
+
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { parseDueDateInput } from '@/lib/format';
+
+async function nextTaskRefNumber(
+  divisionId: string,
+  tx: Prisma.TransactionClient = prisma,
+): Promise<string> {
+  const div = await tx.division.update({
+    where: { id: divisionId },
+    data: { taskSeq: { increment: 1 } },
+    select: { abbreviation: true, taskSeq: true },
+  });
+  const prefix = div.abbreviation || 'GEN';
+  return `T-${prefix}${div.taskSeq}`;
+}
 
 /**
  * Task server actions.
@@ -149,20 +164,25 @@ export async function createTaskAction(
   if (!meRow) return fail('Your account could not be found.', epoch);
 
   try {
-    const task = await prisma.task.create({
-      data: {
-        name: parsed.data.name,
-        description: parsed.data.description ?? null,
-        ownerId: meRow.id,
-        divisionId: parsed.data.divisionId ?? meRow.divisionId,
-        status: 'not_started',
-        priority: parsed.data.priority,
-        visibility: parsed.data.visibility,
-        dueDate: parsed.data.dueDate ? parseDueDateInput(parsed.data.dueDate) : null,
-        milestone: parsed.data.milestone ?? false,
-        linkedTimelineFileId: parsed.data.linkedTimelineFileId ?? null,
-        createdById: meRow.id,
-      },
+    const targetDivisionId = parsed.data.divisionId ?? meRow.divisionId;
+    const task = await prisma.$transaction(async (tx) => {
+      const refNumber = await nextTaskRefNumber(targetDivisionId, tx);
+      return tx.task.create({
+        data: {
+          refNumber,
+          name: parsed.data.name,
+          description: parsed.data.description ?? null,
+          ownerId: meRow.id,
+          divisionId: targetDivisionId,
+          status: 'not_started',
+          priority: parsed.data.priority,
+          visibility: parsed.data.visibility,
+          dueDate: parsed.data.dueDate ? parseDueDateInput(parsed.data.dueDate) : null,
+          milestone: parsed.data.milestone ?? false,
+          linkedTimelineFileId: parsed.data.linkedTimelineFileId ?? null,
+          createdById: meRow.id,
+        },
+      });
     });
 
     // Mirror the link on TimelineFileTaskLink so the TF detail page can
@@ -604,18 +624,22 @@ export async function addSubtaskAction(
   const assigneeId = parsed.data.assigneeId ?? me.id;
 
   try {
-    const subtask = await prisma.task.create({
-      data: {
-        name: parsed.data.name,
-        ownerId: assigneeId,
-        divisionId: parent.divisionId,
-        status: 'not_started',
-        priority: 'low',
-        visibility: parent.visibility,
-        dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
-        parentTaskId: parent.id,
-        createdById: me.id,
-      },
+    const subtask = await prisma.$transaction(async (tx) => {
+      const refNumber = await nextTaskRefNumber(parent.divisionId, tx);
+      return tx.task.create({
+        data: {
+          refNumber,
+          name: parsed.data.name,
+          ownerId: assigneeId,
+          divisionId: parent.divisionId,
+          status: 'not_started',
+          priority: 'low',
+          visibility: parent.visibility,
+          dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
+          parentTaskId: parent.id,
+          createdById: me.id,
+        },
+      });
     });
     await prisma.taskActivity.create({
       data: {

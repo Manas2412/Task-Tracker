@@ -149,6 +149,19 @@ export function CreateDivisionDialog({
             ) : null}
           </label>
 
+          {/* Abbreviation (used in Task IDs like T-KI1) */}
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium text-ink-2">Abbreviation</span>
+            <input
+              name="abbreviation"
+              maxLength={10}
+              autoComplete="off"
+              placeholder="e.g. KI, ABD, OJS"
+              className="w-full px-3 py-2 rounded-lg border border-line bg-panel text-[13px] outline-none transition-colors focus:border-ink"
+            />
+            <span className="text-[10px] text-ink-3">Used in Task IDs (e.g. T-KI1, T-ABD2)</span>
+          </label>
+
           {/* Parent (sub-division / section) */}
           {kind === 'sub_division' || kind === 'section' ? (
             <label className="flex flex-col gap-1">

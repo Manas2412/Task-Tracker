@@ -133,6 +133,7 @@ export async function searchTasksFor(
     parentTaskId: null,
     OR: [
       { name: { contains: q, mode: 'insensitive' } },
+      { refNumber: { contains: q, mode: 'insensitive' } },
       { description: { contains: q, mode: 'insensitive' } },
       { owner: { name: { contains: q, mode: 'insensitive' } } },
     ],

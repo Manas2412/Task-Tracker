@@ -349,19 +349,28 @@ export async function commitImportAction(
       continue;
     }
     try {
-      const task = await prisma.task.create({
-        data: {
-          name: row.name,
-          description: row.description ?? null,
-          ownerId: row.ownerId,
-          divisionId: row.divisionId,
-          status: 'not_started',
-          priority: row.priority,
-          visibility: row.visibility,
-          dueDate: row.dueDate ? parseDueDateInput(row.dueDate) : null,
-          milestone: row.milestone,
-          createdById: guard.userId,
-        },
+      const task = await prisma.$transaction(async (tx) => {
+        const div = await tx.division.update({
+          where: { id: row.divisionId },
+          data: { taskSeq: { increment: 1 } },
+          select: { abbreviation: true, taskSeq: true },
+        });
+        const refNumber = `T-${div.abbreviation || 'GEN'}${div.taskSeq}`;
+        return tx.task.create({
+          data: {
+            refNumber,
+            name: row.name,
+            description: row.description ?? null,
+            ownerId: row.ownerId,
+            divisionId: row.divisionId,
+            status: 'not_started',
+            priority: row.priority,
+            visibility: row.visibility,
+            dueDate: row.dueDate ? parseDueDateInput(row.dueDate) : null,
+            milestone: row.milestone,
+            createdById: guard.userId,
+          },
+        });
       });
 
       // Tag joins

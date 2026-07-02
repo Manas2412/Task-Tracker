@@ -46,6 +46,7 @@ export default async function PriorityBoardPage() {
     const lane = t.jsPriorityLane as PillJsLane;
     tasksByLane[lane].push({
       id: t.id,
+      refNumber: t.refNumber,
       name: t.name,
       status: t.status,
       priority: t.priority,

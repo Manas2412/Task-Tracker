@@ -84,6 +84,7 @@ const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const createDivisionSchema = z
   .object({
     name: z.string().trim().min(1, 'Name is required').max(80, 'Name is too long'),
+    abbreviation: z.string().trim().max(10, 'Max 10 characters').default(''),
     kind: z.enum(KINDS, { errorMap: () => ({ message: 'Pick a kind' }) }),
     parentId: z
       .union([z.literal(''), z.string().uuid()])
@@ -130,6 +131,7 @@ export async function createDivisionAction(
 
   const parsed = createDivisionSchema.safeParse({
     name: formData.get('name'),
+    abbreviation: formData.get('abbreviation') ?? '',
     kind: formData.get('kind'),
     parentId: formData.get('parentId'),
     pmuParentDivisionId: formData.get('pmuParentDivisionId'),
@@ -176,6 +178,7 @@ export async function createDivisionAction(
     const created = await prisma.division.create({
       data: {
         name: parsed.data.name,
+        abbreviation: parsed.data.abbreviation,
         kind: parsed.data.kind,
         parentId: parsed.data.parentId,
         pmuParentDivisionId: parsed.data.pmuParentDivisionId,

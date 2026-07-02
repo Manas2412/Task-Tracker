@@ -23,6 +23,7 @@ import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/
 
 export type BoardTask = {
   id: string;
+  refNumber?: string | null;
   name: string;
   status: string;
   priority: string;
@@ -242,9 +243,12 @@ function LaneCard({ task, canCurate }: { task: BoardTask; canCurate: boolean }) 
         ) : null}
         <Link
           href={`/tasks/${task.id}`}
-          className="flex-1 text-[13px] font-medium text-ink leading-snug hover:underline"
+          className="flex-1 min-w-0 hover:underline"
         >
-          {task.name}
+          {task.refNumber ? (
+            <span className="font-mono text-[9px] text-ink-3 tracking-wide block">{task.refNumber}</span>
+          ) : null}
+          <span className="text-[13px] font-medium text-ink leading-snug">{task.name}</span>
         </Link>
         <span
           className={cn(

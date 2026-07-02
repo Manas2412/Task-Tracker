@@ -397,6 +397,9 @@ export default async function TaskDetailPage({ params }: PageProps) {
           {task.milestone ? <Pill variant="milestone" /> : null}
         </div>
 
+        {task.refNumber ? (
+          <span className="font-mono text-[11px] text-ink-3 tracking-wide">{task.refNumber}</span>
+        ) : null}
         <h1
           id="task-title"
           className="font-serif text-[26px] md:text-[30px] leading-tight font-medium text-ink tracking-tight-title"

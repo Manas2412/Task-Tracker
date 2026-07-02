@@ -839,12 +839,12 @@ async function main() {
   // ── Create divisions ────────────────────────────────────
   console.log('Creating divisions…');
   const divisionData = [
-    { name: DIV.OFFICE, kind: 'division' as const, avatarColour: '#1e1b4b', displayOrder: 0 },
-    { name: DIV.KI, kind: 'division' as const, avatarColour: '#0c4a6e', displayOrder: 1, hasPmu: true },
-    { name: DIV.NSDF, kind: 'division' as const, avatarColour: '#064e3b', displayOrder: 2 },
-    { name: DIV.SGM, kind: 'division' as const, avatarColour: '#7c2d12', displayOrder: 3, hasPmu: true },
-    { name: DIV.MEDIA, kind: 'division' as const, avatarColour: '#581c87', displayOrder: 4 },
-    { name: DIV.ABD, kind: 'division' as const, avatarColour: '#1e3a5f', displayOrder: 5 },
+    { name: DIV.OFFICE, kind: 'division' as const, avatarColour: '#1e1b4b', displayOrder: 0, abbreviation: 'OJS' },
+    { name: DIV.KI, kind: 'division' as const, avatarColour: '#0c4a6e', displayOrder: 1, hasPmu: true, abbreviation: 'KI' },
+    { name: DIV.NSDF, kind: 'division' as const, avatarColour: '#064e3b', displayOrder: 2, abbreviation: 'NSDF' },
+    { name: DIV.SGM, kind: 'division' as const, avatarColour: '#7c2d12', displayOrder: 3, hasPmu: true, abbreviation: 'SGM' },
+    { name: DIV.MEDIA, kind: 'division' as const, avatarColour: '#581c87', displayOrder: 4, abbreviation: 'MED' },
+    { name: DIV.ABD, kind: 'division' as const, avatarColour: '#1e3a5f', displayOrder: 5, abbreviation: 'ABD' },
   ];
 
   const divMap: Record<string, string> = {};

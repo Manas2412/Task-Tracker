@@ -242,6 +242,8 @@ model Division {
   kind                     DivisionKind
   hasPmu                   Boolean       @default(false) @map("has_pmu")
   pmuParentDivisionId      String?       @map("pmu_parent_division_id") @db.Uuid
+  abbreviation             String        @default("")
+  taskSeq                  Int           @default(0) @map("task_seq")
   avatarColour             String        @map("avatar_colour")
   displayOrder             Int           @default(0) @map("display_order")
 
@@ -273,6 +275,7 @@ model Division {
 
 model Task {
   id                       String          @id @default(uuid()) @db.Uuid
+  refNumber                String?         @unique @map("ref_number")
   name                     String
   description              String?
 

@@ -31,6 +31,7 @@ const STATUS_LABEL: Record<PillStatusTone, string> = {
 
 export type TaskCardProps = {
   taskId: string;
+  refNumber?: string | null;
   name: string;
   division: { name: string };
   status: PillStatusTone;
@@ -49,6 +50,7 @@ export type TaskCardProps = {
 
 export function TaskCard({
   taskId,
+  refNumber,
   name,
   division,
   status,
@@ -86,9 +88,14 @@ export function TaskCard({
       ) : null}
 
       <header className="flex items-start justify-between gap-2.5 mb-2">
-        <h3 className="text-[14px] font-medium leading-[1.35] text-ink tracking-[-0.005em] flex-1">
-          {name}
-        </h3>
+        <div className="flex-1 min-w-0">
+          {refNumber ? (
+            <span className="font-mono text-[10px] text-ink-3 tracking-wide">{refNumber}</span>
+          ) : null}
+          <h3 className="text-[14px] font-medium leading-[1.35] text-ink tracking-[-0.005em]">
+            {name}
+          </h3>
+        </div>
         <span
           aria-label={`${priority} priority`}
           className={cn('w-2 h-2 rounded-full mt-[5px] shrink-0', PRIORITY_DOT[priority])}
