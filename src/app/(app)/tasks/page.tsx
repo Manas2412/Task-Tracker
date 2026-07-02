@@ -202,12 +202,16 @@ function TaskRow({
 }
 
 /**
- * The four relation segments of the tasks view:
- *   1. Division tasks   — colleagues' tasks (neither owned nor created by me)
- *   2. Assigned to me   — I own it, someone else created or handed it to me
- *   3. My tasks         — created by me and still owned by me
- *   4. Transferred by me — created by me, now owned by another user
- * Every visible task lands in exactly one segment; empty segments are hidden.
+ * The four relation segments of the tasks view, in display order:
+ *   1. Assigned to me    — I own it, someone else created or handed it to me
+ *   2. Division tasks    — the division's full shared board: every visible
+ *                          task with Division visibility, including ones
+ *                          that also appear in the personal segments
+ *   3. Transferred by me — created by me, now owned by another user
+ *   4. My tasks          — created by me and still owned by me
+ * Division tasks is the complete board, so a task can appear both there and
+ * in a personal segment. Personal-visibility tasks never enter the division
+ * segment. Empty segments are hidden.
  */
 type RelationSegment = {
   key: 'division' | 'assigned' | 'mine' | 'transferred';
@@ -217,30 +221,16 @@ type RelationSegment = {
 };
 
 function segmentTasksByRelation(tasks: VisibleTask[], meId: string): RelationSegment[] {
-  const division: VisibleTask[] = [];
-  const assigned: VisibleTask[] = [];
-  const mine: VisibleTask[] = [];
-  const transferred: VisibleTask[] = [];
-
-  for (const t of tasks) {
-    if (t.ownerId === meId) {
-      if (t.createdById === meId) {
-        mine.push(t);
-      } else {
-        assigned.push(t);
-      }
-    } else if (t.createdById === meId) {
-      transferred.push(t);
-    } else {
-      division.push(t);
-    }
-  }
+  const assigned = tasks.filter((t) => t.ownerId === meId && t.createdById !== meId);
+  const division = tasks.filter((t) => t.visibility === 'division');
+  const transferred = tasks.filter((t) => t.createdById === meId && t.ownerId !== meId);
+  const mine = tasks.filter((t) => t.ownerId === meId && t.createdById === meId);
 
   const segments: RelationSegment[] = [
-    { key: 'division', label: 'Division tasks', icon: 'ti-building', tasks: division },
     { key: 'assigned', label: 'Assigned to me', icon: 'ti-user-check', tasks: assigned },
-    { key: 'mine', label: 'My tasks', icon: 'ti-user', tasks: mine },
+    { key: 'division', label: 'Division tasks', icon: 'ti-building', tasks: division },
     { key: 'transferred', label: 'Transferred by me', icon: 'ti-transfer', tasks: transferred },
+    { key: 'mine', label: 'My tasks', icon: 'ti-user', tasks: mine },
   ];
   return segments.filter((s) => s.tasks.length > 0);
 }
