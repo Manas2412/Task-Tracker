@@ -58,6 +58,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
   ]);
 
   const grouped = groupByDivision ? groupTasksByDivision(tasks) : null;
+  const segments = groupByDivision ? null : segmentTasksByRelation(tasks, me.id);
 
   return (
       <PullToRefresh>
@@ -121,11 +122,29 @@ export default async function TasksPage({ searchParams }: PageProps) {
               ))}
             </div>
           ) : (
-            <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
-              {tasks.map((t) => (
-                <TaskRow key={t.id} task={t} meId={me.id} isAdminLike={isAdminLike} />
+            <div className="space-y-6">
+              {segments!.map((segment) => (
+                <section key={segment.key} aria-label={segment.label}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <i
+                      className={`ti ${segment.icon} text-[14px] text-ink-3`}
+                      aria-hidden="true"
+                    />
+                    <h3 className="text-[12px] font-medium text-ink-2 uppercase tracking-[0.06em]">
+                      {segment.label}
+                    </h3>
+                    <span className="text-[11px] text-ink-3">
+                      {segment.tasks.length}
+                    </span>
+                  </div>
+                  <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
+                    {segment.tasks.map((t) => (
+                      <TaskRow key={t.id} task={t} meId={me.id} isAdminLike={isAdminLike} />
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
+            </div>
           )}
         </div>
 
@@ -179,6 +198,50 @@ function TaskRow({
       />
     </li>
   );
+}
+
+/**
+ * The four relation segments of the tasks view:
+ *   1. Division tasks   — colleagues' tasks (neither owned nor created by me)
+ *   2. Assigned to me   — I own it, someone else created or handed it to me
+ *   3. My tasks         — created by me and still owned by me
+ *   4. Transferred by me — created by me, now owned by another user
+ * Every visible task lands in exactly one segment; empty segments are hidden.
+ */
+type RelationSegment = {
+  key: 'division' | 'assigned' | 'mine' | 'transferred';
+  label: string;
+  icon: string;
+  tasks: VisibleTask[];
+};
+
+function segmentTasksByRelation(tasks: VisibleTask[], meId: string): RelationSegment[] {
+  const division: VisibleTask[] = [];
+  const assigned: VisibleTask[] = [];
+  const mine: VisibleTask[] = [];
+  const transferred: VisibleTask[] = [];
+
+  for (const t of tasks) {
+    if (t.ownerId === meId) {
+      if (t.createdById === meId) {
+        mine.push(t);
+      } else {
+        assigned.push(t);
+      }
+    } else if (t.createdById === meId) {
+      transferred.push(t);
+    } else {
+      division.push(t);
+    }
+  }
+
+  const segments: RelationSegment[] = [
+    { key: 'division', label: 'Division tasks', icon: 'ti-building', tasks: division },
+    { key: 'assigned', label: 'Assigned to me', icon: 'ti-user-check', tasks: assigned },
+    { key: 'mine', label: 'My tasks', icon: 'ti-user', tasks: mine },
+    { key: 'transferred', label: 'Transferred by me', icon: 'ti-transfer', tasks: transferred },
+  ];
+  return segments.filter((s) => s.tasks.length > 0);
 }
 
 type DivisionGroup = {

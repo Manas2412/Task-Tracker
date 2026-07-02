@@ -5,10 +5,10 @@ import { prisma } from '@/lib/db';
 /**
  * Server-side visibility scoper for tasks.
  *
- * Implements the rules in docs/PERMISSIONS.md §2 with the Phase 1 caveat:
- * for hierarchy slots below Director, we cover own + direct-reports tasks.
- * Full recursive chain traversal (via a Postgres recursive CTE) lands in
- * a later turn — flagged here so it's not silently forgotten.
+ * Division-wide model: every ministry (non-PMU) officer sees all
+ * non-personal tasks in their own division, regardless of hierarchy slot —
+ * a newly created division user sees the division's tasks from first
+ * login. JS and OSD keep their wider surfaces; PMU isolation is unchanged.
  *
  * Personal-visibility tasks are NEVER returned to anyone but their owner,
  * including Super Admin and OSD.
@@ -62,24 +62,19 @@ export async function buildVisibilityClauses(me: CallerSummary): Promise<Prisma.
   }
 
   if (me.isPmu) {
-    // Phase 1: PMU members see only own + collaborated. PMU-tag concept
-    // (per PERMISSIONS.md §5.2) lands when the tag UI exists.
+    // PMU isolation (PERMISSIONS.md §5.2): own + collaborated only —
+    // never the division's internal ministry tasks.
     // TODO: Phase 3 — add PMU-tagged tasks in the same division.
     return clauses;
   }
 
-  // Dy Sec / Under Sec / Section Officer / ASO — own + direct reports.
-  // TODO: Phase 1 follow-up — recursive CTE for the full subordinate chain.
-  const directReports = await prisma.user.findMany({
-    where: { supervisorId: me.id },
-    select: { id: true },
+  // Dy Sec / Under Sec / Section Officer / ASO — all non-personal tasks in
+  // their own division, same as the Director rule. Without this a fresh
+  // division user saw an empty board on first login.
+  clauses.push({
+    visibility: 'division',
+    divisionId: me.divisionId,
   });
-  if (directReports.length > 0) {
-    clauses.push({
-      visibility: 'division',
-      ownerId: { in: directReports.map((u) => u.id) },
-    });
-  }
   return clauses;
 }
 
