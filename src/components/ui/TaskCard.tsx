@@ -40,6 +40,7 @@ export type TaskCardProps = {
   due?: { label: string; tone: 'today' | 'overdue' | 'soon' | 'future' | 'none' };
   owner: { initials: string; colour: string; name: string };
   subtasks?: { done: number; total: number };
+  hasAttachment?: boolean;
   /** If set, render "Primary: <divisionName>" pill (cross-division indicator) */
   primaryDivisionName?: string;
   href?: string;
@@ -57,6 +58,7 @@ export function TaskCard({
   due,
   owner,
   subtasks,
+  hasAttachment,
   primaryDivisionName,
   href,
   className,
@@ -112,6 +114,10 @@ export function TaskCard({
         </div>
 
         <div className="flex items-center gap-2 text-[11px] text-ink-3 shrink-0">
+          {hasAttachment ? (
+            <i className="ti ti-paperclip text-[13px] text-ink-3" aria-hidden="true" title="Has attachment" />
+          ) : null}
+
           {subtasks && subtasks.total > 0 ? (
             <span className="inline-flex items-center gap-[3px] bg-line-2 px-[7px] py-[2px] rounded-lg text-[10px]">
               <i className="ti ti-list-check text-[10px]" aria-hidden="true" />

@@ -168,6 +168,7 @@ function TaskRow({
           name: t.owner.name,
         }}
         subtasks={subtaskTotal > 0 ? { done: subtaskDone, total: subtaskTotal } : undefined}
+        hasAttachment={t.hasAttachment}
         primaryDivisionName={
           t.collaborators.some((c) => c.role === 'division_lead')
             ? t.division.name

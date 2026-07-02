@@ -120,6 +120,7 @@ export type VisibleTask = Task & {
   division: { id: string; name: string; avatarColour: string };
   subtasks: { status: string }[];
   collaborators: { role: string }[];
+  hasAttachment: boolean;
 };
 
 export async function fetchVisibleTasks(opts: {
@@ -170,7 +171,21 @@ export async function fetchVisibleTasks(opts: {
     ],
   });
 
-  return tasks as VisibleTask[];
+  const taskIds = tasks.map((t) => t.id);
+  const attachedIds = new Set<string>();
+  if (taskIds.length > 0) {
+    const rows = await prisma.attachment.findMany({
+      where: { ownerType: 'task', ownerId: { in: taskIds } },
+      select: { ownerId: true },
+      distinct: ['ownerId'],
+    });
+    for (const r of rows) attachedIds.add(r.ownerId);
+  }
+
+  return tasks.map((t) => ({
+    ...t,
+    hasAttachment: attachedIds.has(t.id),
+  })) as VisibleTask[];
 }
 
 /**
