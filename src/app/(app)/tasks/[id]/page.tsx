@@ -9,7 +9,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { initialsOf } from '@/lib/format';
 import { buildVisibilityClauses } from '@/lib/visibility';
-import { CollaboratorsSection, type Candidate, type CollaboratorRow } from './_components/CollaboratorsSection';
+import { CollaboratorsSection, type Candidate, type CollaboratorRow, type SubtaskScope } from './_components/CollaboratorsSection';
 import { JsLanePicker } from './_components/JsLanePicker';
 import { TagsSection, type TaskTagRow } from './_components/TagsSection';
 import { MoreMenu } from './_components/MoreMenu';
@@ -138,7 +138,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
           id: true,
           name: true,
           designation: true,
-          division: { select: { name: true } },
+          division: { select: { name: true, avatarColour: true } },
         },
         orderBy: { name: 'asc' },
       })
@@ -149,6 +149,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
     name: u.name,
     designation: u.designation,
     divisionName: u.division.name,
+    divisionColour: u.division.avatarColour,
   }));
 
   // Mentionables: every active user (including the owner). Cap at 200 for
@@ -189,15 +190,20 @@ export default async function TaskDetailPage({ params }: PageProps) {
   // collaborator carries the division_lead role.
   const isCrossDivision = collaboratorRows.some((c) => c.role === 'division_lead');
 
-  // Subtask assignee candidates: active users in the task's division.
+  const subtaskScopes: SubtaskScope[] = task.subtasks.map((s) => ({
+    id: s.id,
+    name: s.name,
+  }));
+
+  // Subtask assignee candidates: all active users.
   const subtaskAssigneeRows = canEditFields
     ? await prisma.user.findMany({
-        where: { isActive: true, divisionId: task.divisionId },
+        where: { isActive: true },
         select: {
           id: true,
           name: true,
           designation: true,
-          division: { select: { avatarColour: true } },
+          division: { select: { name: true, avatarColour: true } },
         },
         orderBy: { name: 'asc' },
       })
@@ -206,6 +212,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
     id: u.id,
     name: u.name,
     designation: u.designation,
+    divisionName: u.division.name,
     divisionColour: u.division.avatarColour,
   }));
 
@@ -449,6 +456,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         candidates={candidates}
         canEdit={canEditCollaborators}
         canViewProfiles={canChangeDivision}
+        subtasks={!task.parentTaskId ? subtaskScopes : undefined}
       />
 
       <TagsSection

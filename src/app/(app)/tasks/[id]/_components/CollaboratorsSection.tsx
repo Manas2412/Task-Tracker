@@ -5,7 +5,7 @@ import { useFormState, useFormStatus } from 'react-dom';
 
 import Link from 'next/link';
 
-import { Avatar, Sheet } from '@/components/ui';
+import { Avatar, Sheet, UserPicker, type UserPickerOption } from '@/components/ui';
 import {
   addCollaboratorAction,
   removeCollaboratorAction,
@@ -27,6 +27,12 @@ export type Candidate = {
   name: string;
   designation: string;
   divisionName: string;
+  divisionColour?: string;
+};
+
+export type SubtaskScope = {
+  id: string;
+  name: string;
 };
 
 type CollaboratorsSectionProps = {
@@ -35,6 +41,7 @@ type CollaboratorsSectionProps = {
   candidates: Candidate[];
   canEdit: boolean;
   canViewProfiles: boolean;
+  subtasks?: SubtaskScope[];
 };
 
 const ROLE_LABEL: Record<CollaboratorRow['role'], string> = {
@@ -55,6 +62,7 @@ export function CollaboratorsSection({
   candidates,
   canEdit,
   canViewProfiles,
+  subtasks,
 }: CollaboratorsSectionProps) {
   const [addOpen, setAddOpen] = useState(false);
 
@@ -108,6 +116,7 @@ export function CollaboratorsSection({
           taskId={taskId}
           candidates={candidates}
           alreadyAdded={collaborators.map((c) => c.userId)}
+          subtasks={subtasks}
         />
       ) : null}
     </section>
@@ -196,12 +205,14 @@ function AddDialog({
   taskId,
   candidates,
   alreadyAdded,
+  subtasks,
 }: {
   open: boolean;
   onClose: () => void;
   taskId: string;
   candidates: Candidate[];
   alreadyAdded: string[];
+  subtasks?: SubtaskScope[];
 }) {
   const [state, formAction] = useFormState(addCollaboratorAction, {
     ok: false,
@@ -209,17 +220,28 @@ function AddDialog({
   });
   const [userId, setUserId] = useState('');
   const [role, setRole] = useState<(typeof ROLE_OPTIONS)[number]['value']>('collaborator');
+  const [scopeId, setScopeId] = useState('');
 
   useEffect(() => {
     if (state.ok) {
       onClose();
       setUserId('');
       setRole('collaborator');
+      setScopeId('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, state.epoch]);
 
   const available = candidates.filter((c) => !alreadyAdded.includes(c.id));
+  const pickerOptions: UserPickerOption[] = available.map((c) => ({
+    id: c.id,
+    name: c.name,
+    designation: c.designation,
+    divisionName: c.divisionName,
+    divisionColour: c.divisionColour,
+  }));
+
+  const targetTaskId = scopeId || taskId;
 
   return (
     <Sheet
@@ -230,7 +252,25 @@ function AddDialog({
     >
       {open ? (
         <form action={formAction} className="flex flex-col gap-3">
-          <input type="hidden" name="taskId" value={taskId} />
+          <input type="hidden" name="taskId" value={targetTaskId} />
+
+          {subtasks && subtasks.length > 0 ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium text-ink-2">Scope</span>
+              <select
+                value={scopeId}
+                onChange={(e) => setScopeId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-line bg-panel text-[13px] outline-none transition-colors appearance-none focus:border-ink"
+              >
+                <option value="">Entire task</option>
+                {subtasks.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    Subtask: {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-medium text-ink-2">Person</span>
@@ -240,27 +280,14 @@ function AddDialog({
                 Users sub-section.
               </p>
             ) : (
-              <select
-                name="userId"
+              <UserPicker
+                options={pickerOptions}
                 value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                required
-                className={cn(
-                  'w-full px-3 py-2 rounded-lg border bg-panel text-[13px] outline-none transition-colors appearance-none',
-                  state.fieldErrors?.userId
-                    ? 'border-urgent focus:border-urgent'
-                    : 'border-line focus:border-ink',
-                )}
-              >
-                <option value="" disabled>
-                  Pick someone…
-                </option>
-                {available.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} · {c.designation} · {c.divisionName}
-                  </option>
-                ))}
-              </select>
+                onChange={setUserId}
+                placeholder="Search by name or designation…"
+                name="userId"
+                error={!!state.fieldErrors?.userId}
+              />
             )}
             {state.fieldErrors?.userId ? (
               <span className="text-[11px] text-urgent">{state.fieldErrors.userId}</span>

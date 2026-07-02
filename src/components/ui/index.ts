@@ -21,3 +21,5 @@ export { AttachmentList, type AttachmentRow } from './AttachmentList';
 
 export { SwipeToReveal } from './SwipeToReveal';
 export { PullToRefresh } from './PullToRefresh';
+
+export { UserPicker, type UserPickerOption } from './UserPicker';

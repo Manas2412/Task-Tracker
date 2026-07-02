@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useFormState, useFormStatus } from 'react-dom';
 
-import { Avatar } from '@/components/ui';
+import { Avatar, UserPicker, type UserPickerOption } from '@/components/ui';
 import { addSubtaskAction, toggleSubtaskAction, updateSubtaskAction } from '@/app/actions/tasks';
 import { initialsOf, formatDue } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,7 @@ type AssigneeOption = {
   id: string;
   name: string;
   designation: string;
+  divisionName?: string;
   divisionColour: string;
 };
 
@@ -215,6 +216,16 @@ function parentDueDateMax(parentDueDate: Date | null): string | undefined {
   return toDatetimeLocalValue(end);
 }
 
+function toPickerOptions(assignees: AssigneeOption[]): UserPickerOption[] {
+  return assignees.map((u) => ({
+    id: u.id,
+    name: u.name,
+    designation: u.designation,
+    divisionName: u.divisionName,
+    divisionColour: u.divisionColour,
+  }));
+}
+
 function AddSubtaskForm({
   taskId,
   assignees,
@@ -228,10 +239,12 @@ function AddSubtaskForm({
 }) {
   const ref = useRef<HTMLFormElement>(null);
   const [state, formAction] = useFormState(addSubtaskAction, { ok: false, epoch: 0 });
+  const [assigneeId, setAssigneeId] = useState('');
 
   useEffect(() => {
     if (state.ok) {
       ref.current?.reset();
+      setAssigneeId('');
       onDone();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -253,20 +266,16 @@ function AddSubtaskForm({
       />
 
       <div className="flex gap-2">
-        <label className="flex-1 flex flex-col gap-1">
+        <div className="flex-1 flex flex-col gap-1">
           <span className="text-[10px] font-medium text-ink-3">Assign to</span>
-          <select
+          <UserPicker
+            options={toPickerOptions(assignees)}
+            value={assigneeId}
+            onChange={setAssigneeId}
+            placeholder="Search or leave blank for myself…"
             name="assigneeId"
-            className="w-full px-2 py-2 rounded-lg border border-line bg-panel text-[12px] text-ink outline-none focus:border-ink"
-          >
-            <option value="">Myself</option>
-            {assignees.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} — {u.designation}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+        </div>
 
         <label className="flex-1 flex flex-col gap-1">
           <span className="text-[10px] font-medium text-ink-3">Deadline</span>
@@ -326,6 +335,7 @@ function EditSubtaskForm({
 }) {
   const ref = useRef<HTMLFormElement>(null);
   const [state, formAction] = useFormState(updateSubtaskAction, { ok: false, epoch: 0 });
+  const [assigneeId, setAssigneeId] = useState(subtask.owner.id);
 
   useEffect(() => {
     if (state.ok) onDone();
@@ -339,20 +349,16 @@ function EditSubtaskForm({
       <input type="hidden" name="subtaskId" value={subtask.id} />
 
       <div className="flex gap-2">
-        <label className="flex-1 flex flex-col gap-1">
+        <div className="flex-1 flex flex-col gap-1">
           <span className="text-[10px] font-medium text-ink-3">Assigned to</span>
-          <select
+          <UserPicker
+            options={toPickerOptions(assignees)}
+            value={assigneeId}
+            onChange={setAssigneeId}
+            placeholder="Search by name…"
             name="assigneeId"
-            defaultValue={subtask.owner.id}
-            className="w-full px-2 py-2 rounded-lg border border-line bg-panel text-[12px] text-ink outline-none focus:border-ink"
-          >
-            {assignees.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} — {u.designation}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+        </div>
 
         <label className="flex-1 flex flex-col gap-1">
           <span className="text-[10px] font-medium text-ink-3">Deadline</span>
