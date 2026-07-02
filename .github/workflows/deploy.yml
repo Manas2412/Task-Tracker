@@ -19,6 +19,14 @@ jobs:
             cd /var/www/myas
             git pull origin main
             pnpm install --frozen-lockfile
-            npx prisma db push --accept-data-loss
+            npx prisma generate
+            # One-time baseline: if _prisma_migrations table doesn't exist,
+            # mark all pre-existing migrations as already applied so
+            # migrate deploy only runs new ones.
+            npx prisma migrate resolve --applied 20260602051033_init 2>/dev/null || true
+            npx prisma migrate resolve --applied 20260630120000_add_phone_and_work_activities 2>/dev/null || true
+            npx prisma migrate resolve --applied 20260701120000_add_task_transferred_notification_type 2>/dev/null || true
+            npx prisma migrate resolve --applied 20260702120000_add_task_pulled_notification_type 2>/dev/null || true
+            npx prisma migrate deploy
             pnpm build
             pm2 restart myas
