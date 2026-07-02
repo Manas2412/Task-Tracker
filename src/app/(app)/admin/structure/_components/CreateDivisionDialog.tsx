@@ -21,31 +21,28 @@ type CreateDivisionDialogProps = {
   open: boolean;
   onClose: () => void;
   divisions: DivisionOption[];
-  /** preselect this kind when opening */
   initialKind?: 'division' | 'sub_division' | 'section' | 'pmu';
-  /** preselect this parent when opening */
   initialParentId?: string;
 };
 
 const KIND_OPTIONS = [
-  { value: 'division', label: 'Division', hint: 'Top-level' },
-  { value: 'sub_division', label: 'Sub-division', hint: 'Under a division' },
-  { value: 'section', label: 'Section', hint: 'Under a sub-division' },
-  { value: 'pmu', label: 'PMU', hint: 'Consultant team attached to a division' },
+  { value: 'division', label: 'Division', hint: 'Top-level unit', icon: 'ti-building' },
+  { value: 'sub_division', label: 'Sub-division', hint: 'Under a division', icon: 'ti-git-branch' },
+  { value: 'section', label: 'Section', hint: 'Under a sub-division', icon: 'ti-layout-list' },
+  { value: 'pmu', label: 'PMU', hint: 'Consultant team', icon: 'ti-users-group' },
 ] as const;
 
-// Standard division palette (per docs/COLOUR_TOKENS.css §1.4).
 const PALETTE = [
-  '#1e1b4b', // deep indigo
-  '#4338ca', // indigo-purple
-  '#1e40af', // blue
-  '#0e7490', // cyan
-  '#047857', // emerald
-  '#b45309', // amber
-  '#c2410c', // burnt orange
-  '#be185d', // rose
-  '#6b21a8', // violet
-  '#525252', // grey
+  { hex: '#1e1b4b', label: 'Indigo' },
+  { hex: '#4338ca', label: 'Purple' },
+  { hex: '#1e40af', label: 'Blue' },
+  { hex: '#0e7490', label: 'Cyan' },
+  { hex: '#047857', label: 'Emerald' },
+  { hex: '#b45309', label: 'Amber' },
+  { hex: '#c2410c', label: 'Orange' },
+  { hex: '#be185d', label: 'Rose' },
+  { hex: '#6b21a8', label: 'Violet' },
+  { hex: '#525252', label: 'Grey' },
 ];
 
 export function CreateDivisionDialog({
@@ -64,12 +61,14 @@ export function CreateDivisionDialog({
   const [kind, setKind] = useState<typeof KIND_OPTIONS[number]['value']>(initialKind);
   const [parentId, setParentId] = useState<string>(initialParentId ?? '');
   const [colour, setColour] = useState('#1e1b4b');
+  const [abbr, setAbbr] = useState('');
 
   useEffect(() => {
     if (open) {
       setKind(initialKind);
       setParentId(initialParentId ?? '');
       setColour('#1e1b4b');
+      setAbbr('');
     }
   }, [open, initialKind, initialParentId]);
 
@@ -95,15 +94,16 @@ export function CreateDivisionDialog({
     <Sheet
       open={open}
       onClose={onClose}
-      title="New division"
-      subtitle="Top-level divisions own sub-divisions, sections, and PMU teams."
+      title="New unit"
+      subtitle="Create a division, sub-division, section, or PMU team."
+      size="md"
     >
       {open ? (
-        <form ref={formRef} action={formAction} className="flex flex-col gap-4">
-          {/* Kind */}
+        <form ref={formRef} action={formAction} className="flex flex-col gap-5">
+          {/* Kind selector */}
           <fieldset>
-            <legend className="section-label mb-2">Kind</legend>
-            <div className="grid grid-cols-2 gap-1.5">
+            <legend className="section-label mb-2.5">Type</legend>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {KIND_OPTIONS.map((k) => {
                 const active = kind === k.value;
                 return (
@@ -112,16 +112,27 @@ export function CreateDivisionDialog({
                     type="button"
                     onClick={() => setKind(k.value)}
                     className={cn(
-                      'px-3 py-2 rounded-lg border text-left transition-colors',
+                      'flex flex-col items-center md:items-center gap-1 px-3 py-3 md:py-2.5 rounded-xl border text-center transition-all',
                       active
-                        ? 'border-primary bg-primary-soft'
-                        : 'border-line bg-panel hover:border-ink-4',
+                        ? 'border-primary bg-primary-soft shadow-sm ring-1 ring-primary/20'
+                        : 'border-line bg-panel hover:border-ink-4 hover:bg-bg',
                     )}
                   >
-                    <div className={cn('text-[12.5px] font-medium', active ? 'text-primary' : 'text-ink')}>
+                    <i
+                      className={cn(
+                        'ti',
+                        k.icon,
+                        'text-[18px] md:text-[20px] shrink-0',
+                        active ? 'text-primary' : 'text-ink-3',
+                      )}
+                      aria-hidden="true"
+                    />
+                    <div className={cn('text-[12px] font-medium leading-tight', active ? 'text-primary' : 'text-ink')}>
                       {k.label}
                     </div>
-                    <div className="text-[10px] text-ink-3 mt-0.5">{k.hint}</div>
+                    <div className={cn('text-[10px] leading-tight', active ? 'text-primary/70' : 'text-ink-3')}>
+                      {k.hint}
+                    </div>
                   </button>
                 );
               })}
@@ -130,8 +141,8 @@ export function CreateDivisionDialog({
           </fieldset>
 
           {/* Name */}
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-medium text-ink-2">Name</span>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium text-ink-2 uppercase tracking-[0.06em]">Name</span>
             <input
               name="name"
               autoFocus
@@ -140,7 +151,7 @@ export function CreateDivisionDialog({
               autoComplete="off"
               placeholder={kind === 'pmu' ? 'e.g. KIM PMU' : 'e.g. Khelo India Mission'}
               className={cn(
-                'w-full px-3 py-2 rounded-lg border bg-panel text-[13px] outline-none transition-colors',
+                'w-full px-3 py-2.5 rounded-lg border bg-panel text-[13px] outline-none transition-colors placeholder:text-ink-4',
                 state.fieldErrors?.name ? 'border-urgent focus:border-urgent' : 'border-line focus:border-ink',
               )}
             />
@@ -149,46 +160,62 @@ export function CreateDivisionDialog({
             ) : null}
           </label>
 
-          {/* Abbreviation (used in Task IDs like T-KI1) */}
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-medium text-ink-2">Abbreviation</span>
-            <input
-              name="abbreviation"
-              maxLength={10}
-              autoComplete="off"
-              placeholder="e.g. KI, ABD, OJS"
-              className="w-full px-3 py-2 rounded-lg border border-line bg-panel text-[13px] outline-none transition-colors focus:border-ink"
-            />
-            <span className="text-[10px] text-ink-3">Used in Task IDs (e.g. T-KI1, T-ABD2)</span>
+          {/* Abbreviation */}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium text-ink-2 uppercase tracking-[0.06em]">
+              Abbreviation
+            </span>
+            <div className="relative">
+              <input
+                name="abbreviation"
+                value={abbr}
+                onChange={(e) => setAbbr(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                maxLength={10}
+                autoComplete="off"
+                placeholder="e.g. KI, ABD, OJS"
+                className="w-full px-3 py-2.5 rounded-lg border border-line bg-panel text-[13px] font-mono tracking-wide outline-none transition-colors focus:border-ink placeholder:text-ink-4 placeholder:font-sans placeholder:tracking-normal"
+              />
+              {abbr ? (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-mono text-ink-3">
+                  T-{abbr}1
+                </span>
+              ) : null}
+            </div>
+            <span className="text-[10px] text-ink-3">
+              Auto-prefixes task IDs — leave blank to auto-generate
+            </span>
           </label>
 
           {/* Parent (sub-division / section) */}
           {kind === 'sub_division' || kind === 'section' ? (
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] font-medium text-ink-2">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-medium text-ink-2 uppercase tracking-[0.06em]">
                 Parent {kind === 'sub_division' ? 'division' : 'sub-division'}
               </span>
-              <select
-                name="parentId"
-                value={parentId}
-                onChange={(e) => setParentId(e.target.value)}
-                required
-                className={cn(
-                  'w-full px-3 py-2 rounded-lg border bg-panel text-[13px] outline-none appearance-none',
-                  state.fieldErrors?.parentId
-                    ? 'border-urgent focus:border-urgent'
-                    : 'border-line focus:border-ink',
-                )}
-              >
-                <option value="" disabled>
-                  Pick one…
-                </option>
-                {parentCandidates.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
+              <div className="relative">
+                <select
+                  name="parentId"
+                  value={parentId}
+                  onChange={(e) => setParentId(e.target.value)}
+                  required
+                  className={cn(
+                    'w-full px-3 py-2.5 rounded-lg border bg-panel text-[13px] outline-none appearance-none pr-8',
+                    state.fieldErrors?.parentId
+                      ? 'border-urgent focus:border-urgent'
+                      : 'border-line focus:border-ink',
+                  )}
+                >
+                  <option value="" disabled>
+                    Select…
                   </option>
-                ))}
-              </select>
+                  {parentCandidates.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <i className="ti ti-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[14px] text-ink-3 pointer-events-none" aria-hidden="true" />
+              </div>
               {state.fieldErrors?.parentId ? (
                 <span className="text-[11px] text-urgent">{state.fieldErrors.parentId}</span>
               ) : parentCandidates.length === 0 ? (
@@ -201,28 +228,33 @@ export function CreateDivisionDialog({
 
           {/* PMU parent */}
           {kind === 'pmu' ? (
-            <label className="flex flex-col gap-1">
-              <span className="text-[11px] font-medium text-ink-2">Attaches to division</span>
-              <select
-                name="pmuParentDivisionId"
-                required
-                defaultValue={initialParentId ?? ''}
-                className={cn(
-                  'w-full px-3 py-2 rounded-lg border bg-panel text-[13px] outline-none appearance-none',
-                  state.fieldErrors?.pmuParentDivisionId
-                    ? 'border-urgent focus:border-urgent'
-                    : 'border-line focus:border-ink',
-                )}
-              >
-                <option value="" disabled>
-                  Pick a division…
-                </option>
-                {pmuParentCandidates.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-medium text-ink-2 uppercase tracking-[0.06em]">
+                Attaches to division
+              </span>
+              <div className="relative">
+                <select
+                  name="pmuParentDivisionId"
+                  required
+                  defaultValue={initialParentId ?? ''}
+                  className={cn(
+                    'w-full px-3 py-2.5 rounded-lg border bg-panel text-[13px] outline-none appearance-none pr-8',
+                    state.fieldErrors?.pmuParentDivisionId
+                      ? 'border-urgent focus:border-urgent'
+                      : 'border-line focus:border-ink',
+                  )}
+                >
+                  <option value="" disabled>
+                    Select a division…
                   </option>
-                ))}
-              </select>
+                  {pmuParentCandidates.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <i className="ti ti-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[14px] text-ink-3 pointer-events-none" aria-hidden="true" />
+              </div>
               {state.fieldErrors?.pmuParentDivisionId ? (
                 <span className="text-[11px] text-urgent">{state.fieldErrors.pmuParentDivisionId}</span>
               ) : null}
@@ -231,29 +263,38 @@ export function CreateDivisionDialog({
 
           {/* Colour palette */}
           <fieldset>
-            <legend className="section-label mb-2">Avatar colour</legend>
-            <div className="flex flex-wrap gap-1.5">
+            <legend className="section-label mb-2.5">Colour</legend>
+            <div className="flex flex-wrap gap-2">
               {PALETTE.map((c) => {
-                const active = colour === c;
+                const active = colour === c.hex;
                 return (
                   <button
-                    key={c}
+                    key={c.hex}
                     type="button"
-                    onClick={() => setColour(c)}
-                    aria-label={`Pick ${c}`}
+                    onClick={() => setColour(c.hex)}
+                    aria-label={c.label}
                     aria-pressed={active}
                     className={cn(
-                      'w-7 h-7 rounded-full border-2 transition-transform',
-                      active ? 'border-ink scale-110' : 'border-transparent hover:scale-105',
+                      'w-8 h-8 rounded-full transition-all relative flex items-center justify-center',
+                      active
+                        ? 'ring-2 ring-offset-2 ring-offset-panel scale-110'
+                        : 'hover:scale-110',
                     )}
-                    style={{ backgroundColor: c }}
-                  />
+                    style={{
+                      backgroundColor: c.hex,
+                      ...(active ? { ['--tw-ring-color' as string]: c.hex } : {}),
+                    }}
+                  >
+                    {active ? (
+                      <i className="ti ti-check text-[14px] text-white" aria-hidden="true" />
+                    ) : null}
+                  </button>
                 );
               })}
             </div>
             <input type="hidden" name="avatarColour" value={colour} />
-            <p className="text-[10px] text-ink-3 mt-2">
-              Officers inherit this colour on their avatar inside the chosen unit.
+            <p className="text-[10px] text-ink-3 mt-2.5">
+              Officers inherit this colour on their avatar inside the unit.
             </p>
           </fieldset>
 
@@ -266,11 +307,11 @@ export function CreateDivisionDialog({
             </p>
           ) : null}
 
-          <div className="flex gap-2 mt-1">
+          <div className="flex gap-2 mt-1 pt-2 border-t border-line-2">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 rounded-lg border border-line text-[13px] font-medium text-ink-2 hover:bg-line-2"
+              className="flex-1 py-2.5 rounded-lg border border-line text-[13px] font-medium text-ink-2 hover:bg-bg transition-colors"
             >
               Cancel
             </button>
@@ -288,7 +329,7 @@ function CreateButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+      className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60 transition-opacity"
     >
       {pending ? 'Creating…' : 'Create'}
     </button>

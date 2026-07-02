@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
  * Responsive dialog.
  *
  *   - mobile (< md) : bottom sheet, slides up from the bottom edge.
- *   - tablet+ (md+) : centred modal, 460 px wide, scales/fades.
+ *   - tablet+ (md+) : centred modal, scales/fades.
  *
  * Single DOM container, single state — Tailwind responsive classes flip
  * the presentation. See Design Tokens §6.3 (bottom sheet) and §6.8 (modal).
@@ -17,6 +17,11 @@ import { cn } from '@/lib/utils';
  * mount when it wants fresh state on each open (e.g. forms).
  */
 
+const SIZE_CLASS = {
+  sm: 'md:w-[460px]',
+  md: 'md:w-[520px]',
+} as const;
+
 type SheetProps = {
   open: boolean;
   onClose: () => void;
@@ -24,6 +29,7 @@ type SheetProps = {
   subtitle?: string;
   children: React.ReactNode;
   ariaLabelledBy?: string;
+  size?: keyof typeof SIZE_CLASS;
 };
 
 export function Sheet({
@@ -33,6 +39,7 @@ export function Sheet({
   subtitle,
   children,
   ariaLabelledBy,
+  size = 'sm',
 }: SheetProps) {
   // Esc closes.
   useEffect(() => {
@@ -61,7 +68,7 @@ export function Sheet({
         aria-hidden="true"
         onClick={onClose}
         className={cn(
-          'fixed inset-0 z-40 bg-black/40 transition-opacity duration-200',
+          'fixed inset-0 z-[60] bg-black/40 transition-opacity duration-200',
           open ? 'opacity-100' : 'opacity-0 pointer-events-none',
         )}
       />
@@ -73,14 +80,15 @@ export function Sheet({
         aria-labelledby={ariaLabelledBy ?? (title ? 'sheet-title' : undefined)}
         className={cn(
           // Common
-          'fixed z-50 bg-panel will-change-transform',
+          'fixed z-[70] bg-panel will-change-transform',
           // Mobile: pinned to bottom, full width, rounded top
           'inset-x-0 bottom-0 rounded-t-[24px] max-h-[90dvh] overflow-y-auto',
           // Mobile transitions
           'transition-transform duration-300 ease-out',
           // Desktop: centred modal
           'md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2',
-          'md:w-[460px] md:max-w-[calc(100vw-32px)] md:rounded-2xl md:max-h-[85dvh]',
+          SIZE_CLASS[size],
+          'md:max-w-[calc(100vw-32px)] md:rounded-2xl md:max-h-[85dvh]',
           'md:-translate-x-1/2 md:-translate-y-1/2',
           'md:transition-all md:duration-200',
           // Open/closed states

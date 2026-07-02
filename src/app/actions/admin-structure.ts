@@ -133,8 +133,8 @@ export async function createDivisionAction(
     name: formData.get('name'),
     abbreviation: formData.get('abbreviation') ?? '',
     kind: formData.get('kind'),
-    parentId: formData.get('parentId'),
-    pmuParentDivisionId: formData.get('pmuParentDivisionId'),
+    parentId: formData.get('parentId') ?? undefined,
+    pmuParentDivisionId: formData.get('pmuParentDivisionId') ?? undefined,
     avatarColour: formData.get('avatarColour') ?? '#1e1b4b',
   });
   if (!parsed.success) {
