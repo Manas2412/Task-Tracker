@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 
 import { cn } from '@/lib/utils';
 
@@ -51,8 +51,11 @@ export function SectionActivity({ activity }: SectionActivityProps) {
                 <time
                   className="ml-1.5 text-ink-3 text-[11px]"
                   dateTime={e.createdAt.toISOString()}
+                  title={format(e.createdAt, 'd LLL yyyy, h:mm a')}
                 >
-                  {formatDistanceToNow(e.createdAt, { addSuffix: true })}
+                  {isReadReceipt(e.eventType)
+                    ? `on ${format(e.createdAt, 'd LLL yyyy, h:mm aaa')}`
+                    : formatDistanceToNow(e.createdAt, { addSuffix: true })}
                 </time>
               </span>
             </li>
@@ -125,9 +128,18 @@ function describeEvent(type: string, payload: Record<string, unknown> | null): s
       return 'archived this task';
     case 'task_transferred':
       return `transferred this task to ${String(payload.toName ?? '')}`;
+    case 'task_read':
+      return 'read this task';
+    case 'subtask_read':
+      return `read subtask "${String(payload.subtaskName ?? '')}"`;
     default:
       return type.replace(/_/g, ' ');
   }
+}
+
+/** Read receipts show the absolute date and time, not a relative phrase. */
+function isReadReceipt(type: string): boolean {
+  return type === 'task_read' || type === 'subtask_read';
 }
 
 function isAccent(type: string): boolean {

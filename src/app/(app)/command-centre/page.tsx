@@ -382,7 +382,7 @@ export default async function CommandCentrePage() {
                         {isUnread ? (
                           <span
                             aria-hidden="true"
-                            className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 shrink-0"
+                            className="w-1.5 h-1.5 rounded-full bg-urgent mt-1.5 shrink-0"
                           />
                         ) : null}
                       </Link>
