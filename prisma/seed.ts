@@ -65,6 +65,7 @@ const DIV = {
   SGM: 'SGM',
   MEDIA: 'Media & IT',
   ABD: 'Autonomous Bodies',
+  KIM: 'Khelo India Mission',
 } as const;
 
 type UserSeed = {
@@ -845,6 +846,7 @@ async function main() {
     { name: DIV.SGM, kind: 'division' as const, avatarColour: '#7c2d12', displayOrder: 3, hasPmu: true, abbreviation: 'SGM' },
     { name: DIV.MEDIA, kind: 'division' as const, avatarColour: '#581c87', displayOrder: 4, abbreviation: 'MED' },
     { name: DIV.ABD, kind: 'division' as const, avatarColour: '#1e3a5f', displayOrder: 5, abbreviation: 'ABD' },
+    { name: DIV.KIM, kind: 'division' as const, avatarColour: '#155e75', displayOrder: 6, abbreviation: 'KIM' },
   ];
 
   const divMap: Record<string, string> = {};

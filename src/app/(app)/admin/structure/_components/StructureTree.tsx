@@ -13,6 +13,22 @@ import {
 import { cn } from '@/lib/utils';
 
 import { CreateDivisionDialog } from './CreateDivisionDialog';
+import { ManageMembersDialog } from './ManageMembersDialog';
+
+import type {
+  UserFormDivisionOption,
+  UserFormSupervisorOption,
+} from '@/app/(app)/admin/users/_components/UserFormFields';
+
+export type TreeUser = {
+  id: string;
+  name: string;
+  username: string;
+  designation: string;
+  divisionId: string;
+  divisionName: string;
+  divisionColour: string;
+};
 
 export type StructureNode = {
   id: string;
@@ -27,6 +43,9 @@ export type StructureNode = {
 type StructureTreeProps = {
   nodes: StructureNode[];
   activeId: string | null;
+  allUsers: TreeUser[];
+  divisions: UserFormDivisionOption[];
+  supervisors: UserFormSupervisorOption[];
 };
 
 const KIND_ICON: Record<StructureNode['kind'], string> = {
@@ -36,9 +55,10 @@ const KIND_ICON: Record<StructureNode['kind'], string> = {
   pmu: 'ti-building-bridge',
 };
 
-export function StructureTree({ nodes, activeId }: StructureTreeProps) {
+export function StructureTree({ nodes, activeId, allUsers, divisions, supervisors }: StructureTreeProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<StructureNode | null>(null);
+  const [membersTarget, setMembersTarget] = useState<StructureNode | null>(null);
   const [createDefaults, setCreateDefaults] = useState<{
     kind: StructureNode['kind'];
     parentId?: string;
@@ -92,6 +112,7 @@ export function StructureTree({ nodes, activeId }: StructureTreeProps) {
                 depth={0}
                 onAddChild={openCreate}
                 onRename={setRenameTarget}
+                onManageMembers={setMembersTarget}
               />
             ))
           )}
@@ -131,6 +152,16 @@ export function StructureTree({ nodes, activeId }: StructureTreeProps) {
           onClose={() => setRenameTarget(null)}
         />
       ) : null}
+
+      <ManageMembersDialog
+        open={!!membersTarget}
+        onClose={() => setMembersTarget(null)}
+        divisionId={membersTarget?.id ?? ''}
+        divisionName={membersTarget?.name ?? ''}
+        existingUsers={allUsers}
+        divisions={divisions}
+        supervisors={supervisors}
+      />
     </>
   );
 }
@@ -147,6 +178,7 @@ function TreeBranch({
   depth,
   onAddChild,
   onRename,
+  onManageMembers,
 }: {
   node: StructureNode;
   allNodes: StructureNode[];
@@ -155,6 +187,7 @@ function TreeBranch({
   depth: number;
   onAddChild: (defaults: { kind: StructureNode['kind']; parentId?: string }) => void;
   onRename: (n: StructureNode) => void;
+  onManageMembers: (n: StructureNode) => void;
 }) {
   const children = byParent.get(node.id) ?? [];
   const [expanded, setExpanded] = useState(depth < 1);
@@ -170,6 +203,7 @@ function TreeBranch({
         onToggle={() => setExpanded((v) => !v)}
         onAddChild={onAddChild}
         onRename={onRename}
+        onManageMembers={onManageMembers}
       />
       {expanded && children.length > 0 ? (
         <div className="ml-3 pl-2 border-l border-line-2">
@@ -183,6 +217,7 @@ function TreeBranch({
               depth={depth + 1}
               onAddChild={onAddChild}
               onRename={onRename}
+              onManageMembers={onManageMembers}
             />
           ))}
         </div>
@@ -204,6 +239,7 @@ function TreeNode({
   onToggle,
   onAddChild,
   onRename,
+  onManageMembers,
 }: {
   node: StructureNode;
   activeId: string | null;
@@ -213,6 +249,7 @@ function TreeNode({
   onToggle?: () => void;
   onAddChild?: (defaults: { kind: StructureNode['kind']; parentId?: string }) => void;
   onRename?: (n: StructureNode) => void;
+  onManageMembers?: (n: StructureNode) => void;
 }) {
   const isActive = node.id === activeId;
   const searchParams = useSearchParams();
@@ -275,7 +312,7 @@ function TreeNode({
         ) : null}
       </Link>
 
-      <RowMenu node={node} onAddChild={onAddChild} onRename={onRename} />
+      <RowMenu node={node} onAddChild={onAddChild} onRename={onRename} onManageMembers={onManageMembers} />
     </div>
   );
 }
@@ -288,10 +325,12 @@ function RowMenu({
   node,
   onAddChild,
   onRename,
+  onManageMembers,
 }: {
   node: StructureNode;
   onAddChild?: (defaults: { kind: StructureNode['kind']; parentId?: string }) => void;
   onRename?: (n: StructureNode) => void;
+  onManageMembers?: (n: StructureNode) => void;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -356,6 +395,16 @@ function RowMenu({
             onClick={() => {
               setOpen(false);
               onRename(node);
+            }}
+          />
+        ) : null}
+        {onManageMembers ? (
+          <MenuItem
+            icon="ti-users-plus"
+            label="Manage members"
+            onClick={() => {
+              setOpen(false);
+              onManageMembers(node);
             }}
           />
         ) : null}

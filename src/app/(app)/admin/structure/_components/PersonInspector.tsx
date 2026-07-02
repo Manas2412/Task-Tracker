@@ -23,6 +23,9 @@ import type {
 } from '@/app/(app)/admin/users/_components/UserFormFields';
 import { useTransition } from 'react';
 
+import { ManageMembersDialog } from './ManageMembersDialog';
+import type { TreeUser } from './StructureTree';
+
 export type InspectorUser = {
   id: string;
   name: string;
@@ -53,6 +56,8 @@ type PersonInspectorProps = {
   divisions: UserFormDivisionOption[];
   supervisors: UserFormSupervisorOption[];
   selfId: string;
+  activeDivision?: { id: string; name: string };
+  allUsers?: TreeUser[];
 };
 
 export function PersonInspector({
@@ -60,9 +65,12 @@ export function PersonInspector({
   divisions,
   supervisors,
   selfId,
+  activeDivision,
+  allUsers,
 }: PersonInspectorProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   if (!user) {
@@ -245,6 +253,13 @@ export function PersonInspector({
             onClick={toggleActive}
             disabledReason={isSelf ? 'You cannot disable your own account.' : undefined}
           />
+          {activeDivision ? (
+            <ActionButton
+              icon="ti-users-plus"
+              label="Add member to this unit"
+              onClick={() => setMembersOpen(true)}
+            />
+          ) : null}
           <p className="text-[10px] text-ink-3 mt-2 leading-relaxed px-2">
             <i className="ti ti-arrows-move text-[11px] mr-1" aria-hidden="true" />
             To change supervisor, drag the card in the chart on the left.
@@ -267,6 +282,18 @@ export function PersonInspector({
         userId={user.id}
         userName={user.name}
       />
+
+      {activeDivision && allUsers ? (
+        <ManageMembersDialog
+          open={membersOpen}
+          onClose={() => setMembersOpen(false)}
+          divisionId={activeDivision.id}
+          divisionName={activeDivision.name}
+          existingUsers={allUsers}
+          divisions={divisions}
+          supervisors={supervisors.filter((s) => s.id !== user.id)}
+        />
+      ) : null}
     </>
   );
 }

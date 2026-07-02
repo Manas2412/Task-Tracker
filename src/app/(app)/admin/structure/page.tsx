@@ -8,7 +8,7 @@ import {
   PersonInspector,
   type InspectorUser,
 } from './_components/PersonInspector';
-import { StructureTree, type StructureNode } from './_components/StructureTree';
+import { StructureTree, type StructureNode, type TreeUser } from './_components/StructureTree';
 
 import type {
   UserFormDivisionOption,
@@ -63,6 +63,16 @@ export default async function StructurePage({ searchParams }: PageProps) {
     pmuParentDivisionId: d.pmuParentDivisionId,
     avatarColour: d.avatarColour,
     userCount: userCountsByDivision.get(d.id) ?? 0,
+  }));
+
+  const treeUsers: TreeUser[] = allUsers.filter((u) => u.isActive).map((u) => ({
+    id: u.id,
+    name: u.name,
+    username: u.username,
+    designation: u.designation,
+    divisionId: u.divisionId,
+    divisionName: u.division.name,
+    divisionColour: u.division.avatarColour,
   }));
 
   // Pick the active division — default to the first top-level division.
@@ -229,7 +239,13 @@ export default async function StructurePage({ searchParams }: PageProps) {
     <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_320px] gap-4">
       {/* Left — Structure Tree */}
       <aside className="lg:sticky lg:top-[7rem] self-start">
-        <StructureTree nodes={treeNodes} activeId={activeDivision.id} />
+        <StructureTree
+          nodes={treeNodes}
+          activeId={activeDivision.id}
+          allUsers={treeUsers}
+          divisions={divisionOptions}
+          supervisors={supervisorOptions}
+        />
       </aside>
 
       {/* Centre — Hierarchy Mapper */}
@@ -250,6 +266,8 @@ export default async function StructurePage({ searchParams }: PageProps) {
           divisions={divisionOptions}
           supervisors={supervisorOptions}
           selfId={session.user.id}
+          activeDivision={{ id: activeDivision.id, name: activeDivision.name }}
+          allUsers={treeUsers}
         />
       </aside>
     </div>
