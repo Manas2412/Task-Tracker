@@ -42,6 +42,7 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 | **Reassign downward in own chain** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | n/a | n/a | ✓ |
 | **Reassign sideways / upward** | needs approval¹ | needs approval¹ | needs approval¹ | needs approval¹ | needs approval¹ | needs approval¹ | needs approval¹ | needs approval¹ | ✓ (no approval) |
 | **Approve reassignment requests** | for own subordinates | for own subordinates | for own subordinates | for own subordinates | for own subordinates | for own subordinates |  |  | ✓ (any) |
+| **Transfer task to same-division user** | own | own | own | own | own | own | own | own | own |
 | **Add collaborators** | ✓ (own/visible) | ✓ | ✓ (own/visible) | ✓ (own/visible) | ✓ (own/visible) | ✓ (own/visible) | ✓ (own) | ✓ (PMU-tagged) | ✓ |
 | **Add cross-division collaborators (division leads)** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |
 | **Set JS Priority lane** |  | ✓ |  |  |  |  |  |  | ✓ |
@@ -136,7 +137,8 @@ The role switcher in the top bar is the only entry point. OSD and Super Admin ar
 
 - **Downward within own chain** — applies immediately. Log to `task_activity` and `audit_log`. No notification to the previous owner beyond the activity log entry.
 - **Sideways or upward** — creates a `reassignment_requests` row with `approver_id` = the proposed new owner's superior. The superior receives a notification of type `reassignment_approval_requested`. On approval, the reassignment applies and a `reassignment_approved` notification fires to the requester; on rejection, `reassignment_rejected` fires.
-- The picker UI marks rows that would require approval with an amber "Approval needed" badge.
+- **Same-division transfer (by current owner)** — the task owner can transfer ownership to any active user in the same division without approval. `ownerId` updates immediately; `createdById` stays unchanged. If the task had `personal` visibility, it flips to `division`. Activity log records `task_transferred` with `{from, to}`. The new owner receives `task_assigned`; the original creator (if different from both parties) receives `task_transferred`.
+- The reassignment picker UI marks rows that would require approval with an amber "Approval needed" badge. The transfer button is separate — visible only to the current task owner.
 
 ### 5.7 Deletion vs archive
 

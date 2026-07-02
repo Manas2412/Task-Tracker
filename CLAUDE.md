@@ -106,6 +106,8 @@ pnpm dev                     # http://localhost:3000
 - S3 attachments end-to-end (presign + register + delete + Drive-link fallback) — done; activates the moment `S3_*` env vars are present
 - Mobile gestures — swipe-to-archive on `/tasks` cards, swipe-to-mark-read on `/notifications` rows, pull-to-refresh on `/tasks` — done
 - Performance hardening — `loading.tsx` skeletons on `/tasks`, `/timeline-files`, `/admin/audit`, `/search`; index audit complete (see [docs/PERF_NOTES.md](docs/PERF_NOTES.md))
+- Subtask user assignment with datetime deadline — assignees from same division, deadline validated against parent task — done
+- Task transfer — owner can hand off a task to another same-division user; activity trail + creator notification — done
 - **Deferred infrastructure work** — automated tests (visibility scoper, role-based view tests, server-action contract tests). Requires Vitest setup + a CI workflow; track as a separate epic.
 
 ## The two-font system

@@ -31,6 +31,7 @@ Supporting components added for completeness:
 18. [BottomNav (mobile)](#18-bottomnav-mobile)
 19. [RoleSwitcher (top-bar segmented control)](#19-roleswitcher-top-bar-segmented-control)
 20. [SubNav (Super Admin)](#20-subnav-super-admin)
+21. [TransferTaskButton](#21-transfertaskbutton)
 
 ---
 
@@ -645,6 +646,32 @@ type SubNavProps = {
 - Container: `--panel` background, `--line` bottom border
 
 **Desktop-only.**
+
+---
+
+## 21. TransferTaskButton
+
+Lets the current task owner transfer ownership to another active user in the same division.
+
+**File:** `src/app/(app)/tasks/[id]/_components/TransferTaskButton.tsx`
+
+**Props:**
+```ts
+{
+  taskId: string;
+  candidates: { id: string; name: string; designation: string; divisionColour: string }[];
+}
+```
+
+**Behaviour:**
+- Renders a bordered button with `ti-transfer` icon and "Transfer task" label.
+- Opens a `Sheet` with a search-filtered list of same-division users.
+- Each candidate row is a form that submits `transferTaskAction`.
+- On success the sheet closes; the page revalidates showing the new owner.
+
+**Visibility:** only rendered when the logged-in user is the task owner, the task is not a subtask, and at least one transfer candidate exists.
+
+**Tokens consumed:** `--line` border, `--ink-2` text, `--line-2` hover background.
 
 ---
 

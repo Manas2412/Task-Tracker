@@ -116,6 +116,7 @@ Distinct from `task_status` — Timeline Files have their own list.
 | 'reassignment_approved'
 | 'reassignment_rejected'
 | 'password_reset_by_admin'
+| 'task_transferred'
 ```
 
 ### 1.14 `audit_action`
@@ -262,7 +263,7 @@ Per-task user-facing event log (visible in the Activity section on the task deta
 | `id` | `uuid` | PK |  |
 | `task_id` | `uuid` | FK → `tasks.id`, NOT NULL | Cascade delete |
 | `actor_id` | `uuid` | FK → `users.id`, NOT NULL |  |
-| `event_type` | `text` | NOT NULL | `status_changed`, `js_priority_changed`, `owner_reassigned`, `milestone_toggled`, `collaborator_added`, `collaborator_removed`, `timeline_file_linked`, `timeline_file_unlinked`, `attachment_uploaded`, `subtask_added`, `subtask_completed`, `task_created` |
+| `event_type` | `text` | NOT NULL | `status_changed`, `js_priority_changed`, `owner_reassigned`, `milestone_toggled`, `collaborator_added`, `collaborator_removed`, `timeline_file_linked`, `timeline_file_unlinked`, `attachment_uploaded`, `subtask_added`, `subtask_completed`, `subtask_updated`, `task_created`, `task_transferred` |
 | `payload` | `jsonb` | NOT NULL, default `'{}'` | Event-specific data (old/new values, names for legibility) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` |  |
 
