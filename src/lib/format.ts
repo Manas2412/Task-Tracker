@@ -61,3 +61,32 @@ export function formatDue(due: Date | null | undefined, now: Date = new Date()):
 export function daysUntil(date: Date, now: Date = new Date()): number {
   return differenceInCalendarDays(date, now);
 }
+
+/**
+ * IST offset — the app is India-only (Asia/Kolkata, UTC+05:30).
+ */
+export const IST_UTC_OFFSET = '+05:30';
+
+/** Default time-of-day for a due date entered without a time: 4 pm IST. */
+export const DEFAULT_DUE_TIME = '16:00';
+
+/**
+ * Parse a due-date form value into a Date.
+ *
+ * A date-only value (`YYYY-MM-DD`, from an `<input type="date">`) carries no
+ * time. Left to `new Date()` it is read as 00:00 UTC, which renders as
+ * 05:30 IST — so we default it to 16:00 IST (4 pm) instead. Values that
+ * already include a time (`YYYY-MM-DDTHH:mm`, from a datetime-local input)
+ * are interpreted in IST as entered. Anything already carrying a timezone or
+ * seconds is passed straight to `new Date()`.
+ */
+export function parseDueDateInput(value: string): Date {
+  const s = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return new Date(`${s}T${DEFAULT_DUE_TIME}:00${IST_UTC_OFFSET}`);
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) {
+    return new Date(`${s}:00${IST_UTC_OFFSET}`);
+  }
+  return new Date(s);
+}

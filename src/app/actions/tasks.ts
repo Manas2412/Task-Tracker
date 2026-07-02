@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { parseDueDateInput } from '@/lib/format';
 
 /**
  * Task server actions.
@@ -157,7 +158,7 @@ export async function createTaskAction(
         status: 'not_started',
         priority: parsed.data.priority,
         visibility: parsed.data.visibility,
-        dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
+        dueDate: parsed.data.dueDate ? parseDueDateInput(parsed.data.dueDate) : null,
         milestone: parsed.data.milestone ?? false,
         linkedTimelineFileId: parsed.data.linkedTimelineFileId ?? null,
         createdById: meRow.id,
@@ -480,7 +481,7 @@ export async function updateTaskFieldsAction(
     events.push({ eventType: 'description_updated', payload: {} });
   }
   if (parsed.data.dueDate !== undefined) {
-    const next = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null;
+    const next = parsed.data.dueDate ? parseDueDateInput(parsed.data.dueDate) : null;
     const prevIso = task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null;
     const nextIso = next ? next.toISOString().slice(0, 10) : null;
     if (prevIso !== nextIso) {
