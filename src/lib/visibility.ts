@@ -120,6 +120,8 @@ export type VisibleTask = Task & {
   division: { id: string; name: string; avatarColour: string };
   subtasks: { status: string }[];
   collaborators: { role: string }[];
+  /** True when the task carries at least one task-level attachment (uploaded doc or Drive link). */
+  hasAttachment: boolean;
 };
 
 export async function fetchVisibleTasks(opts: {
@@ -170,7 +172,24 @@ export async function fetchVisibleTasks(opts: {
     ],
   });
 
-  return tasks as VisibleTask[];
+  // Attachments are polymorphic (no Prisma relation to Task), so resolve the
+  // "has a document attached" flag with one distinct lookup over the visible
+  // task ids rather than an N+1 per card. Task-level attachments only.
+  const taskIds = tasks.map((t) => t.id);
+  const attachedIds = new Set<string>();
+  if (taskIds.length > 0) {
+    const rows = await prisma.attachment.findMany({
+      where: { ownerType: 'task', ownerId: { in: taskIds } },
+      select: { ownerId: true },
+      distinct: ['ownerId'],
+    });
+    for (const r of rows) attachedIds.add(r.ownerId);
+  }
+
+  return tasks.map((t) => ({
+    ...t,
+    hasAttachment: attachedIds.has(t.id),
+  })) as VisibleTask[];
 }
 
 /**
@@ -194,28 +213,4 @@ export async function fetchTaskCounts(callerId: string): Promise<{
   });
   if (!me) return { open: 0, dueToday: 0, overdue: 0 };
 
-  const visibilityClauses = await buildVisibilityClauses(me);
-  const base: Prisma.TaskWhereInput = {
-    archivedAt: null,
-    parentTaskId: null,
-    AND: [{ OR: visibilityClauses }],
-  };
-
-  const now = new Date();
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
-  const endOfToday = new Date(now);
-  endOfToday.setHours(23, 59, 59, 999);
-
-  const [open, dueToday, overdue] = await Promise.all([
-    prisma.task.count({ where: { ...base, status: { not: 'completed' } } }),
-    prisma.task.count({
-      where: { ...base, dueDate: { gte: startOfToday, lte: endOfToday }, status: { not: 'completed' } },
-    }),
-    prisma.task.count({
-      where: { ...base, dueDate: { lt: now }, status: { not: 'completed' } },
-    }),
-  ]);
-
-  return { open, dueToday, overdue };
-}
+  const visibilityClau
