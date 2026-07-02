@@ -5,7 +5,7 @@ import { PullToRefresh } from '@/components/ui';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { formatDue, initialsOf } from '@/lib/format';
-import { fetchTaskCounts, fetchVisibleTasks, type TaskFilter } from '@/lib/visibility';
+import { fetchTaskCounts, fetchVisibleTasks, type TaskFilter, type TaskSort } from '@/lib/visibility';
 
 import { DivisionControls } from './_components/DivisionControls';
 import { FilterChips } from './_components/FilterChips';
@@ -18,7 +18,7 @@ import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/
 const VALID_FILTERS: TaskFilter[] = ['all', 'today', 'overdue', 'mine', 'urgent', 'completed', 'js_priority', 'milestone'];
 
 type PageProps = {
-  searchParams?: { filter?: string; division?: string; group?: string };
+  searchParams?: { filter?: string; division?: string; group?: string; sort?: string };
 };
 
 export default async function TasksPage({ searchParams }: PageProps) {
@@ -33,6 +33,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
   const divisionFilter = searchParams?.division ?? '';
   const groupByDivision = searchParams?.group === 'division';
+  const sort: TaskSort = searchParams?.sort === 'latest' ? 'latest' : 'default';
 
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -48,7 +49,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
   const isAdminLike = me.isSuperAdmin || me.hierarchySlot === 'osd';
 
   const [tasks, counts, divisions] = await Promise.all([
-    fetchVisibleTasks({ callerId: me.id, filter, divisionId: divisionFilter || undefined }),
+    fetchVisibleTasks({ callerId: me.id, filter, divisionId: divisionFilter || undefined, sort }),
     fetchTaskCounts(me.id),
     prisma.division.findMany({
       where: { kind: 'division' },

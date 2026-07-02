@@ -19,14 +19,20 @@ export function DivisionControls({ divisions }: DivisionControlsProps) {
   const searchParams = useSearchParams();
   const activeDivision = searchParams.get('division') ?? '';
   const groupBy = searchParams.get('group') === 'division';
+  const sortLatest = searchParams.get('sort') === 'latest';
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const sortRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
+      }
+      if (sortRef.current && !sortRef.current.contains(e.target as Node)) {
+        setSortOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -34,7 +40,7 @@ export function DivisionControls({ divisions }: DivisionControlsProps) {
   }, []);
 
   const buildHref = useCallback(
-    (overrides: { division?: string; group?: string }) => {
+    (overrides: { division?: string; group?: string; sort?: string }) => {
       const params = new URLSearchParams(searchParams.toString());
       if (overrides.division !== undefined) {
         if (overrides.division) {
@@ -48,6 +54,13 @@ export function DivisionControls({ divisions }: DivisionControlsProps) {
           params.set('group', overrides.group);
         } else {
           params.delete('group');
+        }
+      }
+      if (overrides.sort !== undefined) {
+        if (overrides.sort) {
+          params.set('sort', overrides.sort);
+        } else {
+          params.delete('sort');
         }
       }
       const qs = params.toString();
@@ -65,10 +78,15 @@ export function DivisionControls({ divisions }: DivisionControlsProps) {
     router.push(buildHref({ group: groupBy ? '' : 'division' }), { scroll: false });
   };
 
+  const onSelectSort = (sort: '' | 'latest') => {
+    setSortOpen(false);
+    router.push(buildHref({ sort }), { scroll: false });
+  };
+
   const activeName = divisions.find((d) => d.id === activeDivision)?.name;
 
   return (
-    <div className="flex items-center gap-2 mt-2">
+    <div className="flex flex-wrap items-center gap-2 mt-2">
       {/* Division filter dropdown */}
       <div ref={wrapperRef} className="relative">
         <button
@@ -147,6 +165,72 @@ export function DivisionControls({ divisions }: DivisionControlsProps) {
         <i className="ti ti-layout-rows text-[13px]" aria-hidden="true" />
         Group by division
       </button>
+
+      {/* Sort dropdown — available in flat and grouped views alike */}
+      <div ref={sortRef} className="relative">
+        <button
+          type="button"
+          onClick={() => setSortOpen(!sortOpen)}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-3 py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
+            sortLatest
+              ? 'bg-ink text-white border-ink'
+              : 'bg-panel text-ink-2 border-line hover:border-ink-4',
+          )}
+        >
+          <i className="ti ti-arrows-sort text-[13px]" aria-hidden="true" />
+          {sortLatest ? 'Sort: latest' : 'Sort'}
+          <i
+            className={cn(
+              'ti text-[11px] transition-transform',
+              sortOpen ? 'ti-chevron-up' : 'ti-chevron-down',
+            )}
+            aria-hidden="true"
+          />
+        </button>
+
+        {sortOpen ? (
+          <ul
+            role="listbox"
+            className="absolute left-0 top-full mt-1 z-30 min-w-[180px] rounded-xl border border-line bg-panel shadow-xl overflow-hidden"
+          >
+            <li>
+              <button
+                type="button"
+                role="option"
+                aria-selected={!sortLatest}
+                onClick={() => onSelectSort('')}
+                className={cn(
+                  'w-full text-left px-3 py-2.5 text-[12.5px] transition-colors',
+                  !sortLatest ? 'bg-primary-soft font-medium text-ink' : 'text-ink-2 hover:bg-bg',
+                )}
+              >
+                Default order
+                <span className="block text-[10.5px] text-ink-3 mt-0.5">
+                  JS Priority, due date, priority
+                </span>
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                role="option"
+                aria-selected={sortLatest}
+                onClick={() => onSelectSort('latest')}
+                className={cn(
+                  'w-full text-left px-3 py-2.5 text-[12.5px] transition-colors',
+                  sortLatest ? 'bg-primary-soft font-medium text-ink' : 'text-ink-2 hover:bg-bg',
+                )}
+              >
+                Latest first
+                <span className="block text-[10.5px] text-ink-3 mt-0.5">
+                  Newest created on top
+                </span>
+              </button>
+            </li>
+          </ul>
+        ) : null}
+      </div>
     </div>
   );
 }

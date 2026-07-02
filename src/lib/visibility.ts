@@ -16,6 +16,12 @@ import { prisma } from '@/lib/db';
 
 export type TaskFilter = 'all' | 'today' | 'overdue' | 'mine' | 'urgent' | 'completed' | 'js_priority' | 'milestone';
 
+/**
+ * List ordering. `default` is the smart order (JS Priority lane, then due
+ * date, then priority, then newest); `latest` is newest-created first.
+ */
+export type TaskSort = 'default' | 'latest';
+
 export type CallerSummary = {
   id: string;
   hierarchySlot: string;
@@ -127,6 +133,7 @@ export async function fetchVisibleTasks(opts: {
   callerId: string;
   filter: TaskFilter;
   divisionId?: string;
+  sort?: TaskSort;
 }): Promise<VisibleTask[]> {
   const me = await prisma.user.findUnique({
     where: { id: opts.callerId },
@@ -163,12 +170,15 @@ export async function fetchVisibleTasks(opts: {
       subtasks: { select: { status: true } },
       collaborators: { select: { role: true } },
     },
-    orderBy: [
-      { jsPriorityLane: { sort: 'asc', nulls: 'last' } },
-      { dueDate: { sort: 'asc', nulls: 'last' } },
-      { priority: 'desc' },
-      { createdAt: 'desc' },
-    ],
+    orderBy:
+      opts.sort === 'latest'
+        ? [{ createdAt: 'desc' }]
+        : [
+            { jsPriorityLane: { sort: 'asc', nulls: 'last' } },
+            { dueDate: { sort: 'asc', nulls: 'last' } },
+            { priority: 'desc' },
+            { createdAt: 'desc' },
+          ],
   });
 
   const taskIds = tasks.map((t) => t.id);
