@@ -151,6 +151,16 @@ export function describeNotification(
         accent: 'info',
       };
     }
+    case 'task_pulled': {
+      const puller = String(p.pulledByName ?? '');
+      return {
+        icon: 'ti-git-pull-request',
+        iconClass: 'text-info',
+        text: `${puller} pulled your task`,
+        href: taskHref,
+        accent: 'info',
+      };
+    }
     case 'password_reset_by_admin':
       return {
         icon: 'ti-lock-cog',

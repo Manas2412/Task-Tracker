@@ -1695,3 +1695,67 @@ export async function transferTaskAction(
   revalidateTask(task.id);
   return ok(epoch);
 }
+
+// ---------------------------------------------------------------
+// Pull task — division user claims an unassigned task
+// ---------------------------------------------------------------
+
+const pullTaskSchema = z.object({ taskId: z.string().uuid() });
+
+export async function pullTaskAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const parsed = pullTaskSchema.safeParse({ taskId: formData.get('taskId') });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const task = await prisma.task.findUnique({
+    where: { id: parsed.data.taskId },
+    select: { id: true, name: true, ownerId: true, createdById: true, divisionId: true, visibility: true, parentTaskId: true },
+  });
+  if (!task) return fail('Task not found.', epoch);
+
+  if (task.ownerId !== task.createdById) return fail('This task is already assigned.', epoch);
+  if (task.ownerId === me.id) return fail('You already own this task.', epoch);
+  if (task.visibility === 'personal') return fail('Personal tasks cannot be pulled.', epoch);
+  if (task.parentTaskId) return fail('Subtasks cannot be pulled.', epoch);
+
+  const meRow = await prisma.user.findUnique({
+    where: { id: me.id },
+    select: { id: true, name: true, divisionId: true },
+  });
+  if (!meRow) return fail('User not found.', epoch);
+  if (meRow.divisionId !== task.divisionId) return fail('You can only pull tasks from your own division.', epoch);
+
+  await prisma.$transaction([
+    prisma.task.update({
+      where: { id: task.id },
+      data: { ownerId: me.id },
+    }),
+    prisma.taskActivity.create({
+      data: {
+        taskId: task.id,
+        actorId: me.id,
+        eventType: 'task_pulled',
+        payload: { pulledBy: me.id, pulledByName: meRow.name },
+      },
+    }),
+  ]);
+
+  if (task.createdById !== me.id) {
+    await prisma.notification.create({
+      data: {
+        userId: task.createdById,
+        type: 'task_pulled',
+        payload: { taskId: task.id, taskName: task.name, pulledByName: meRow.name },
+      },
+    });
+  }
+
+  revalidateTask(task.id);
+  return ok(epoch);
+}

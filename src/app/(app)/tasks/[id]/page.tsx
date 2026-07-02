@@ -20,6 +20,7 @@ import { SectionContext } from './_components/SectionContext';
 import { SectionDetails } from './_components/SectionDetails';
 import { SectionSubtasks } from './_components/SectionSubtasks';
 import { StatusPicker } from './_components/StatusPicker';
+import { PullTaskButton } from './_components/PullTaskButton';
 import { TransferTaskButton } from './_components/TransferTaskButton';
 
 import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/ui/Pill';
@@ -107,6 +108,13 @@ export default async function TaskDetailPage({ params }: PageProps) {
   }
 
   const isOwner = task.ownerId === session.user.id;
+  const isUnassigned = task.ownerId === task.createdById;
+  const canPull =
+    isUnassigned &&
+    !isOwner &&
+    !task.parentTaskId &&
+    task.visibility !== 'personal' &&
+    me.divisionId === task.divisionId;
 
   const canDelete =
     task.createdById === session.user.id || isOwner;
@@ -447,6 +455,12 @@ export default async function TaskDetailPage({ params }: PageProps) {
       {isOwner && !task.parentTaskId && transferCandidates.length > 0 ? (
         <div className="px-4 md:px-6 py-3 border-b border-line-2">
           <TransferTaskButton taskId={task.id} candidates={transferCandidates} />
+        </div>
+      ) : null}
+
+      {canPull ? (
+        <div className="px-4 md:px-6 py-3 border-b border-line-2">
+          <PullTaskButton taskId={task.id} />
         </div>
       ) : null}
 
