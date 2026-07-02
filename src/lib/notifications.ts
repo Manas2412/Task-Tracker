@@ -54,13 +54,15 @@ export function describeNotification(
         accent: 'js',
       };
     }
-    case 'task_assigned':
+    case 'task_assigned': {
+      const by = typeof p.assignedByName === 'string' ? p.assignedByName.trim() : '';
       return {
         icon: 'ti-user-plus',
         iconClass: 'text-primary',
-        text: 'Assigned a task to you',
+        text: by ? `${by} assigned a task to you` : 'Assigned a task to you',
         href: taskHref,
       };
+    }
     case 'mention':
       return {
         icon: 'ti-at',

@@ -70,7 +70,7 @@ export function NotificationsBell({ unreadCount, recent }: NotificationsBellProp
         <i className="ti ti-bell text-[18px]" aria-hidden="true" />
         {unreadCount > 0 ? (
           <span
-            className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-accent text-white text-[9px] font-medium grid place-items-center border-2 border-bg"
+            className="absolute top-1 right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-urgent text-white text-[9px] font-medium grid place-items-center border-2 border-bg"
             aria-hidden="true"
           >
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -205,7 +205,7 @@ function Row({
           {isUnread ? (
             <span
               aria-hidden="true"
-              className="w-2 h-2 rounded-full bg-accent mt-1 shrink-0"
+              className="w-2 h-2 rounded-full bg-urgent mt-1 shrink-0"
             />
           ) : null}
         </button>

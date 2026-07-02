@@ -654,7 +654,14 @@ export async function addSubtaskAction(
         data: {
           userId: assigneeId,
           type: 'task_assigned',
-          payload: { taskId: subtask.id, taskName: subtask.name, parentTaskId: parent.id },
+          payload: {
+            taskId: subtask.id,
+            taskName: subtask.name,
+            parentTaskId: parent.id,
+            assignedById: me.id,
+            assignedByName: me.name ?? null,
+            dueDate: subtask.dueDate?.toISOString() ?? null,
+          },
         },
       });
     }
@@ -751,7 +758,7 @@ export async function updateSubtaskAction(
 
   const subtask = await prisma.task.findUnique({
     where: { id: parsed.data.subtaskId },
-    select: { id: true, parentTaskId: true, ownerId: true, name: true },
+    select: { id: true, parentTaskId: true, ownerId: true, name: true, dueDate: true },
   });
   if (!subtask || !subtask.parentTaskId) return fail('Subtask not found.', epoch);
 
@@ -801,11 +808,26 @@ export async function updateSubtaskAction(
     ]);
 
     if (parsed.data.assigneeId && parsed.data.assigneeId !== subtask.ownerId && parsed.data.assigneeId !== me.id) {
+      // Effective due date after this update — the payload snapshot must
+      // reflect what the assignee will actually see on the subtask.
+      const nextDueDate =
+        parsed.data.dueDate !== undefined
+          ? parsed.data.dueDate
+            ? new Date(parsed.data.dueDate)
+            : null
+          : subtask.dueDate;
       await prisma.notification.create({
         data: {
           userId: parsed.data.assigneeId,
           type: 'task_assigned',
-          payload: { taskId: subtask.id, taskName: subtask.name, parentTaskId: parent.id },
+          payload: {
+            taskId: subtask.id,
+            taskName: subtask.name,
+            parentTaskId: parent.id,
+            assignedById: me.id,
+            assignedByName: me.name ?? null,
+            dueDate: nextDueDate?.toISOString() ?? null,
+          },
         },
       });
     }
@@ -1286,7 +1308,7 @@ export async function addCollaboratorAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, ownerId: true, archivedAt: true },
+    select: { id: true, name: true, ownerId: true, archivedAt: true, dueDate: true },
   });
   if (!task || task.archivedAt) return fail('Task not found.', epoch);
 
@@ -1337,7 +1359,14 @@ export async function addCollaboratorAction(
         data: {
           userId: parsed.data.userId,
           type: 'task_assigned',
-          payload: { taskId: task.id, taskName: task.name, role: parsed.data.role },
+          payload: {
+            taskId: task.id,
+            taskName: task.name,
+            role: parsed.data.role,
+            assignedById: me.id,
+            assignedByName: me.name ?? null,
+            dueDate: task.dueDate?.toISOString() ?? null,
+          },
         },
       });
     }
@@ -1452,7 +1481,7 @@ export async function reassignTaskAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, ownerId: true },
+    select: { id: true, name: true, ownerId: true, dueDate: true },
   });
   if (!task) return fail('Task not found.', epoch);
   if (task.ownerId === parsed.data.newOwnerId) return fail('Already the owner.', epoch);
@@ -1492,7 +1521,14 @@ export async function reassignTaskAction(
         data: {
           userId: parsed.data.newOwnerId,
           type: 'task_assigned',
-          payload: { taskId: task.id, actorId: me.id },
+          payload: {
+            taskId: task.id,
+            taskName: task.name,
+            actorId: me.id,
+            assignedById: me.id,
+            assignedByName: me.name ?? null,
+            dueDate: task.dueDate?.toISOString() ?? null,
+          },
         },
       });
     }
@@ -1556,8 +1592,9 @@ export async function resolveReassignmentAction(
   const request = await prisma.reassignmentRequest.findUnique({
     where: { id: parsed.data.requestId },
     include: {
-      task: { select: { id: true, name: true, ownerId: true } },
+      task: { select: { id: true, name: true, ownerId: true, dueDate: true } },
       proposedOwner: { select: { id: true, name: true } },
+      requestedBy: { select: { id: true, name: true } },
     },
   });
   if (!request) return fail('Request not found.', epoch);
@@ -1601,7 +1638,14 @@ export async function resolveReassignmentAction(
           ? [{
               userId: request.proposedOwnerId,
               type: 'task_assigned' as const,
-              payload: { taskId: request.taskId, actorId: me.id },
+              payload: {
+                taskId: request.taskId,
+                taskName: request.task.name,
+                actorId: me.id,
+                assignedById: request.requestedById,
+                assignedByName: request.requestedBy.name,
+                dueDate: request.task.dueDate?.toISOString() ?? null,
+              },
             }]
           : []),
       ],
@@ -1659,7 +1703,7 @@ export async function transferTaskAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, ownerId: true, createdById: true, divisionId: true, visibility: true },
+    select: { id: true, name: true, ownerId: true, createdById: true, divisionId: true, visibility: true, dueDate: true },
   });
   if (!task) return fail('Task not found.', epoch);
 
@@ -1698,7 +1742,13 @@ export async function transferTaskAction(
       data: {
         userId: target.id,
         type: 'task_assigned',
-        payload: { taskId: task.id, taskName: task.name },
+        payload: {
+          taskId: task.id,
+          taskName: task.name,
+          assignedById: me.id,
+          assignedByName: me.name ?? null,
+          dueDate: task.dueDate?.toISOString() ?? null,
+        },
       },
     }),
   ];
