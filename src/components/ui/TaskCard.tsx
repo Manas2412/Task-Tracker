@@ -40,6 +40,7 @@ export type TaskCardProps = {
   due?: { label: string; tone: 'today' | 'overdue' | 'soon' | 'future' | 'none' };
   owner: { initials: string; colour: string; name: string };
   subtasks?: { done: number; total: number };
+  /** Show a paperclip icon when the task has a document attached. */
   hasAttachment?: boolean;
   /** If set, render "Primary: <divisionName>" pill (cross-division indicator) */
   primaryDivisionName?: string;
@@ -115,7 +116,9 @@ export function TaskCard({
 
         <div className="flex items-center gap-2 text-[11px] text-ink-3 shrink-0">
           {hasAttachment ? (
-            <i className="ti ti-paperclip text-[13px] text-ink-3" aria-hidden="true" title="Has attachment" />
+            <span role="img" aria-label="Has attachment" title="Has attachment" className="inline-flex">
+              <i className="ti ti-paperclip text-[13px] text-ink-3" aria-hidden="true" />
+            </span>
           ) : null}
 
           {subtasks && subtasks.total > 0 ? (
@@ -131,21 +134,4 @@ export function TaskCard({
                 'font-medium',
                 due.tone === 'overdue' && 'text-urgent',
                 due.tone === 'today' && 'text-accent',
-                (due.tone === 'soon' || due.tone === 'future') && 'text-ink-3 font-normal',
-              )}
-            >
-              {due.label}
-            </time>
-          ) : null}
-
-          <Avatar
-            initials={owner.initials}
-            colour={owner.colour}
-            size="xs"
-            ariaLabel={`Owner ${owner.name}`}
-          />
-        </div>
-      </footer>
-    </Wrapper>
-  );
-}
+                (due.tone === 'soon' || due.
