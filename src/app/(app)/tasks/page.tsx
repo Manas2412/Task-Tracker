@@ -219,4 +219,7 @@ function EmptyState({ filter }: { filter: TaskFilter }) {
   return (
     <div className="rounded-xl border border-dashed border-line p-10 text-center bg-panel">
       <i className="ti ti-inbox text-[28px] text-ink-3 mb-2 block" aria-hidden="true" />
-      <p className="text-[13px] text-ink-2">
+      <p className="text-[13px] text-ink-2">{copy[filter]}</p>
+    </div>
+  );
+}
