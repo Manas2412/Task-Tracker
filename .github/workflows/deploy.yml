@@ -27,6 +27,8 @@ jobs:
             npx prisma migrate resolve --applied 20260630120000_add_phone_and_work_activities 2>/dev/null || true
             npx prisma migrate resolve --applied 20260701120000_add_task_transferred_notification_type 2>/dev/null || true
             npx prisma migrate resolve --applied 20260702120000_add_task_pulled_notification_type 2>/dev/null || true
+            npx prisma migrate resolve --rolled-back 20260702140000_add_task_ref_number 2>/dev/null || true
+            npx prisma migrate resolve --applied 20260702140000_add_task_ref_number 2>/dev/null || true
             npx prisma migrate deploy
             pnpm build
             pm2 restart myas
