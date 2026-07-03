@@ -418,6 +418,110 @@ export async function updateTimelineFileFieldsAction(
 }
 
 // ============================================================
+// updateTimelineFileRefNumberAction — Super Admin only, renumber TF-YYYY/N
+// ============================================================
+
+const updateRefNumberSchema = z.object({
+  id: z.string().uuid(),
+  refYear: z
+    .string()
+    .trim()
+    .refine((s) => /^\d{4}$/.test(s), 'Enter a 4-digit year')
+    .transform((s) => Number(s))
+    .refine((n) => n >= 2000 && n <= 2100, 'Year must be between 2000 and 2100'),
+  /** Kept as a raw string so leading zeros the officer types are preserved
+   * verbatim in refNo, same as at creation. */
+  fileNumber: z
+    .string()
+    .trim()
+    .min(1, 'File number is required')
+    .refine((s) => /^\d{1,6}$/.test(s), 'Enter a whole number (1–999999)')
+    .refine((s) => Number(s) > 0, 'File number must be greater than zero'),
+});
+
+export async function updateTimelineFileRefNumberAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const session = await auth();
+  if (!session?.user) return fail('You are signed out.', epoch);
+
+  // Super Admin only — renumbering the official reference is stricter
+  // than the other TF field edits (OSD + Super Admin).
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isSuperAdmin: true, isActive: true },
+  });
+  if (!me?.isActive || !me.isSuperAdmin) {
+    return fail('Only Super Admin can change the reference number.', epoch);
+  }
+
+  const parsed = updateRefNumberSchema.safeParse({
+    id: formData.get('id'),
+    refYear: formData.get('refYear'),
+    fileNumber: formData.get('fileNumber'),
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues)
+      fieldErrors[String(issue.path[0])] = issue.message;
+    return { ok: false, fieldErrors, epoch };
+  }
+
+  const tf = await prisma.timelineFile.findUnique({
+    where: { id: parsed.data.id },
+    select: { id: true, refNo: true },
+  });
+  if (!tf) return fail('Timeline file not found.', epoch);
+
+  const refYear = parsed.data.refYear;
+  const refSeqRaw = parsed.data.fileNumber;
+  const refSeq = Number(refSeqRaw);
+  const refNo = `TF-${refYear}/${refSeqRaw}`;
+
+  if (refNo === tf.refNo) return ok(epoch);
+
+  try {
+    await prisma.timelineFile.update({
+      where: { id: tf.id },
+      data: { refNo, refYear, refSeq },
+    });
+
+    await prisma.timelineFileActivity.create({
+      data: {
+        timelineFileId: tf.id,
+        actorId: session.user.id,
+        eventType: 'ref_number_changed',
+        payload: { from: tf.refNo, to: refNo },
+      },
+    });
+  } catch (err: unknown) {
+    // P2002 = unique constraint violation — this year/number combination
+    // (or the resulting refNo string) already belongs to another file.
+    if (
+      err &&
+      typeof err === 'object' &&
+      'code' in err &&
+      (err as { code?: string }).code === 'P2002'
+    ) {
+      return {
+        ok: false,
+        epoch,
+        fieldErrors: {
+          fileNumber: `${refNo} is already in use by another timeline file.`,
+        },
+      };
+    }
+    console.error('updateTimelineFileRefNumberAction failed:', err);
+    return fail('Could not update the reference number.', epoch);
+  }
+
+  revalidateTf(tf.id);
+  return ok(epoch);
+}
+
+// ============================================================
 // addMarkedToAction / removeMarkedToAction
 // ============================================================
 
