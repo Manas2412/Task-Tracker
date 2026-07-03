@@ -306,11 +306,19 @@ const updateFieldsSchema = z.object({
     .optional()
     .transform((s) => (s && s.length > 0 ? s : undefined))
     .refine((s) => !s || !Number.isNaN(Date.parse(s)), 'Received date is invalid'),
+  // Distinguishes "field absent" (undefined — leave the deadline alone,
+  // e.g. when saving an unrelated field like the subject) from "field
+  // present but empty" (null — an explicit clear via the Deadline row's
+  // Clear button). A naive `s ? s : null` collapses both to null and
+  // silently wipes the deadline on every edit that doesn't touch it.
   deadlineDate: z
     .string()
     .optional()
-    .transform((s) => (s ? s : null))
-    .refine((s) => s === null || !Number.isNaN(Date.parse(s)), 'Deadline date is invalid'),
+    .transform((s) => (s === undefined ? undefined : s.length > 0 ? s : null))
+    .refine(
+      (s) => s === undefined || s === null || !Number.isNaN(Date.parse(s)),
+      'Deadline date is invalid',
+    ),
   secretaryComments: z.string().max(4000).optional(),
   deskComments: z.string().max(4000).optional(),
 });

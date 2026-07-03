@@ -454,11 +454,19 @@ const updateFieldsSchema = z.object({
     .max(5000)
     .optional()
     .transform((s) => (typeof s === 'string' ? s : undefined)),
+  // Distinguishes "field absent" (undefined — leave the due date alone,
+  // e.g. when saving an unrelated field like the title) from "field
+  // present but empty" (null — an explicit clear via the Due row's Clear
+  // button). A naive `s ? s : null` collapses both to null and silently
+  // wipes the due date on every edit that doesn't touch it.
   dueDate: z
     .string()
     .optional()
-    .transform((s) => (s && s.length > 0 ? s : null))
-    .refine((s) => s === null || !Number.isNaN(Date.parse(s)), 'Due date is invalid'),
+    .transform((s) => (s === undefined ? undefined : s.length > 0 ? s : null))
+    .refine(
+      (s) => s === undefined || s === null || !Number.isNaN(Date.parse(s)),
+      'Due date is invalid',
+    ),
   visibility: z.enum(VISIBILITY).optional(),
   milestone: z
     .string()
