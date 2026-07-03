@@ -204,14 +204,10 @@ function TaskRow({
 /**
  * The four relation segments of the tasks view, in display order:
  *   1. Assigned to me    — I own it, someone else created or handed it to me
- *   2. Division tasks    — the division's full shared board: every visible
- *                          task with Division visibility, including ones
- *                          that also appear in the personal segments
+ *   2. Division tasks    — division-visibility tasks NOT already in a personal segment
  *   3. Transferred by me — created by me, now owned by another user
  *   4. My tasks          — created by me and still owned by me
- * Division tasks is the complete board, so a task can appear both there and
- * in a personal segment. Personal-visibility tasks never enter the division
- * segment. Empty segments are hidden.
+ * Each task appears in exactly one segment. Empty segments are hidden.
  */
 type RelationSegment = {
   key: 'division' | 'assigned' | 'mine' | 'transferred';
@@ -222,9 +218,11 @@ type RelationSegment = {
 
 function segmentTasksByRelation(tasks: VisibleTask[], meId: string): RelationSegment[] {
   const assigned = tasks.filter((t) => t.ownerId === meId && t.createdById !== meId);
-  const division = tasks.filter((t) => t.visibility === 'division');
   const transferred = tasks.filter((t) => t.createdById === meId && t.ownerId !== meId);
   const mine = tasks.filter((t) => t.ownerId === meId && t.createdById === meId);
+
+  const personalIds = new Set([...assigned, ...transferred, ...mine].map((t) => t.id));
+  const division = tasks.filter((t) => t.visibility === 'division' && !personalIds.has(t.id));
 
   const segments: RelationSegment[] = [
     { key: 'assigned', label: 'Assigned to me', icon: 'ti-user-check', tasks: assigned },
