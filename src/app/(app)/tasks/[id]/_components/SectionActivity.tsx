@@ -128,6 +128,8 @@ function describeEvent(type: string, payload: Record<string, unknown> | null): s
       return 'archived this task';
     case 'task_transferred':
       return `transferred this task to ${String(payload.toName ?? '')}`;
+    case 'task_renamed':
+      return `renamed this task to "${String(payload.to ?? '')}"`;
     case 'task_read':
       return 'read this task';
     case 'subtask_read':

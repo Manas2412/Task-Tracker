@@ -429,6 +429,12 @@ export async function updateTaskPriorityAction(
 
 const updateFieldsSchema = z.object({
   taskId: z.string().uuid(),
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Task name is required')
+    .max(200, 'Task name is too long')
+    .optional(),
   description: z
     .string()
     .max(5000)
@@ -467,6 +473,7 @@ export async function updateTaskFieldsAction(
 
   const parsed = updateFieldsSchema.safeParse({
     taskId: formData.get('taskId'),
+    name: formData.has('name') ? (formData.get('name') as string) : undefined,
     description: formData.has('description') ? (formData.get('description') as string) : undefined,
     dueDate: formData.has('dueDate') ? (formData.get('dueDate') as string) : undefined,
     visibility: formData.has('visibility')
@@ -496,17 +503,30 @@ export async function updateTaskFieldsAction(
   const data: Record<string, unknown> = {};
   const events: { eventType: string; payload: Record<string, unknown> }[] = [];
 
+  if (parsed.data.name !== undefined && parsed.data.name !== task.name) {
+    data.name = parsed.data.name;
+    events.push({
+      eventType: 'task_renamed',
+      payload: { from: task.name, to: parsed.data.name },
+    });
+  }
   if (parsed.data.description !== undefined && parsed.data.description !== (task.description ?? '')) {
     data.description = parsed.data.description.length > 0 ? parsed.data.description : null;
     events.push({ eventType: 'description_updated', payload: {} });
   }
   if (parsed.data.dueDate !== undefined) {
     const next = parsed.data.dueDate ? parseDueDateInput(parsed.data.dueDate) : null;
-    const prevIso = task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null;
-    const nextIso = next ? next.toISOString().slice(0, 10) : null;
-    if (prevIso !== nextIso) {
+    // Compare full timestamps so a time-of-day change also registers; the
+    // activity payload stays date-only for legible rendering.
+    if ((task.dueDate?.getTime() ?? null) !== (next?.getTime() ?? null)) {
       data.dueDate = next;
-      events.push({ eventType: 'due_date_changed', payload: { from: prevIso, to: nextIso } });
+      events.push({
+        eventType: 'due_date_changed',
+        payload: {
+          from: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
+          to: next ? next.toISOString().slice(0, 10) : null,
+        },
+      });
     }
   }
   if (parsed.data.visibility !== undefined && parsed.data.visibility !== task.visibility) {

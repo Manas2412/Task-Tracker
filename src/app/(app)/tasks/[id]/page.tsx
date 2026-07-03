@@ -20,6 +20,7 @@ import { SectionContext } from './_components/SectionContext';
 import { SectionDetails } from './_components/SectionDetails';
 import { SectionSubtasks } from './_components/SectionSubtasks';
 import { StatusPicker } from './_components/StatusPicker';
+import { TaskTitleEditor } from './_components/TaskTitleEditor';
 import { PullTaskButton } from './_components/PullTaskButton';
 import { TransferTaskButton } from './_components/TransferTaskButton';
 
@@ -400,12 +401,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         {task.refNumber ? (
           <span className="font-mono text-[11px] text-ink-3 tracking-wide">{task.refNumber}</span>
         ) : null}
-        <h1
-          id="task-title"
-          className="font-serif text-[26px] md:text-[30px] leading-tight font-medium text-ink tracking-tight-title"
-        >
-          {task.name}
-        </h1>
+        <TaskTitleEditor taskId={task.id} name={task.name} canEdit={canEditFields} />
 
         <p className="mt-2 text-[11px] text-ink-3 inline-flex items-center gap-1.5">
           <i className="ti ti-edit text-[12px]" aria-hidden="true" />
