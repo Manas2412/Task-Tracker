@@ -24,12 +24,14 @@ type QueuedDriveLink = { name: string; url: string };
 type CreateTimelineFileDialogProps = {
   divisions: DivisionOption[];
   defaultReceivedDate: string;
+  suggestedFileNumber: number;
   s3Configured: boolean;
 };
 
 export function CreateTimelineFileDialog({
   divisions,
   defaultReceivedDate,
+  suggestedFileNumber,
   s3Configured,
 }: CreateTimelineFileDialogProps) {
   const [open, setOpen] = useState(false);
@@ -202,15 +204,34 @@ export function CreateTimelineFileDialog({
         open={open}
         onClose={uploading ? () => {} : () => setOpen(false)}
         title="New timeline file"
-        subtitle="Reference number is generated as TF-YYYY/NNN automatically."
+        subtitle="Enter the file number from your register — it becomes the reference number."
       >
         {open ? (
           <form ref={formRef} action={formAction} className="flex flex-col gap-3.5">
+            <Field
+              label="TL file number"
+              hint={`Becomes TF-${new Date().getFullYear()}/${suggestedFileNumber || 'N'} by default — change it to match your file register.`}
+              error={state.fieldErrors?.fileNumber}
+            >
+              <input
+                name="fileNumber"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{1,6}"
+                maxLength={6}
+                required
+                autoFocus
+                disabled={uploading}
+                defaultValue={String(suggestedFileNumber)}
+                placeholder="e.g. 45"
+                className={inputCn(!!state.fieldErrors?.fileNumber)}
+              />
+            </Field>
+
             <Field label="Subject" error={state.fieldErrors?.subject}>
               <input
                 name="subject"
                 required
-                autoFocus
                 maxLength={200}
                 disabled={uploading}
                 placeholder="e.g. Cabinet brief request — Khelo India Mission"

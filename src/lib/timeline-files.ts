@@ -131,26 +131,21 @@ export async function fetchTfCounts(callerId: string): Promise<{
 }
 
 // ============================================================
-// Ref-number generation: TF-YYYY/NNN (per PRD §5.2)
+// Ref-number: TF-YYYY/Number (per PRD §5.2, desk-entered)
 // ============================================================
 
 /**
- * Allocate the next sequential ref-number for the given year inside a
- * transaction. Caller passes its own Prisma tx so the SELECT + INSERT
- * are atomic, avoiding duplicate refSeq under concurrency.
- *
- * Retry-on-conflict happens in the action; this helper just computes.
+ * Suggests the next sequential file number for the given year — shown as
+ * a convenience default on the create form. The desk officer types the
+ * actual number from their physical file register (overriding the
+ * suggestion when it differs); uniqueness for that year is enforced by
+ * the `(ref_year, ref_seq)` constraint at insert time, not here.
  */
-export async function nextRefNumber(
-  tx: Prisma.TransactionClient,
-  year: number,
-): Promise<{ refYear: number; refSeq: number; refNo: string }> {
-  const last = await tx.timelineFile.findFirst({
+export async function suggestNextRefSeq(year: number): Promise<number> {
+  const last = await prisma.timelineFile.findFirst({
     where: { refYear: year },
     orderBy: { refSeq: 'desc' },
     select: { refSeq: true },
   });
-  const refSeq = (last?.refSeq ?? 0) + 1;
-  const refNo = `TF-${year}/${String(refSeq).padStart(3, '0')}`;
-  return { refYear: year, refSeq, refNo };
+  return (last?.refSeq ?? 0) + 1;
 }

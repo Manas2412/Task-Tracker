@@ -419,6 +419,7 @@ model TimelineFile {
   deadlineDate                DateTime?           @map("deadline_date") @db.Date
   status                      TimelineFileStatus  @default(pending_action)
   secretaryComments           String?             @map("secretary_comments")
+  deskComments                String?             @map("desk_comments")
   actionDocumentAttachmentId  String?             @map("action_document_attachment_id") @db.Uuid
 
   createdById                 String              @map("created_by") @db.Uuid

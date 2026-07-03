@@ -5,19 +5,19 @@ import { z } from 'zod';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { nextRefNumber } from '@/lib/timeline-files';
 
 /**
  * Timeline File server actions (PRD §5.2).
  *
- *   createTimelineFileAction       — auto-generates TF-YYYY/NNN, atomic
- *   updateTimelineFileFieldsAction — subject/from/dates/secretary's comments
+ *   createTimelineFileAction       — builds TF-YYYY/Number from the desk-
+ *                                    entered file number
+ *   updateTimelineFileFieldsAction — subject/from/dates/comments
  *   updateTimelineFileStatusAction — Pending Action / In Progress / etc.
  *   addMarkedToAction / removeMarkedToAction — division scope membership
  *
  * Authorisation:
  *   - Creation: OSD or Super Admin (delegation to staff lands later)
- *   - Edits to subject/from/dates/secretary comments: OSD + Super Admin
+ *   - Edits to subject/from/dates/secretary + desk comments: OSD + Super Admin
  *   - Status change: OSD + Super Admin + Director of any marked-to division
  *   - Phase 3 simplification: action-level checks; row-level visibility
  *     enforced by the scoper used for reads.
@@ -82,6 +82,18 @@ const TF_STATUSES = [
 // ============================================================
 
 const createSchema = z.object({
+  /**
+   * The desk-entered file number — kept as a raw string (not coerced to a
+   * number) so leading zeros the officer types are preserved verbatim in
+   * the displayed ref number. `refSeq` (the Int column backing the
+   * per-year uniqueness constraint) is derived from it in the action.
+   */
+  fileNumber: z
+    .string()
+    .trim()
+    .min(1, 'TL file number is required')
+    .refine((s) => /^\d{1,6}$/.test(s), 'Enter a whole number (1–999999)')
+    .refine((s) => Number(s) > 0, 'File number must be greater than zero'),
   subject: z.string().trim().min(1, 'Subject is required').max(200, 'Subject is too long'),
   fromWhom: z.string().trim().min(1, 'From-whom is required').max(120),
   receivedDate: z
@@ -115,6 +127,7 @@ export async function createTimelineFileAction(
   if (!guard.ok) return fail(guard.error, epoch);
 
   const parsed = createSchema.safeParse({
+    fileNumber: formData.get('fileNumber'),
     subject: formData.get('subject'),
     fromWhom: formData.get('fromWhom'),
     receivedDate: formData.get('receivedDate'),
@@ -131,86 +144,86 @@ export async function createTimelineFileAction(
 
   const received = new Date(parsed.data.receivedDate);
   const deadline = parsed.data.deadlineDate ? new Date(parsed.data.deadlineDate) : null;
-  const refYearGuess = received.getUTCFullYear();
+  const refYear = received.getUTCFullYear();
+  const refSeqRaw = parsed.data.fileNumber;
+  const refSeq = Number(refSeqRaw);
+  const refNo = `TF-${refYear}/${refSeqRaw}`;
 
-  // Up to 3 retries against the unique(ref_year, ref_seq) constraint
-  // under burst-create.
-  const MAX_ATTEMPTS = 3;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      const created = await prisma.$transaction(async (tx) => {
-        const { refNo, refYear, refSeq } = await nextRefNumber(tx, refYearGuess);
-        return tx.timelineFile.create({
-          data: {
-            refNo,
-            refYear,
-            refSeq,
-            subject: parsed.data.subject,
-            fromWhom: parsed.data.fromWhom,
-            receivedDate: received,
-            deadlineDate: deadline,
-            status: 'pending_action',
-            secretaryComments: parsed.data.secretaryComments ?? null,
-            createdById: guard.userId,
-            markedTo: {
-              createMany: {
-                data: parsed.data.markedTo.map((divisionId) => ({ divisionId })),
-              },
-            },
-          },
-        });
-      });
-
-      // Notify each marked-to division's Director (best-effort).
-      const directors = await prisma.user.findMany({
-        where: {
-          divisionId: { in: parsed.data.markedTo },
-          hierarchySlot: 'director',
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      if (directors.length > 0) {
-        await prisma.notification.createMany({
-          data: directors.map((d) => ({
-            userId: d.id,
-            type: 'timeline_file_marked_to_division',
-            payload: { timelineFileId: created.id, refNo: created.refNo },
-          })),
-        });
-      }
-
-      await prisma.timelineFileActivity.create({
-        data: {
-          timelineFileId: created.id,
-          actorId: guard.userId,
-          eventType: 'created_from_correspondence',
-          payload: {
-            subject: created.subject,
-            fromWhom: created.fromWhom,
-            markedToCount: parsed.data.markedTo.length,
+  try {
+    const created = await prisma.timelineFile.create({
+      data: {
+        refNo,
+        refYear,
+        refSeq,
+        subject: parsed.data.subject,
+        fromWhom: parsed.data.fromWhom,
+        receivedDate: received,
+        deadlineDate: deadline,
+        status: 'pending_action',
+        secretaryComments: parsed.data.secretaryComments ?? null,
+        createdById: guard.userId,
+        markedTo: {
+          createMany: {
+            data: parsed.data.markedTo.map((divisionId) => ({ divisionId })),
           },
         },
-      });
+      },
+    });
 
-      revalidateTf(created.id);
-      return ok(epoch, { id: created.id, refNo: created.refNo });
-    } catch (err: unknown) {
-      // P2002 = unique constraint violation. Re-loop to grab the next NNN.
-      if (
-        err &&
-        typeof err === 'object' &&
-        'code' in err &&
-        (err as { code?: string }).code === 'P2002' &&
-        attempt < MAX_ATTEMPTS
-      ) {
-        continue;
-      }
-      console.error('createTimelineFileAction failed:', err);
-      return fail('Could not create the timeline file. Try again.', epoch);
+    // Notify each marked-to division's Director (best-effort).
+    const directors = await prisma.user.findMany({
+      where: {
+        divisionId: { in: parsed.data.markedTo },
+        hierarchySlot: 'director',
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (directors.length > 0) {
+      await prisma.notification.createMany({
+        data: directors.map((d) => ({
+          userId: d.id,
+          type: 'timeline_file_marked_to_division',
+          payload: { timelineFileId: created.id, refNo: created.refNo },
+        })),
+      });
     }
+
+    await prisma.timelineFileActivity.create({
+      data: {
+        timelineFileId: created.id,
+        actorId: guard.userId,
+        eventType: 'created_from_correspondence',
+        payload: {
+          subject: created.subject,
+          fromWhom: created.fromWhom,
+          markedToCount: parsed.data.markedTo.length,
+        },
+      },
+    });
+
+    revalidateTf(created.id);
+    return ok(epoch, { id: created.id, refNo: created.refNo });
+  } catch (err: unknown) {
+    // P2002 = unique constraint violation — this file number is already
+    // used for this year (via refNo or the (refYear, refSeq) index).
+    if (
+      err &&
+      typeof err === 'object' &&
+      'code' in err &&
+      (err as { code?: string }).code === 'P2002'
+    ) {
+      return {
+        ok: false,
+        epoch,
+        fieldErrors: {
+          fileNumber: `TL file number ${refSeqRaw} is already used for ${refYear}. Try a different number.`,
+        },
+      };
+    }
+    console.error('createTimelineFileAction failed:', err);
+    return fail('Could not create the timeline file. Try again.', epoch);
   }
-  return fail('Reference number conflict. Try again.', epoch);
 }
 
 // ============================================================
@@ -299,6 +312,7 @@ const updateFieldsSchema = z.object({
     .transform((s) => (s ? s : null))
     .refine((s) => s === null || !Number.isNaN(Date.parse(s)), 'Deadline date is invalid'),
   secretaryComments: z.string().max(4000).optional(),
+  deskComments: z.string().max(4000).optional(),
 });
 
 export async function updateTimelineFileFieldsAction(
@@ -322,6 +336,7 @@ export async function updateTimelineFileFieldsAction(
     secretaryComments: formData.has('secretaryComments')
       ? (formData.get('secretaryComments') as string)
       : undefined,
+    deskComments: formData.has('deskComments') ? (formData.get('deskComments') as string) : undefined,
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -330,47 +345,68 @@ export async function updateTimelineFileFieldsAction(
     return { ok: false, fieldErrors, epoch };
   }
 
+  const tf = await prisma.timelineFile.findUnique({ where: { id: parsed.data.id } });
+  if (!tf) return fail('Timeline file not found.', epoch);
+
   const data: Record<string, unknown> = {};
-  if (parsed.data.subject !== undefined) data.subject = parsed.data.subject;
+  if (parsed.data.subject !== undefined && parsed.data.subject !== tf.subject) {
+    data.subject = parsed.data.subject;
+  }
   if (parsed.data.fromWhom !== undefined) data.fromWhom = parsed.data.fromWhom;
   if (parsed.data.receivedDate !== undefined)
     data.receivedDate = new Date(parsed.data.receivedDate);
-  if (parsed.data.deadlineDate !== undefined)
-    data.deadlineDate = parsed.data.deadlineDate ? new Date(parsed.data.deadlineDate) : null;
+  if (parsed.data.deadlineDate !== undefined) {
+    const next = parsed.data.deadlineDate ? new Date(parsed.data.deadlineDate) : null;
+    if ((tf.deadlineDate?.getTime() ?? null) !== (next?.getTime() ?? null)) {
+      data.deadlineDate = next;
+    }
+  }
   if (parsed.data.secretaryComments !== undefined)
     data.secretaryComments = parsed.data.secretaryComments.length > 0
       ? parsed.data.secretaryComments
       : null;
+  if (parsed.data.deskComments !== undefined)
+    data.deskComments = parsed.data.deskComments.length > 0 ? parsed.data.deskComments : null;
 
   if (Object.keys(data).length === 0) return ok(epoch);
 
   try {
     await prisma.timelineFile.update({ where: { id: parsed.data.id }, data });
 
-    const isSecretaryComment = parsed.data.secretaryComments !== undefined;
+    let eventType = 'fields_updated';
+    let eventPayload: Record<string, unknown> = { fields: Object.keys(data) };
+    if (parsed.data.secretaryComments !== undefined) {
+      eventType = 'secretary_comment_added';
+    } else if (parsed.data.deskComments !== undefined) {
+      eventType = 'desk_comment_added';
+    } else if ('subject' in data) {
+      eventType = 'tf_renamed';
+      eventPayload = { from: tf.subject, to: data.subject };
+    } else if ('deadlineDate' in data) {
+      eventType = 'deadline_changed';
+      eventPayload = {
+        from: tf.deadlineDate ? tf.deadlineDate.toISOString().slice(0, 10) : null,
+        to: data.deadlineDate ? (data.deadlineDate as Date).toISOString().slice(0, 10) : null,
+      };
+    }
+
     await prisma.timelineFileActivity.create({
       data: {
         timelineFileId: parsed.data.id,
         actorId: guard.userId,
-        eventType: isSecretaryComment ? 'secretary_comment_added' : 'fields_updated',
-        payload: { fields: Object.keys(data) },
+        eventType,
+        payload: eventPayload as object,
       },
     });
 
-    if (isSecretaryComment) {
-      const tf = await prisma.timelineFile.findUnique({
-        where: { id: parsed.data.id },
-        select: { createdById: true, refNo: true },
+    if (eventType === 'secretary_comment_added' && tf.createdById !== guard.userId) {
+      await prisma.notification.create({
+        data: {
+          userId: tf.createdById,
+          type: 'secretary_comment_on_timeline_file',
+          payload: { timelineFileId: parsed.data.id, refNo: tf.refNo },
+        },
       });
-      if (tf && tf.createdById !== guard.userId) {
-        await prisma.notification.create({
-          data: {
-            userId: tf.createdById,
-            type: 'secretary_comment_on_timeline_file',
-            payload: { timelineFileId: parsed.data.id, refNo: tf.refNo },
-          },
-        });
-      }
     }
   } catch (err) {
     console.error('updateTimelineFileFieldsAction failed:', err);

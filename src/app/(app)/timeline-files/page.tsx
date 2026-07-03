@@ -8,6 +8,7 @@ import { isS3Configured } from '@/lib/s3';
 import {
   fetchTfCounts,
   fetchVisibleTimelineFiles,
+  suggestNextRefSeq,
   type TfFilter,
 } from '@/lib/timeline-files';
 import { cn } from '@/lib/utils';
@@ -49,7 +50,7 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
   const canCreate =
     session.user.isSuperAdmin || session.user.hierarchySlot === 'osd';
 
-  const [tfs, counts, divisions] = await Promise.all([
+  const [tfs, counts, divisions, suggestedFileNumber] = await Promise.all([
     fetchVisibleTimelineFiles({ callerId: session.user.id, filter }),
     fetchTfCounts(session.user.id),
     canCreate
@@ -59,6 +60,7 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
           select: { id: true, name: true, avatarColour: true },
         })
       : Promise.resolve([]),
+    canCreate ? suggestNextRefSeq(new Date().getUTCFullYear()) : Promise.resolve(1),
   ]);
 
   const todayIso = new Date().toISOString().slice(0, 10);
@@ -89,6 +91,7 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
             <CreateTimelineFileDialog
               divisions={divisions}
               defaultReceivedDate={todayIso}
+              suggestedFileNumber={suggestedFileNumber}
               s3Configured={isS3Configured()}
             />
           ) : null}
