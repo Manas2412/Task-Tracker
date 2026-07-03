@@ -333,14 +333,7 @@ export async function updateTaskStatusAction(
         notifs.push({
           userId: task.ownerId,
           type: 'status_changed_on_my_task',
-          payload: {
-            taskId: task.id,
-            taskName: task.name,
-            from: task.status,
-            to: parsed.data.status,
-            actorId: me.id,
-            actorName: me.name ?? null,
-          },
+          payload: { taskId: task.id, taskName: task.name, from: task.status, to: parsed.data.status, actorId: me.id },
         });
       }
 
@@ -353,14 +346,7 @@ export async function updateTaskStatusAction(
           notifs.push({
             userId: dl.userId,
             type: 'cross_division_status_change',
-            payload: {
-              taskId: task.id,
-              taskName: task.name,
-              from: task.status,
-              to: parsed.data.status,
-              actorId: me.id,
-              actorName: me.name ?? null,
-            },
+            payload: { taskId: task.id, taskName: task.name, from: task.status, to: parsed.data.status },
           });
         }
       }
@@ -931,7 +917,7 @@ export async function postCommentAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true },
+    select: { id: true },
   });
   if (!task) return fail('Task not found.', epoch);
 
@@ -953,13 +939,7 @@ export async function postCommentAction(
       .map((uid) => ({
         userId: uid,
         type: 'mention' as const,
-        payload: {
-          taskId: task.id,
-          taskName: task.name,
-          commentId: comment.id,
-          actorId: me.id,
-          actorName: me.name ?? null,
-        },
+        payload: { taskId: task.id, commentId: comment.id, actorId: me.id },
       }));
     if (mentionNotifs.length > 0) {
       await prisma.notification.createMany({ data: mentionNotifs });
@@ -1253,7 +1233,6 @@ export async function setJsPriorityLaneAction(
     where: { id: parsed.data.taskId },
     select: {
       id: true,
-      name: true,
       jsPriorityLane: true,
       ownerId: true,
       owner: { select: { supervisorId: true, divisionId: true } },
@@ -1299,13 +1278,7 @@ export async function setJsPriorityLaneAction(
             data: notifTargets.map((uid) => ({
               userId: uid,
               type: 'js_priority_added',
-              payload: {
-                taskId: task.id,
-                taskName: task.name,
-                lane: parsed.data.lane,
-                actorId: me.id,
-                actorName: me.name ?? null,
-              },
+              payload: { taskId: task.id, lane: parsed.data.lane },
             })),
           });
         }
@@ -1600,13 +1573,7 @@ export async function reassignTaskAction(
       data: {
         userId: approverId,
         type: 'reassignment_approval_requested',
-        payload: {
-          taskId: task.id,
-          taskName: task.name,
-          actorId: me.id,
-          actorName: me.name ?? null,
-          proposedOwnerId: parsed.data.newOwnerId,
-        },
+        payload: { taskId: task.id, actorId: me.id, proposedOwnerId: parsed.data.newOwnerId },
       },
     });
     await prisma.taskActivity.create({
@@ -1685,12 +1652,7 @@ export async function resolveReassignmentAction(
         {
           userId: request.requestedById,
           type: 'reassignment_approved',
-          payload: {
-            taskId: request.taskId,
-            taskName: request.task.name,
-            actorId: me.id,
-            actorName: me.name ?? null,
-          },
+          payload: { taskId: request.taskId, actorId: me.id },
         },
         ...(request.proposedOwnerId !== request.requestedById
           ? [{
@@ -1727,12 +1689,7 @@ export async function resolveReassignmentAction(
       data: {
         userId: request.requestedById,
         type: 'reassignment_rejected',
-        payload: {
-          taskId: request.taskId,
-          taskName: request.task.name,
-          actorId: me.id,
-          actorName: me.name ?? null,
-        },
+        payload: { taskId: request.taskId, actorId: me.id },
       },
     });
   }

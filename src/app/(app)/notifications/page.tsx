@@ -6,14 +6,10 @@ import {
   markAllNotificationsReadAction,
   readAndRedirectAction,
 } from '@/app/actions/notifications';
-import { NotificationTaskCard } from '@/components/ui';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { formatDue } from '@/lib/format';
 import { describeNotification } from '@/lib/notifications';
-import {
-  buildNotificationTaskContext,
-  type NotificationTaskContext,
-} from '@/lib/notification-context';
 import { cn } from '@/lib/utils';
 
 import { NotificationRowSwipe } from './_components/NotificationRowSwipe';
@@ -45,7 +41,7 @@ export default async function NotificationsPage({ searchParams }: PageProps) {
     }),
   ]);
 
-  const taskContext = await buildNotificationTaskContext(notifications);
+  const assignmentDetails = await buildAssignmentDetails(notifications);
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-6 lg:px-8 pt-4 md:pt-6 pb-12">
@@ -91,7 +87,7 @@ export default async function NotificationsPage({ searchParams }: PageProps) {
       ) : (
         <ul className="bg-panel border border-line rounded-xl overflow-hidden">
           {notifications.map((n) => (
-            <Row key={n.id} notification={n} taskContext={taskContext.get(n.id)} />
+            <Row key={n.id} notification={n} assignment={assignmentDetails.get(n.id)} />
           ))}
         </ul>
       )}
@@ -105,7 +101,7 @@ export default async function NotificationsPage({ searchParams }: PageProps) {
 
 function Row({
   notification,
-  taskContext,
+  assignment,
 }: {
   notification: {
     id: string;
@@ -114,7 +110,7 @@ function Row({
     readAt: Date | null;
     createdAt: Date;
   };
-  taskContext?: NotificationTaskContext;
+  assignment?: AssignmentDetails;
 }) {
   const described = describeNotification(
     notification.type,
@@ -166,7 +162,7 @@ function Row({
             >
               {described.text}
             </p>
-            {taskContext ? <NotificationTaskCard {...taskContext} variant="full" /> : null}
+            {assignment ? <AssignmentCard assignment={assignment} /> : null}
             <time
               className="text-[11px] text-ink-3 mt-0.5 block"
               dateTime={notification.createdAt.toISOString()}
@@ -192,6 +188,129 @@ function Row({
       </NotificationRowSwipe>
     </li>
   );
+}
+
+// ------------------------------------------------------------
+// Task-assignment card — task name, assigned by, due date
+// ------------------------------------------------------------
+
+type AssignmentDetails = {
+  taskName: string;
+  assignedByName: string | null;
+  dueDate: Date | null;
+};
+
+function AssignmentCard({ assignment }: { assignment: AssignmentDetails }) {
+  const due = assignment.dueDate ? formatDue(assignment.dueDate) : null;
+
+  return (
+    <span className="block mt-2 mb-1 rounded-lg border border-line bg-bg px-3 py-2.5">
+      <span className="block text-[13px] font-medium text-ink leading-snug">
+        {assignment.taskName}
+      </span>
+      <span className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
+        {assignment.assignedByName ? (
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-3">
+            <i className="ti ti-user text-[12px]" aria-hidden="true" />
+            Assigned by <span className="font-medium text-ink-2">{assignment.assignedByName}</span>
+          </span>
+        ) : null}
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 text-[11px]',
+            due?.tone === 'overdue' && 'text-urgent font-medium',
+            due?.tone === 'today' && 'text-accent font-medium',
+            (!due || due.tone === 'soon' || due.tone === 'future') && 'text-ink-3',
+          )}
+        >
+          <i className="ti ti-calendar-due text-[12px]" aria-hidden="true" />
+          {assignment.dueDate
+            ? `Due ${format(assignment.dueDate, 'd LLL yyyy, h:mm aaa')}`
+            : 'No due date'}
+        </span>
+      </span>
+    </span>
+  );
+}
+
+const UUID_RE = /^[0-9a-f-]{36}$/i;
+
+/**
+ * Resolves the card content for every task-assignment notification in one
+ * batched pass. Live task data (name, due date) wins so the card stays
+ * accurate after edits; the payload snapshot covers deleted tasks and
+ * notifications created before the payload carried these fields.
+ */
+async function buildAssignmentDetails(
+  notifications: { id: string; type: string; payload: unknown }[],
+): Promise<Map<string, AssignmentDetails>> {
+  const details = new Map<string, AssignmentDetails>();
+  const rows = notifications
+    .filter((n) => n.type === 'task_assigned')
+    .map((n) => ({ id: n.id, payload: (n.payload ?? {}) as Record<string, unknown> }));
+  if (rows.length === 0) return details;
+
+  const taskIds = new Set<string>();
+  const assignerIds = new Set<string>();
+  for (const { payload } of rows) {
+    if (typeof payload.taskId === 'string' && UUID_RE.test(payload.taskId)) {
+      taskIds.add(payload.taskId);
+    }
+    // Older notifications carry only an actor id — resolve the name live.
+    const assignerId = payload.assignedById ?? payload.actorId;
+    if (
+      typeof payload.assignedByName !== 'string' &&
+      typeof assignerId === 'string' &&
+      UUID_RE.test(assignerId)
+    ) {
+      assignerIds.add(assignerId);
+    }
+  }
+
+  const [tasks, assigners] = await Promise.all([
+    taskIds.size > 0
+      ? prisma.task.findMany({
+          where: { id: { in: [...taskIds] } },
+          select: { id: true, name: true, dueDate: true },
+        })
+      : Promise.resolve([]),
+    assignerIds.size > 0
+      ? prisma.user.findMany({
+          where: { id: { in: [...assignerIds] } },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const taskById = new Map(tasks.map((t) => [t.id, t]));
+  const nameById = new Map(assigners.map((u) => [u.id, u.name]));
+
+  for (const { id, payload } of rows) {
+    const task = typeof payload.taskId === 'string' ? taskById.get(payload.taskId) : undefined;
+    const taskName =
+      task?.name ??
+      (typeof payload.taskName === 'string' && payload.taskName.trim()
+        ? payload.taskName.trim()
+        : null);
+    if (!taskName) continue;
+
+    const assignerId = payload.assignedById ?? payload.actorId;
+    const assignedByName =
+      typeof payload.assignedByName === 'string' && payload.assignedByName.trim()
+        ? payload.assignedByName.trim()
+        : typeof assignerId === 'string'
+          ? nameById.get(assignerId) ?? null
+          : null;
+
+    // When the task still exists its due date wins — even if null (cleared).
+    const dueDate = task
+      ? task.dueDate
+      : typeof payload.dueDate === 'string' && !Number.isNaN(Date.parse(payload.dueDate))
+        ? new Date(payload.dueDate)
+        : null;
+
+    details.set(id, { taskName, assignedByName, dueDate });
+  }
+  return details;
 }
 
 // ------------------------------------------------------------

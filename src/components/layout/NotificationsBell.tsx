@@ -8,12 +8,10 @@ import {
   markAllNotificationsReadAction,
   readAndRedirectAction,
 } from '@/app/actions/notifications';
-import { NotificationTaskCard } from '@/components/ui';
 import {
   describeNotification,
   type DescribedNotification,
 } from '@/lib/notifications';
-import type { NotificationTaskContext } from '@/lib/notification-context';
 import { cn } from '@/lib/utils';
 
 export type BellNotification = {
@@ -22,7 +20,6 @@ export type BellNotification = {
   payload: Record<string, unknown> | null;
   readAt: Date | null;
   createdAt: Date;
-  taskContext?: NotificationTaskContext;
 };
 
 type NotificationsBellProps = {
@@ -197,9 +194,6 @@ function Row({
             >
               {described.text}
             </p>
-            {notification.taskContext ? (
-              <NotificationTaskCard {...notification.taskContext} variant="compact" />
-            ) : null}
             <time
               className="text-[10px] text-ink-3 mt-0.5 block"
               dateTime={notification.createdAt.toISOString()}

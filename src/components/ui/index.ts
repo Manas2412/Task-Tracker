@@ -23,5 +23,3 @@ export { SwipeToReveal } from './SwipeToReveal';
 export { PullToRefresh } from './PullToRefresh';
 
 export { UserPicker, type UserPickerOption } from './UserPicker';
-
-export { NotificationTaskCard, type NotificationTaskCardProps } from './NotificationTaskCard';
