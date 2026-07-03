@@ -99,6 +99,14 @@ function describeTfEvent(type: string, payload: Record<string, unknown> | null):
       return 'updated the file details';
     case 'secretary_comment_added':
       return 'updated the secretary\'s comments';
+    case 'desk_comment_added':
+      return 'updated the desk comment';
+    case 'tf_renamed':
+      return `renamed the subject to "${String(payload.to ?? '')}"`;
+    case 'deadline_changed':
+      return payload.to
+        ? `set the deadline to ${String(payload.to)}`
+        : 'cleared the deadline';
     case 'marked_to_division':
       return 'marked the file to another division';
     case 'marked_to_division_removed':

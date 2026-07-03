@@ -15,6 +15,7 @@ import { isS3Configured } from '@/lib/s3';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
 import { cn } from '@/lib/utils';
 
+import { DeskCommentSection } from './_components/DeskCommentSection';
 import { LinkedTasksSection, type LinkedTaskRow } from './_components/LinkedTasksSection';
 import {
   MarkedToEditor,
@@ -22,8 +23,10 @@ import {
 } from './_components/MarkedToEditor';
 import { SecretaryQuoteSection } from './_components/SecretaryQuoteSection';
 import { TfActivitySection } from './_components/TfActivitySection';
+import { TfDeadlineEditor } from './_components/TfDeadlineEditor';
 import { TfMoreMenu } from './_components/TfMoreMenu';
 import { TfStatusPicker } from './_components/TfStatusPicker';
+import { TfTitleEditor } from './_components/TfTitleEditor';
 
 type PageProps = { params: { id: string } };
 
@@ -222,12 +225,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
           ) : null}
         </div>
 
-        <h1
-          id="tf-title"
-          className="font-serif text-[24px] md:text-[28px] leading-tight text-ink tracking-tight-title mb-2"
-        >
-          {tf.subject}
-        </h1>
+        <TfTitleEditor tfId={tf.id} subject={tf.subject} canEdit={canEditFields} />
 
         <p className="text-[12px] text-ink-2">
           From <span className="text-ink font-medium">{tf.fromWhom}</span>
@@ -240,6 +238,12 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         tfId={tf.id}
         comments={tf.secretaryComments}
         signature={secretarySignature}
+        canEdit={canEditFields}
+      />
+
+      <DeskCommentSection
+        tfId={tf.id}
+        comments={tf.deskComments}
         canEdit={canEditFields}
       />
 
@@ -302,24 +306,11 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
           <Row icon="ti-calendar-event" label="Received">
             {format(tf.receivedDate, 'd LLL yyyy')}
           </Row>
-          <Row icon="ti-clock" label="Deadline">
-            {tf.deadlineDate ? (
-              <span className={cn(isOverdue && 'text-urgent')}>
-                {format(tf.deadlineDate, 'd LLL yyyy')}{' '}
-                {days !== null ? (
-                  <span className="text-ink-3 text-[11px] font-normal">
-                    ({days < 0
-                      ? `${Math.abs(days)} ${Math.abs(days) === 1 ? 'd' : 'd'} overdue`
-                      : days === 0
-                        ? 'today'
-                        : `in ${days} ${days === 1 ? 'd' : 'd'}`})
-                  </span>
-                ) : null}
-              </span>
-            ) : (
-              <span className="text-ink-3 italic">No deadline</span>
-            )}
-          </Row>
+          <TfDeadlineEditor
+            tfId={tf.id}
+            deadlineDate={tf.deadlineDate}
+            canEdit={canEditFields}
+          />
           <Row icon="ti-building" label="Marked to">
             <MarkedToEditor
               tfId={tf.id}
