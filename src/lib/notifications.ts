@@ -43,40 +43,54 @@ export function describeNotification(
   const p = payload ?? {};
   const taskHref = p.taskId ? `/tasks/${String(p.taskId)}` : '/tasks';
 
+  // Task title, quoted inline where the payload carries one. Every
+  // task-linked notification type below embeds this so the bell dropdown
+  // and /notifications page both name the task, not just describe the event.
+  const title = typeof p.taskName === 'string' ? p.taskName.trim() : '';
+
   switch (type) {
     case 'js_priority_added': {
       const lane = String(p.lane ?? '');
+      const laneLabel = LANE_LABEL[lane] ?? lane;
       return {
         icon: 'ti-bookmark-filled',
         iconClass: 'text-accent',
-        text: `Added to JS Priority — ${LANE_LABEL[lane] ?? lane}`,
+        text: title
+          ? `Added "${title}" to JS Priority — ${laneLabel}`
+          : `Added to JS Priority — ${laneLabel}`,
         href: taskHref,
         accent: 'js',
       };
     }
     case 'task_assigned': {
       const by = typeof p.assignedByName === 'string' ? p.assignedByName.trim() : '';
+      const what = title ? `"${title}"` : 'a task';
       return {
         icon: 'ti-user-plus',
         iconClass: 'text-primary',
-        text: by ? `${by} assigned a task to you` : 'Assigned a task to you',
+        text: by ? `${by} assigned ${what} to you` : `Assigned ${what} to you`,
         href: taskHref,
       };
     }
-    case 'mention':
+    case 'mention': {
+      const by = typeof p.actorName === 'string' ? p.actorName.trim() : '';
       return {
         icon: 'ti-at',
         iconClass: 'text-primary',
-        text: 'Mentioned you in a comment',
+        text: title
+          ? `${by ? `${by} mentioned` : 'Mentioned'} you on "${title}"`
+          : 'Mentioned you in a comment',
         href: taskHref,
         accent: 'primary',
       };
+    }
     case 'status_changed_on_my_task': {
       const to = String(p.to ?? '');
+      const label = STATUS_LABEL[to] ?? to;
       return {
         icon: 'ti-refresh',
         iconClass: 'text-info',
-        text: `Status changed to ${STATUS_LABEL[to] ?? to}`,
+        text: title ? `Status changed to ${label} on "${title}"` : `Status changed to ${label}`,
         href: taskHref,
         accent: 'info',
       };
@@ -85,7 +99,7 @@ export function describeNotification(
       return {
         icon: 'ti-clock',
         iconClass: 'text-accent',
-        text: 'Task due within 24 hours',
+        text: title ? `"${title}" is due within 24 hours` : 'Task due within 24 hours',
         href: taskHref,
         accent: 'js',
       };
@@ -93,7 +107,7 @@ export function describeNotification(
       return {
         icon: 'ti-alert-triangle',
         iconClass: 'text-urgent',
-        text: 'Task is overdue',
+        text: title ? `"${title}" is overdue` : 'Task is overdue',
         href: taskHref,
         accent: 'urgent',
       };
@@ -113,18 +127,23 @@ export function describeNotification(
         href: p.timelineFileId ? `/timeline-files/${String(p.timelineFileId)}` : '/timeline-files',
         accent: 'primary',
       };
-    case 'cross_division_status_change':
+    case 'cross_division_status_change': {
+      const to = String(p.to ?? '');
+      const label = STATUS_LABEL[to] ?? to;
       return {
         icon: 'ti-refresh',
         iconClass: 'text-info',
-        text: 'Status changed on a cross-division task',
+        text: title
+          ? `Status changed to ${label} on "${title}"`
+          : 'Status changed on a cross-division task',
         href: taskHref,
       };
+    }
     case 'reassignment_approval_requested':
       return {
         icon: 'ti-arrows-shuffle',
         iconClass: 'text-accent',
-        text: 'Reassignment needs your approval',
+        text: title ? `Reassignment of "${title}" needs your approval` : 'Reassignment needs your approval',
         href: taskHref,
         accent: 'js',
       };
@@ -132,33 +151,35 @@ export function describeNotification(
       return {
         icon: 'ti-check',
         iconClass: 'text-success',
-        text: 'Reassignment approved',
+        text: title ? `Reassignment of "${title}" approved` : 'Reassignment approved',
         href: taskHref,
       };
     case 'reassignment_rejected':
       return {
         icon: 'ti-x',
         iconClass: 'text-urgent',
-        text: 'Reassignment rejected',
+        text: title ? `Reassignment of "${title}" rejected` : 'Reassignment rejected',
         href: taskHref,
       };
     case 'task_transferred': {
       const from = String(p.fromName ?? '');
       const to = String(p.toName ?? '');
+      const what = title ? `"${title}"` : 'a task';
       return {
         icon: 'ti-transfer',
         iconClass: 'text-info',
-        text: `${from} transferred a task to ${to}`,
+        text: `${from} transferred ${what} to ${to}`,
         href: taskHref,
         accent: 'info',
       };
     }
     case 'task_pulled': {
       const puller = String(p.pulledByName ?? '');
+      const what = title ? `"${title}"` : 'your task';
       return {
         icon: 'ti-git-pull-request',
         iconClass: 'text-info',
-        text: `${puller} pulled your task`,
+        text: `${puller} pulled ${what}`,
         href: taskHref,
         accent: 'info',
       };

@@ -4,6 +4,7 @@ import { AppShell, type BellNotification } from '@/components/layout';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { initialsOf } from '@/lib/format';
+import { buildNotificationTaskContext } from '@/lib/notification-context';
 import { isS3Configured } from '@/lib/s3';
 
 import {
@@ -38,12 +39,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   ]);
   if (!me) redirect('/login');
 
+  const taskContext = await buildNotificationTaskContext(recentRaw);
+
   const recent: BellNotification[] = recentRaw.map((n) => ({
     id: n.id,
     type: n.type,
     payload: n.payload as Record<string, unknown> | null,
     readAt: n.readAt,
     createdAt: n.createdAt,
+    taskContext: taskContext.get(n.id),
   }));
 
   const isOsd = me.hierarchySlot === 'osd' || me.isSuperAdmin;
