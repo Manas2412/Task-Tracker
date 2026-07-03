@@ -20,9 +20,10 @@ export type NotificationTaskCardProps = {
  * title itself isn't repeated here; `describeNotification`'s headline
  * already names it.
  *
- * The 'full' variant sits inset from the row's right edge (not edge to
- * edge) so it never crowds the swipe-to-reveal "Mark read" action on
- * /notifications.
+ * The 'full' variant sizes itself to its content (inline-flex, not a
+ * full-width block) — a compact chip, not a stretched panel — so it can
+ * never crowd the swipe-to-reveal "Mark read" action on /notifications
+ * regardless of row width or viewport.
  */
 export function NotificationTaskCard({
   divisionName,
@@ -66,24 +67,22 @@ export function NotificationTaskCard({
   }
 
   return (
-    <span className="block mt-2 mb-1 mr-6 rounded-lg border border-line bg-bg px-3 py-2">
-      <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        {divisionName ? (
-          <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-3">
-            <i className="ti ti-building text-[12px]" aria-hidden="true" />
-            {divisionName}
-          </span>
-        ) : null}
-        {showActor ? (
-          <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-3">
-            <i className="ti ti-user text-[12px]" aria-hidden="true" />
-            {actorLabel} <span className="font-medium text-ink-2">{actorName}</span>
-          </span>
-        ) : null}
-        <span className={cn('inline-flex items-center gap-1.5 text-[11px]', dueTone)}>
-          <i className="ti ti-calendar-due text-[12px]" aria-hidden="true" />
-          {dueLabel}
+    <span className="inline-flex flex-wrap max-w-full items-center gap-x-4 gap-y-1 mt-2 mb-1 mr-2 rounded-lg border border-line bg-bg px-3 py-2">
+      {divisionName ? (
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-3">
+          <i className="ti ti-building text-[12px]" aria-hidden="true" />
+          {divisionName}
         </span>
+      ) : null}
+      {showActor ? (
+        <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-3">
+          <i className="ti ti-user text-[12px]" aria-hidden="true" />
+          {actorLabel} <span className="font-medium text-ink-2">{actorName}</span>
+        </span>
+      ) : null}
+      <span className={cn('inline-flex items-center gap-1.5 text-[11px]', dueTone)}>
+        <i className="ti ti-calendar-due text-[12px]" aria-hidden="true" />
+        {dueLabel}
       </span>
     </span>
   );
