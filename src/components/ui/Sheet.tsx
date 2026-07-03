@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { cn } from '@/lib/utils';
 
@@ -61,7 +62,13 @@ export function Sheet({
     };
   }, [open]);
 
-  return (
+  // Portal target — render to document.body to escape any stacking context.
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setPortalTarget(document.body);
+  }, []);
+
+  const content = (
     <>
       {/* Backdrop */}
       <div
@@ -122,4 +129,7 @@ export function Sheet({
       </div>
     </>
   );
+
+  if (!portalTarget) return null;
+  return createPortal(content, portalTarget);
 }
