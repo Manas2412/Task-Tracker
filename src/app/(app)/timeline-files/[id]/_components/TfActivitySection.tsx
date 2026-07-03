@@ -107,6 +107,8 @@ function describeTfEvent(type: string, payload: Record<string, unknown> | null):
       return payload.to
         ? `set the deadline to ${String(payload.to)}`
         : 'cleared the deadline';
+    case 'ref_number_changed':
+      return `changed the reference number from ${String(payload.from ?? '')} to ${String(payload.to ?? '')}`;
     case 'marked_to_division':
       return 'marked the file to another division';
     case 'marked_to_division_removed':

@@ -25,6 +25,7 @@ import { SecretaryQuoteSection } from './_components/SecretaryQuoteSection';
 import { TfActivitySection } from './_components/TfActivitySection';
 import { TfDeadlineEditor } from './_components/TfDeadlineEditor';
 import { TfMoreMenu } from './_components/TfMoreMenu';
+import { TfRefNumberEditor } from './_components/TfRefNumberEditor';
 import { TfStatusPicker } from './_components/TfStatusPicker';
 import { TfTitleEditor } from './_components/TfTitleEditor';
 
@@ -216,9 +217,13 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         style={{ background: 'linear-gradient(180deg, var(--primary-soft) 0%, var(--panel) 100%)' }}
       >
         <div className="flex items-center gap-2 flex-wrap mb-2.5">
-          <span className="font-mono text-[11px] font-medium text-primary bg-panel border border-primary-line/60 px-2 py-0.5 rounded-md">
-            {tf.refNo}
-          </span>
+          <TfRefNumberEditor
+            tfId={tf.id}
+            refNo={tf.refNo}
+            refYear={tf.refYear}
+            fileNumber={tf.refNo.split('/')[1] ?? String(tf.refSeq)}
+            canEdit={me.isSuperAdmin}
+          />
           <TfStatusPicker tfId={tf.id} current={tf.status} canEdit={canEditStatus} />
           {tf.deadlineDate && !isClosed && days !== null ? (
             <Pill variant="deadline" daysLeft={days} overdue={isOverdue} />
