@@ -163,8 +163,16 @@ function AddExistingTab({
   const [movingId, setMovingId] = useState<string | null>(null);
 
   const currentMembers = pmu ? users.filter((u) => u.pmuId === pmu.id) : [];
+  // A PMU member keeps their home division, so only users already in the
+  // PMU's division are eligible — matching the server rule and keeping the
+  // division stable. To pull in someone from elsewhere, change their
+  // division first.
   const candidates = pmu
-    ? users.filter((u) => u.pmuId !== pmu.id)
+    ? users.filter(
+        (u) =>
+          u.pmuId !== pmu.id &&
+          (pmu.homeDivisionId == null || u.divisionId === pmu.homeDivisionId),
+      )
     : users.filter((u) => u.divisionId !== divisionId);
 
   const q = search.toLowerCase();

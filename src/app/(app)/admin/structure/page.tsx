@@ -305,7 +305,11 @@ export default async function StructurePage({ searchParams }: PageProps) {
           divisions={divisionOptions}
           supervisors={supervisorOptions}
           selfId={session.user.id}
-          activeDivision={{ id: activeDivision.id, name: activeDivision.name }}
+          activeDivision={{
+            id: activeDivision.id,
+            name: activeDivision.name,
+            kind: activeDivision.kind as 'division' | 'sub_division' | 'section' | 'pmu',
+          }}
           allUsers={treeUsers}
         />
       </aside>
