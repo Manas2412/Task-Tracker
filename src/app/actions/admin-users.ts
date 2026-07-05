@@ -98,7 +98,9 @@ async function audit(
 /**
  * Placement guards shared by create + update: a section must be a
  * `section` row under the chosen sub-division, and a PMU must be a `pmu`
- * row attached to the chosen division.
+ * row attached to the chosen division. PMU members sit outside the
+ * sub-division/section ladder — when a PMU is chosen those two fields
+ * are ignored (and persisted as null), never required.
  */
 async function validatePlacement(opts: {
   divisionId: string;
@@ -108,7 +110,7 @@ async function validatePlacement(opts: {
 }): Promise<Record<string, string> | null> {
   const errors: Record<string, string> = {};
 
-  if (opts.sectionId) {
+  if (opts.sectionId && !opts.pmuId) {
     const section = await prisma.division.findUnique({
       where: { id: opts.sectionId },
       select: { kind: true, parentId: true },
@@ -272,8 +274,8 @@ export async function createUserAction(
         hierarchySlot: parsed.data.hierarchySlot,
         contractRole: parsed.data.contractRole ?? null,
         divisionId: parsed.data.divisionId,
-        subDivisionId: parsed.data.subDivisionId ?? null,
-        sectionId: parsed.data.sectionId ?? null,
+        subDivisionId: parsed.data.pmuId ? null : parsed.data.subDivisionId ?? null,
+        sectionId: parsed.data.pmuId ? null : parsed.data.sectionId ?? null,
         pmuId: parsed.data.pmuId ?? null,
         isPmu: Boolean(parsed.data.pmuId),
         supervisorId: parsed.data.supervisorId ?? null,
@@ -413,8 +415,8 @@ export async function updateUserAction(
         hierarchySlot: parsed.data.hierarchySlot,
         contractRole: parsed.data.contractRole,
         divisionId: parsed.data.divisionId,
-        subDivisionId: parsed.data.subDivisionId,
-        sectionId: parsed.data.sectionId,
+        subDivisionId: parsed.data.pmuId ? null : parsed.data.subDivisionId,
+        sectionId: parsed.data.pmuId ? null : parsed.data.sectionId,
         pmuId: parsed.data.pmuId,
         // Selecting a PMU marks the user as a PMU member. Clearing the
         // dropdown does NOT clear isPmu — legacy PMU users predate pmu_id
@@ -716,9 +718,10 @@ export async function setUserPmuAction(
         data: {
           pmuId: pmu.id,
           isPmu: true,
-          ...(movesDivision
-            ? { divisionId: homeDivisionId, subDivisionId: null, sectionId: null }
-            : {}),
+          // PMU members sit outside the sub-division/section ladder.
+          subDivisionId: null,
+          sectionId: null,
+          ...(movesDivision ? { divisionId: homeDivisionId } : {}),
         },
       });
       await audit(guard.userId, 'update', before.id, {
