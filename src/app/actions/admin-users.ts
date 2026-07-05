@@ -33,6 +33,25 @@ const CONTRACT_ROLES = ['po', 'apo', 'yp'] as const;
 
 const USERNAME_RE = /^[a-z][a-z0-9._-]{1,40}$/;
 
+/**
+ * Optional relation id (uuid or "not set").
+ *
+ * A disabled <select> — e.g. Section/Sub-division while a PMU is chosen,
+ * or PMU in a division with no PMU teams — is omitted from form
+ * submission, so `formData.get()` returns null. Coerce null/undefined to
+ * '' up front so the field validates as "not set" instead of failing the
+ * union with "Invalid input" and blocking the whole save.
+ */
+const optionalRelationToUndefined = z.preprocess(
+  (v) => (v == null ? '' : v),
+  z.union([z.literal(''), z.string().uuid()]),
+).transform((v) => (v.length > 0 ? v : undefined));
+
+const optionalRelationToNull = z.preprocess(
+  (v) => (v == null ? '' : v),
+  z.union([z.literal(''), z.string().uuid()]),
+).transform((v) => (v.length > 0 ? v : null));
+
 type ActionState = {
   ok: boolean;
   error?: string;
@@ -168,22 +187,10 @@ const createUserSchema = z.object({
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
   divisionId: z.string().uuid('Pick a division'),
-  subDivisionId: z
-    .union([z.literal(''), z.string().uuid()])
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined)),
-  sectionId: z
-    .union([z.literal(''), z.string().uuid()])
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined)),
-  pmuId: z
-    .union([z.literal(''), z.string().uuid()])
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined)),
-  supervisorId: z
-    .union([z.literal(''), z.string().uuid()])
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined)),
+  subDivisionId: optionalRelationToUndefined,
+  sectionId: optionalRelationToUndefined,
+  pmuId: optionalRelationToUndefined,
+  supervisorId: optionalRelationToUndefined,
   isSuperAdmin: z
     .string()
     .optional()
@@ -318,22 +325,10 @@ const updateUserSchema = z.object({
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null)),
   divisionId: z.string().uuid('Pick a division'),
-  subDivisionId: z
-    .union([z.literal(''), z.string().uuid()])
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : null)),
-  sectionId: z
-    .union([z.literal(''), z.string().uuid()])
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : null)),
-  pmuId: z
-    .union([z.literal(''), z.string().uuid()])
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : null)),
-  supervisorId: z
-    .union([z.literal(''), z.string().uuid()])
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : null)),
+  subDivisionId: optionalRelationToNull,
+  sectionId: optionalRelationToNull,
+  pmuId: optionalRelationToNull,
+  supervisorId: optionalRelationToNull,
   phone: z
     .union([z.literal(''), z.string().trim().max(20)])
     .optional()

@@ -12,6 +12,7 @@ import {
   HIERARCHY_SLOT_LABEL,
   HIERARCHY_SLOT_LEVEL,
 } from '@/lib/labels';
+import { partitionOrgChart } from '@/lib/org-chart';
 import { cn } from '@/lib/utils';
 
 export type OfficerNode = {
@@ -60,59 +61,26 @@ export function HierarchyMapper({
   const [savedFlash, setSavedFlash] = useState(false);
 
   // ----------------------------------------------------------
-  // Partition: pool / roots / children — total by construction.
+  // Partition: pool / roots / children — total by construction
+  // (see src/lib/org-chart.ts; unit-tested for exactly-once rendering).
   // ----------------------------------------------------------
   const { byId, reports, rootOfficers, unassignedOfficers } = useMemo(() => {
     const byId = new Map(officers.map((o) => [o.id, o]));
-
-    const unassigned = officers.filter((o) => !o.supervisorId);
-    const chartOfficers = officers.filter((o) => o.supervisorId);
+    const part = partitionOrgChart(officers);
+    const get = (ids: string[]) =>
+      ids.map((id) => byId.get(id)).filter(Boolean) as OfficerNode[];
 
     const reports = new Map<string, OfficerNode[]>();
-    for (const o of chartOfficers) {
-      if (o.supervisorId && byId.has(o.supervisorId)) {
-        if (!reports.has(o.supervisorId)) reports.set(o.supervisorId, []);
-        reports.get(o.supervisorId)!.push(o);
-      }
+    for (const [parentId, childIds] of part.childrenByParent) {
+      reports.set(parentId, get(childIds));
     }
 
-    // Roots: supervisor outside the current view.
-    const roots = chartOfficers.filter(
-      (o) => !o.supervisorId || !byId.has(o.supervisorId),
-    );
-
-    // Reachability sweep — anything the roots can't reach (supervisor in
-    // the pool, or a cycle) gets promoted to a root so it still renders.
-    const reached = new Set<string>();
-    const queue = roots.map((r) => r.id);
-    while (queue.length > 0) {
-      const id = queue.pop()!;
-      if (reached.has(id)) continue;
-      reached.add(id);
-      for (const kid of reports.get(id) ?? []) queue.push(kid.id);
-    }
-    for (const o of chartOfficers) {
-      if (reached.has(o.id)) continue;
-      roots.push(o);
-      // Sweep the promoted subtree so nested members aren't re-promoted.
-      const sub = [o.id];
-      while (sub.length > 0) {
-        const id = sub.pop()!;
-        if (reached.has(id)) continue;
-        reached.add(id);
-        for (const kid of reports.get(id) ?? []) sub.push(kid.id);
-      }
-      // Their in-pool/cyclic supervisor edge must not ALSO render them as
-      // a child somewhere: drop the edge pointing at them.
-      if (o.supervisorId && reports.has(o.supervisorId)) {
-        reports.set(
-          o.supervisorId,
-          (reports.get(o.supervisorId) ?? []).filter((k) => k.id !== o.id),
-        );
-      }
-    }
-
-    return { byId, reports, rootOfficers: roots, unassignedOfficers: unassigned };
+    return {
+      byId,
+      reports,
+      rootOfficers: get(part.rootIds),
+      unassignedOfficers: get(part.unassignedIds),
+    };
   }, [officers]);
 
   // ----------------------------------------------------------
