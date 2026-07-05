@@ -691,9 +691,18 @@ export async function setUserPmuAction(
       });
       if (!pmu || pmu.kind !== 'pmu') return fail('PMU team not found.', epoch);
 
-      const homeDivisionId = pmu.pmuParentDivisionId ?? pmu.parentId;
-      const movesDivision =
-        homeDivisionId !== null && homeDivisionId !== before.divisionId;
+      // A PMU belongs to one division, and the user's home division is a
+      // stable attribute we never move. So the user must already be in the
+      // PMU's division — otherwise their division and PMU would disagree
+      // (and the edit form, which lists PMUs by division, could not show
+      // it). Change the division explicitly first if it needs to move.
+      const pmuHome = pmu.pmuParentDivisionId ?? pmu.parentId;
+      if (pmuHome !== before.divisionId) {
+        return fail(
+          "This PMU belongs to a different division. Change the user's division first, then add them.",
+          epoch,
+        );
+      }
 
       await prisma.user.update({
         where: { id: before.id },
@@ -703,17 +712,14 @@ export async function setUserPmuAction(
           // PMU members sit outside the sub-division/section ladder.
           subDivisionId: null,
           sectionId: null,
-          ...(movesDivision ? { divisionId: homeDivisionId } : {}),
         },
       });
       await audit(guard.userId, 'update', before.id, {
         pmuId: before.pmuId,
         isPmu: before.isPmu,
-        divisionId: before.divisionId,
       }, {
         pmuId: pmu.id,
         isPmu: true,
-        divisionId: homeDivisionId ?? before.divisionId,
       });
     } else {
       await prisma.user.update({
@@ -762,9 +768,19 @@ export async function changeDivisionAction(
   });
   if (!parsed.success) return fail('Invalid input.', epoch);
 
+  // Guard against a sub-division / section / PMU id ever landing here —
+  // changing the home division is only valid for a real top-level division.
+  const targetDivision = await prisma.division.findUnique({
+    where: { id: parsed.data.divisionId },
+    select: { kind: true },
+  });
+  if (!targetDivision || targetDivision.kind !== 'division') {
+    return fail('Pick a top-level division.', epoch);
+  }
+
   const before = await prisma.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { divisionId: true },
+    select: { divisionId: true, pmuId: true, isPmu: true },
   });
   if (!before) return fail('User not found.', epoch);
   if (before.divisionId === parsed.data.divisionId) return ok(epoch);
@@ -772,14 +788,25 @@ export async function changeDivisionAction(
   try {
     await prisma.user.update({
       where: { id: parsed.data.userId },
-      data: { divisionId: parsed.data.divisionId, subDivisionId: null },
+      data: {
+        divisionId: parsed.data.divisionId,
+        // A division change resets all sub-placement: sub-division and
+        // section belong to the old division, and a PMU is division-bound,
+        // so the user leaves it too. Leaving them set would orphan the
+        // placement (pmuId pointing at a PMU in the old division).
+        subDivisionId: null,
+        sectionId: null,
+        pmuId: null,
+        isPmu: false,
+        pmuRole: null,
+      },
     });
     await audit(
       guard.userId,
       'update',
       parsed.data.userId,
-      { divisionId: before.divisionId },
-      { divisionId: parsed.data.divisionId },
+      { divisionId: before.divisionId, pmuId: before.pmuId, isPmu: before.isPmu },
+      { divisionId: parsed.data.divisionId, pmuId: null, isPmu: false },
     );
     revalidateAll();
     return ok(epoch);

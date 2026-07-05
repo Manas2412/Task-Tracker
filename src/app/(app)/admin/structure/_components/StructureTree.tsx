@@ -423,7 +423,7 @@ function RowMenu({
             }}
           />
         ) : null}
-        {onManageMembers ? (
+        {onManageMembers && (node.kind === 'division' || node.kind === 'pmu') ? (
           <MenuItem
             icon="ti-users-plus"
             label="Manage members"

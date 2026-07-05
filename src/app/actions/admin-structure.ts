@@ -495,6 +495,18 @@ export async function moveTeamToUnitAction(
   const rootRow = users.find((u) => u.id === root.id);
   if (!rootRow) return fail('User not found.', epoch);
 
+  // The home division is a stable attribute and is NEVER changed by a move.
+  // Every unit (sub-division, section, PMU) belongs to a division, so a
+  // move is only allowed within the team's own division — otherwise the
+  // user's division and placement would disagree. Relocating a division is
+  // an explicit action (Edit user), not a side effect of a move.
+  if (placement.divisionId !== rootRow.divisionId) {
+    return fail(
+      'That unit is in a different division. A move keeps the division — change it from Edit user first.',
+      epoch,
+    );
+  }
+
   // Scope the "team" to the root's own unit (its division, or its PMU when
   // the root is a PMU member) before walking the reporting subtree. A
   // cross-division report is part of nobody's visible chart, so it is left
@@ -517,18 +529,19 @@ export async function moveTeamToUnitAction(
   const desiredIsPmu = (u: { pmuId: string | null; isPmu: boolean }) =>
     placement.isPmu ? true : u.pmuId != null ? false : u.isPmu;
 
+  // Placement fields written to every member — deliberately NOT including
+  // divisionId, which stays exactly as it is.
   const placementFields = {
-    divisionId: placement.divisionId,
     subDivisionId: placement.subDivisionId,
     sectionId: placement.sectionId,
     pmuId: placement.pmuId,
   };
 
   // Idempotent no-op: skip only when EVERY member already matches the
-  // target placement (so a split team is still repaired).
+  // target placement (so a split team is still repaired). divisionId is
+  // excluded since it never changes.
   const anyChange = members.some(
     (u) =>
-      u.divisionId !== placementFields.divisionId ||
       (u.subDivisionId ?? null) !== placementFields.subDivisionId ||
       (u.sectionId ?? null) !== placementFields.sectionId ||
       (u.pmuId ?? null) !== placementFields.pmuId ||

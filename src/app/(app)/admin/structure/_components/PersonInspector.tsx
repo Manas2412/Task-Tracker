@@ -57,7 +57,7 @@ type PersonInspectorProps = {
   divisions: UserFormDivisionOption[];
   supervisors: UserFormSupervisorOption[];
   selfId: string;
-  activeDivision?: { id: string; name: string };
+  activeDivision?: { id: string; name: string; kind: 'division' | 'sub_division' | 'section' | 'pmu' };
   allUsers?: TreeUser[];
 };
 
@@ -237,7 +237,7 @@ export function PersonInspector({
             onClick={toggleActive}
             disabledReason={isSelf ? 'You cannot disable your own account.' : undefined}
           />
-          {activeDivision ? (
+          {activeDivision && activeDivision.kind === 'division' ? (
             <ActionButton
               icon="ti-users-plus"
               label="Add member to this unit"
