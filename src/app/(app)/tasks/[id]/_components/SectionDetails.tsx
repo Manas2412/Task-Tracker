@@ -56,6 +56,8 @@ type SectionDetailsProps = {
   canReassign: boolean;
   canEditFields: boolean;
   canChangeDivision: boolean;
+  /** Whether the caller may make this task division-visible (head/OSD/SA). */
+  canShareToDivision: boolean;
   divisions: DivisionOption[];
   canViewProfiles: boolean;
 };
@@ -98,7 +100,14 @@ export function SectionDetails(props: SectionDetailsProps) {
           divisions={props.divisions}
         />
 
-        <VisibilityRow taskId={props.taskId} visibility={props.visibility} canEdit={props.canEditFields} />
+        {/* Only a head (or OSD/SA) may change visibility — making a task
+            division-visible is a head power, so a normal owner sees it
+            read-only rather than a toggle the server would reject. */}
+        <VisibilityRow
+          taskId={props.taskId}
+          visibility={props.visibility}
+          canEdit={props.canEditFields && props.canShareToDivision}
+        />
 
         <MilestoneRow taskId={props.taskId} milestone={props.milestone} canEdit={props.canEditFields} />
 

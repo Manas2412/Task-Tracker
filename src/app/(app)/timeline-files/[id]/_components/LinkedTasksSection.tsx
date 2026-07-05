@@ -25,6 +25,8 @@ type LinkedTasksSectionProps = {
   markedTo: { id: string; name: string }[];
   linkedTasks: LinkedTaskRow[];
   canCreateTasks: boolean;
+  isOsdOrSa: boolean;
+  divisionsHeaded: string[];
 };
 
 export function LinkedTasksSection({
@@ -34,6 +36,8 @@ export function LinkedTasksSection({
   markedTo,
   linkedTasks,
   canCreateTasks,
+  isOsdOrSa,
+  divisionsHeaded,
 }: LinkedTasksSectionProps) {
   const total = linkedTasks.length;
   const done = linkedTasks.filter((t) => t.status === 'completed').length;
@@ -90,6 +94,8 @@ export function LinkedTasksSection({
           refNo={refNo}
           defaultDueDate={defaultDueDate}
           divisions={markedTo}
+          isOsdOrSa={isOsdOrSa}
+          divisionsHeaded={divisionsHeaded}
         />
       ) : null}
     </section>

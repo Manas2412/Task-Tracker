@@ -19,6 +19,10 @@ type CreateTaskFromTfDialogProps = {
   refNo: string;
   defaultDueDate: string | null; // ISO yyyy-mm-dd
   divisions: DivisionOption[]; // marked-to divisions
+  /** OSD / Super Admin — may create division-visible tasks anywhere. */
+  isOsdOrSa: boolean;
+  /** Divisions the user heads (direct + active delegation). */
+  divisionsHeaded: string[];
 };
 
 const PRIORITIES = [
@@ -33,6 +37,8 @@ export function CreateTaskFromTfDialog({
   refNo,
   defaultDueDate,
   divisions,
+  isOsdOrSa,
+  divisionsHeaded,
 }: CreateTaskFromTfDialogProps) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -62,6 +68,10 @@ export function CreateTaskFromTfDialog({
   }, [state.ok, state.epoch]);
 
   const isCrossDivision = divisions.length > 1;
+  // Division visibility is a head power. If the user doesn't head the
+  // selected division (and isn't OSD/SA), the task is created personal —
+  // reflect that truthfully rather than claiming Division.
+  const canDivision = isOsdOrSa || divisionsHeaded.includes(divisionId);
 
   return (
     <>
@@ -84,7 +94,7 @@ export function CreateTaskFromTfDialog({
           <form ref={formRef} action={formAction} className="flex flex-col gap-3">
             <input type="hidden" name="linkedTimelineFileId" value={tfId} />
             <input type="hidden" name="priority" value={priority} />
-            <input type="hidden" name="visibility" value="division" />
+            <input type="hidden" name="visibility" value={canDivision ? 'division' : 'personal'} />
             <input type="hidden" name="divisionId" value={divisionId} />
 
             {/* Task name */}
@@ -133,8 +143,17 @@ export function CreateTaskFromTfDialog({
                       : (divisions[0]?.name ?? '—')
                   }
                 />
-                <PrefillRow label="Visibility" value="Division" />
+                <PrefillRow
+                  label="Visibility"
+                  value={canDivision ? 'Division' : 'Personal'}
+                />
               </dl>
+              {!canDivision ? (
+                <p className="mt-2 text-[10px] text-ink-2 leading-relaxed">
+                  Only the division head can make this visible to the division —
+                  it will be created as your personal task.
+                </p>
+              ) : null}
             </div>
 
             {/* Optional editable fields */}

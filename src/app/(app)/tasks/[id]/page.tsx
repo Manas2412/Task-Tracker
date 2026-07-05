@@ -474,6 +474,11 @@ export default async function TaskDetailPage({ params }: PageProps) {
         canReassign={canReassign}
         canEditFields={canEditFields}
         canChangeDivision={canChangeDivision}
+        canShareToDivision={
+          session.user.isSuperAdmin ||
+          session.user.hierarchySlot === 'osd' ||
+          isHeadOfTaskDivision
+        }
         divisions={allDivisions}
         canViewProfiles={canChangeDivision}
       />

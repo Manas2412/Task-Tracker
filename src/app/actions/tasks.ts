@@ -174,17 +174,22 @@ export async function createTaskAction(
   });
   if (!meRow) return fail('Your account could not be found.', epoch);
 
+  const actor = await getRbacActor(me.id);
+  // A user can "act as head" of the target division when they are Super
+  // Admin, OSD, the division's head, or hold an active head delegation for
+  // it. Only such users may generate division-level tasks.
+  const canActAsHead = (divisionId: string) =>
+    meRow.isSuperAdmin ||
+    meRow.hierarchySlot === 'osd' ||
+    (actor !== null && canActAsHeadOf(actor, divisionId));
+
   // Division guard: creating a task in another division is a head / OSD /
   // Super Admin power — everyone else creates in their own division. The
   // one exception is spawning from a Timeline File: any viewer of the
   // file may target a division it is marked to (PERMISSIONS.md §3).
   const targetDivisionId = parsed.data.divisionId ?? meRow.divisionId;
   if (targetDivisionId !== meRow.divisionId) {
-    const actor = await getRbacActor(me.id);
-    let allowed =
-      meRow.isSuperAdmin ||
-      meRow.hierarchySlot === 'osd' ||
-      (actor !== null && canActAsHeadOf(actor, targetDivisionId));
+    let allowed = canActAsHead(targetDivisionId);
     if (!allowed && parsed.data.linkedTimelineFileId) {
       const tfClause = await buildTfVisibilityClause({
         id: meRow.id,
@@ -208,6 +213,16 @@ export async function createTaskAction(
     }
   }
 
+  // Division-level visibility is a head power. Only the division's head
+  // (or Super Admin / OSD / an active delegate) can create a task the
+  // whole division sees; every other user's task is personal — visible
+  // to them alone until an authorized owner shares it. This is enforced
+  // here so it holds for Quick Create, the detail form, and TF spawning.
+  const effectiveVisibility =
+    parsed.data.visibility === 'division' && canActAsHead(targetDivisionId)
+      ? 'division'
+      : 'personal';
+
   try {
     const task = await prisma.$transaction(async (tx) => {
       const refNumber = await nextTaskRefNumber(targetDivisionId, tx);
@@ -220,7 +235,7 @@ export async function createTaskAction(
           divisionId: targetDivisionId,
           status: 'not_started',
           priority: parsed.data.priority,
-          visibility: parsed.data.visibility,
+          visibility: effectiveVisibility,
           dueDate: parsed.data.dueDate ? parseDueDateInput(parsed.data.dueDate) : null,
           milestone: parsed.data.milestone ?? false,
           linkedTimelineFileId: parsed.data.linkedTimelineFileId ?? null,
@@ -596,6 +611,24 @@ export async function updateTaskFieldsAction(
     }
   }
   if (parsed.data.visibility !== undefined && parsed.data.visibility !== task.visibility) {
+    // Making a task division-visible is a head power — the same rule as
+    // creation. Only the division's head (or Super Admin / OSD / an active
+    // delegate) can share a task with the whole division; anyone else may
+    // only keep it (or set it back to) personal.
+    if (parsed.data.visibility === 'division') {
+      const meRow = await prisma.user.findUnique({
+        where: { id: me.id },
+        select: { isSuperAdmin: true, hierarchySlot: true },
+      });
+      const actor = await getRbacActor(me.id);
+      const canShare =
+        meRow?.isSuperAdmin === true ||
+        meRow?.hierarchySlot === 'osd' ||
+        (actor !== null && canActAsHeadOf(actor, task.divisionId));
+      if (!canShare) {
+        return fail('Only the division head can make a task visible to the division.', epoch);
+      }
+    }
     data.visibility = parsed.data.visibility;
     events.push({
       eventType: 'visibility_changed',
@@ -694,9 +727,16 @@ export async function addSubtaskAction(
 
   const parent = await prisma.task.findUnique({
     where: { id: parsed.data.parentTaskId },
-    select: { id: true, divisionId: true, visibility: true, ownerId: true, dueDate: true },
+    select: { id: true, divisionId: true, visibility: true, ownerId: true, createdById: true, dueDate: true },
   });
   if (!parent) return fail('Parent task not found.', epoch);
+
+  // Authorisation: only someone who may edit the parent (owner, creator,
+  // head of its division, OSD, or Super Admin) can add a subtask —
+  // otherwise anyone with the parent's id could mint tasks under it.
+  if (!(await canEditTask(me.id, parent))) {
+    return fail('Only the task owner, creator, or head of division can add a subtask.', epoch);
+  }
 
   if (parsed.data.dueDate && parent.dueDate) {
     const subtaskDue = new Date(parsed.data.dueDate);
@@ -709,6 +749,23 @@ export async function addSubtaskAction(
 
   const assigneeId = parsed.data.assigneeId ?? me.id;
 
+  // A subtask is a task: division visibility is still a head power. It
+  // inherits the parent's division visibility only when the creator can
+  // act as head of the division; otherwise it is personal — the same gate
+  // createTaskAction applies, so a non-head can't mint a division-visible
+  // task via the subtask path.
+  const actor = await getRbacActor(me.id);
+  const meRow = await prisma.user.findUnique({
+    where: { id: me.id },
+    select: { isSuperAdmin: true, hierarchySlot: true },
+  });
+  const canActAsHead =
+    meRow?.isSuperAdmin === true ||
+    meRow?.hierarchySlot === 'osd' ||
+    (actor !== null && canActAsHeadOf(actor, parent.divisionId));
+  const subtaskVisibility =
+    parent.visibility === 'division' && canActAsHead ? 'division' : 'personal';
+
   try {
     const subtask = await prisma.$transaction(async (tx) => {
       const refNumber = await nextTaskRefNumber(parent.divisionId, tx);
@@ -720,7 +777,7 @@ export async function addSubtaskAction(
           divisionId: parent.divisionId,
           status: 'not_started',
           priority: 'low',
-          visibility: parent.visibility,
+          visibility: subtaskVisibility,
           dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
           parentTaskId: parent.id,
           createdById: me.id,
@@ -1900,12 +1957,14 @@ export async function transferTaskAction(
   const comment = parsed.data.comment;
   const mentions = await resolveMentions(comment);
 
+  // Visibility is left untouched on transfer. The new owner sees the task
+  // through ownership regardless, and turning a personal task
+  // division-visible is a head power — a transfer must not be a way for a
+  // normal user to surface a task to the whole division. A personal task
+  // simply becomes the new owner's personal task; a head can share it later.
   const updates: Parameters<typeof prisma.task.update>[0]['data'] = {
     ownerId: target.id,
   };
-  if (task.visibility === 'personal') {
-    updates.visibility = 'division';
-  }
 
   try {
     await prisma.$transaction([

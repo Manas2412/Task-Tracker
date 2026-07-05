@@ -12,7 +12,9 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { initialsOf } from '@/lib/format';
 import { isS3Configured } from '@/lib/s3';
+import { getHeadedDivisionIds } from '@/lib/rbac';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
+import { buildVisibilityClauses } from '@/lib/visibility';
 import { cn } from '@/lib/utils';
 
 import { DeskCommentSection } from './_components/DeskCommentSection';
@@ -56,11 +58,16 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
       hierarchySlot: true,
       isSuperAdmin: true,
       divisionId: true,
+      isPmu: true,
     },
   });
   if (!me) notFound();
 
   const visibility = await buildTfVisibilityClause(me);
+  // The linked-tasks panel must only list tasks the viewer can actually
+  // open — a personal task (e.g. one spawned by a non-head) belongs to its
+  // owner alone, so it must not appear as a dead row that 404s on click.
+  const taskVisibility = await buildVisibilityClauses(me);
 
   const tf = await prisma.timelineFile.findFirst({
     where: {
@@ -76,6 +83,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         },
       },
       taskLinks: {
+        where: { task: { AND: [{ OR: taskVisibility }, { archivedAt: null }] } },
         include: {
           task: {
             include: { owner: { include: { division: true } } },
@@ -109,6 +117,10 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
     (me.hierarchySlot === 'director' &&
       tf.markedTo.some((m) => m.division.id === me.divisionId));
   const canCreateTasks = true; // anyone with view access can create from a TF
+  // Whether a TF-spawned task can be division-visible: division visibility
+  // is a head power, so only OSD/SA or the head of the chosen division get it.
+  const isOsdOrSa = me.isSuperAdmin || me.hierarchySlot === 'osd';
+  const divisionsHeaded = await getHeadedDivisionIds(me.id);
 
   // Attachments — same gate as TF field editing for non-OSD directors of marked-to.
   const canEditAtt = await canEditTfAttachments(me.id, tf.id);
@@ -259,6 +271,8 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         markedTo={markedToOptions}
         linkedTasks={linkedTasks}
         canCreateTasks={canCreateTasks}
+        isOsdOrSa={isOsdOrSa}
+        divisionsHeaded={divisionsHeaded}
       />
 
       <section className="px-4 md:px-6 py-5 border-b border-line-2">
