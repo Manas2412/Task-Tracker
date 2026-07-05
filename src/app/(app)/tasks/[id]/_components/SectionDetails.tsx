@@ -620,7 +620,21 @@ function VisibilityRow({
   canEdit: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [chosen, setChosen] = useState(visibility);
+  const [state, formAction] = useFormState<UpdateFieldsState, FormData>(
+    updateTaskFieldsAction,
+    INITIAL_FIELDS_STATE,
+  );
   const current = VISIBILITY_OPTIONS.find((v) => v.value === visibility)!;
+
+  useEffect(() => {
+    if (state.ok) setOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.ok, state.epoch]);
+
+  useEffect(() => {
+    if (open) setChosen(visibility);
+  }, [open, visibility]);
 
   if (!canEdit) {
     return (
@@ -632,20 +646,6 @@ function VisibilityRow({
       </Row>
     );
   }
-  const [chosen, setChosen] = useState(visibility);
-  const [state, formAction] = useFormState<UpdateFieldsState, FormData>(
-    updateTaskFieldsAction,
-    INITIAL_FIELDS_STATE,
-  );
-
-  useEffect(() => {
-    if (state.ok) setOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.ok, state.epoch]);
-
-  useEffect(() => {
-    if (open) setChosen(visibility);
-  }, [open, visibility]);
 
   return (
     <>

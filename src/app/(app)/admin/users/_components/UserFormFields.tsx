@@ -21,6 +21,7 @@ export type UserFormDivisionOption = {
   id: string;
   name: string;
   parentId: string | null;
+  pmuParentDivisionId: string | null;
   kind: 'division' | 'sub_division' | 'section' | 'pmu';
 };
 
@@ -38,6 +39,8 @@ export type UserFormDefaults = {
   contractRole?: string;
   divisionId?: string;
   subDivisionId?: string | null;
+  sectionId?: string | null;
+  pmuId?: string | null;
   supervisorId?: string | null;
   isSuperAdmin?: boolean;
 };
@@ -82,7 +85,21 @@ export function UserFormFields({
     divisions.filter((d) => d.parentId === parentId && d.kind === 'sub_division');
 
   const [divisionId, setDivisionId] = useState(defaults?.divisionId ?? topDivisions[0]?.id ?? '');
+  const [subDivisionId, setSubDivisionId] = useState(defaults?.subDivisionId ?? '');
+  const [sectionId, setSectionId] = useState(defaults?.sectionId ?? '');
+  const [pmuId, setPmuId] = useState(defaults?.pmuId ?? '');
+
   const subDivisions = divisionId ? subDivisionsByParent(divisionId) : [];
+  const sections = subDivisionId
+    ? divisions.filter((d) => d.parentId === subDivisionId && d.kind === 'section')
+    : [];
+  const pmus = divisionId
+    ? divisions.filter(
+        (d) =>
+          d.kind === 'pmu' &&
+          (d.pmuParentDivisionId === divisionId || d.parentId === divisionId),
+      )
+    : [];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -210,7 +227,12 @@ export function UserFormFields({
             <select
               name="divisionId"
               value={divisionId}
-              onChange={(e) => setDivisionId(e.target.value)}
+              onChange={(e) => {
+                setDivisionId(e.target.value);
+                setSubDivisionId('');
+                setSectionId('');
+                setPmuId('');
+              }}
               required
               className={selectCn(!!fieldErrors?.divisionId)}
             >
@@ -230,7 +252,11 @@ export function UserFormFields({
           >
             <select
               name="subDivisionId"
-              defaultValue={defaults?.subDivisionId ?? ''}
+              value={subDivisionId}
+              onChange={(e) => {
+                setSubDivisionId(e.target.value);
+                setSectionId('');
+              }}
               className={selectCn(false)}
               disabled={subDivisions.length === 0}
             >
@@ -238,6 +264,52 @@ export function UserFormFields({
               {subDivisions.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="Section"
+            error={fieldErrors?.sectionId}
+            hint={
+              sections.length === 0 ? 'None available for this sub-division' : undefined
+            }
+          >
+            <select
+              name="sectionId"
+              value={sectionId}
+              onChange={(e) => setSectionId(e.target.value)}
+              className={selectCn(!!fieldErrors?.sectionId)}
+              disabled={sections.length === 0}
+            >
+              <option value="">— None —</option>
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="PMU"
+            error={fieldErrors?.pmuId}
+            hint={
+              pmus.length === 0
+                ? 'No PMU teams for this division'
+                : 'Marks the user as a PMU member'
+            }
+          >
+            <select
+              name="pmuId"
+              value={pmuId}
+              onChange={(e) => setPmuId(e.target.value)}
+              className={selectCn(!!fieldErrors?.pmuId)}
+              disabled={pmus.length === 0}
+            >
+              <option value="">— None —</option>
+              {pmus.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
                 </option>
               ))}
             </select>

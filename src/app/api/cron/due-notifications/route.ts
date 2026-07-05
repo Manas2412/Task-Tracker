@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import type { Prisma } from '@prisma/client';
+
 import { prisma } from '@/lib/db';
 
 /**
@@ -56,7 +58,7 @@ export async function GET(request: Request) {
     recentNotifs.map((n) => `${n.type}:${(n.payload as Record<string, string>).taskId}:${n.userId}`),
   );
 
-  const notifs: { userId: string; type: string; payload: Record<string, unknown> }[] = [];
+  const notifs: Prisma.NotificationCreateManyInput[] = [];
 
   for (const t of dueSoon) {
     const key = `task_due_soon:${t.id}:${t.ownerId}`;

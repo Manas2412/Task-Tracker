@@ -192,6 +192,36 @@ export function describeNotification(
         href: '/profile/change-password',
         accent: 'primary',
       };
+    case 'division_access_delegated': {
+      const division = String(p.divisionName ?? 'a division');
+      const from = String(p.delegatedByName ?? 'A division head');
+      const to = String(p.delegatedToName ?? 'a user');
+      const window = typeof p.windowLabel === 'string' ? ` (${p.windowLabel})` : '';
+      const isDelegate = p.audience === 'delegate';
+      return {
+        icon: 'ti-key',
+        iconClass: 'text-primary',
+        text: isDelegate
+          ? `${from} delegated ${division} access to you${window}`
+          : `${from} delegated ${division} access to ${to}${window}`,
+        href: isDelegate ? '/tasks' : '/admin/structure',
+        accent: 'primary',
+      };
+    }
+    case 'division_access_delegation_revoked': {
+      const division = String(p.divisionName ?? 'a division');
+      const to = String(p.delegatedToName ?? 'a user');
+      const by = String(p.revokedByName ?? 'The division head');
+      const isDelegate = p.audience === 'delegate';
+      return {
+        icon: 'ti-key-off',
+        iconClass: 'text-hold',
+        text: isDelegate
+          ? `${by} revoked your ${division} access`
+          : `${by} revoked ${to}'s ${division} access`,
+        href: isDelegate ? '/tasks' : '/admin/structure',
+      };
+    }
     default:
       return {
         icon: 'ti-bell',

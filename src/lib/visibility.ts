@@ -1,6 +1,11 @@
 import type { Prisma, Task } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
+import { getHeadedDivisionIds } from '@/lib/rbac';
+import {
+  buildVisibilityClausesFrom,
+  type CallerSummary,
+} from '@/lib/visibility-rules';
 
 /**
  * Server-side visibility scoper for tasks.
@@ -9,6 +14,11 @@ import { prisma } from '@/lib/db';
  * non-personal tasks in their own division, regardless of hierarchy slot —
  * a newly created division user sees the division's tasks from first
  * login. JS and OSD keep their wider surfaces; PMU isolation is unchanged.
+ *
+ * Division heads additionally see every division they head — direct
+ * headship (divisions.head_user_id) plus active access delegations. That
+ * is how Mohd Zuber (home: Autonomous Bodies) also sees NSDF, and how a
+ * delegate sees the delegated division for the window's duration.
  *
  * Personal-visibility tasks are NEVER returned to anyone but their owner,
  * including Super Admin and OSD.
@@ -22,66 +32,16 @@ export type TaskFilter = 'all' | 'today' | 'overdue' | 'mine' | 'urgent' | 'comp
  */
 export type TaskSort = 'default' | 'latest';
 
-export type CallerSummary = {
-  id: string;
-  hierarchySlot: string;
-  isSuperAdmin: boolean;
-  divisionId: string;
-  isPmu: boolean;
-};
+export { buildVisibilityClausesFrom };
+export type { CallerSummary };
 
 /**
  * Build the OR-of-visibility-clauses for a caller.
  * Returns clauses that are then composed with the filter clause in the page.
  */
 export async function buildVisibilityClauses(me: CallerSummary): Promise<Prisma.TaskWhereInput[]> {
-  const clauses: Prisma.TaskWhereInput[] = [
-    // Always: tasks I own.
-    { ownerId: me.id },
-    // Always: tasks I'm explicitly added to.
-    { collaborators: { some: { userId: me.id } } },
-  ];
-
-  if (me.isSuperAdmin || me.hierarchySlot === 'osd') {
-    // Super Admin + OSD see all non-personal tasks across the ministry.
-    clauses.push({ visibility: 'division' });
-    return clauses;
-  }
-
-  if (me.hierarchySlot === 'js') {
-    // JS sees own + the JS Priority Board surface.
-    // The board itself ships in Phase 2; the query is correct now.
-    clauses.push({
-      visibility: 'division',
-      jsPriorityLane: { not: null },
-    });
-    return clauses;
-  }
-
-  if (me.hierarchySlot === 'director') {
-    // Director sees every non-personal task in their division.
-    clauses.push({
-      visibility: 'division',
-      divisionId: me.divisionId,
-    });
-    return clauses;
-  }
-
-  if (me.isPmu) {
-    // PMU isolation (PERMISSIONS.md §5.2): own + collaborated only —
-    // never the division's internal ministry tasks.
-    // TODO: Phase 3 — add PMU-tagged tasks in the same division.
-    return clauses;
-  }
-
-  // Dy Sec / Under Sec / Section Officer / ASO — all non-personal tasks in
-  // their own division, same as the Director rule. Without this a fresh
-  // division user saw an empty board on first login.
-  clauses.push({
-    visibility: 'division',
-    divisionId: me.divisionId,
-  });
-  return clauses;
+  const headedDivisionIds = await getHeadedDivisionIds(me.id);
+  return buildVisibilityClausesFrom(me, headedDivisionIds);
 }
 
 /**

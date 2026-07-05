@@ -95,6 +95,49 @@ async function audit(
   });
 }
 
+/**
+ * Placement guards shared by create + update: a section must be a
+ * `section` row under the chosen sub-division, and a PMU must be a `pmu`
+ * row attached to the chosen division.
+ */
+async function validatePlacement(opts: {
+  divisionId: string;
+  subDivisionId: string | null;
+  sectionId: string | null;
+  pmuId: string | null;
+}): Promise<Record<string, string> | null> {
+  const errors: Record<string, string> = {};
+
+  if (opts.sectionId) {
+    const section = await prisma.division.findUnique({
+      where: { id: opts.sectionId },
+      select: { kind: true, parentId: true },
+    });
+    if (!section || section.kind !== 'section') {
+      errors.sectionId = 'Section does not exist';
+    } else if (!opts.subDivisionId || section.parentId !== opts.subDivisionId) {
+      errors.sectionId = 'Section must belong to the chosen sub-division';
+    }
+  }
+
+  if (opts.pmuId) {
+    const pmu = await prisma.division.findUnique({
+      where: { id: opts.pmuId },
+      select: { kind: true, parentId: true, pmuParentDivisionId: true },
+    });
+    if (!pmu || pmu.kind !== 'pmu') {
+      errors.pmuId = 'PMU team does not exist';
+    } else if (
+      pmu.pmuParentDivisionId !== opts.divisionId &&
+      pmu.parentId !== opts.divisionId
+    ) {
+      errors.pmuId = 'PMU must belong to the chosen division';
+    }
+  }
+
+  return Object.keys(errors).length > 0 ? errors : null;
+}
+
 // ============================================================
 // createUserAction
 // ============================================================
@@ -124,6 +167,14 @@ const createUserSchema = z.object({
     .transform((v) => (v && v.length > 0 ? v : undefined)),
   divisionId: z.string().uuid('Pick a division'),
   subDivisionId: z
+    .union([z.literal(''), z.string().uuid()])
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
+  sectionId: z
+    .union([z.literal(''), z.string().uuid()])
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
+  pmuId: z
     .union([z.literal(''), z.string().uuid()])
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
@@ -170,6 +221,8 @@ export async function createUserAction(
     contractRole: formData.get('contractRole'),
     divisionId: formData.get('divisionId'),
     subDivisionId: formData.get('subDivisionId'),
+    sectionId: formData.get('sectionId'),
+    pmuId: formData.get('pmuId'),
     supervisorId: formData.get('supervisorId'),
     isSuperAdmin: formData.get('isSuperAdmin'),
     phone: formData.get('phone'),
@@ -200,6 +253,14 @@ export async function createUserAction(
     return { ok: false, fieldErrors: { divisionId: 'Division does not exist' }, epoch };
   }
 
+  const placementErrors = await validatePlacement({
+    divisionId: parsed.data.divisionId,
+    subDivisionId: parsed.data.subDivisionId ?? null,
+    sectionId: parsed.data.sectionId ?? null,
+    pmuId: parsed.data.pmuId ?? null,
+  });
+  if (placementErrors) return { ok: false, fieldErrors: placementErrors, epoch };
+
   try {
     const passwordHash = await hashPassword(parsed.data.password);
     const created = await prisma.user.create({
@@ -212,6 +273,9 @@ export async function createUserAction(
         contractRole: parsed.data.contractRole ?? null,
         divisionId: parsed.data.divisionId,
         subDivisionId: parsed.data.subDivisionId ?? null,
+        sectionId: parsed.data.sectionId ?? null,
+        pmuId: parsed.data.pmuId ?? null,
+        isPmu: Boolean(parsed.data.pmuId),
         supervisorId: parsed.data.supervisorId ?? null,
         isActive: true,
         isSuperAdmin: parsed.data.isSuperAdmin ?? false,
@@ -256,6 +320,14 @@ const updateUserSchema = z.object({
     .union([z.literal(''), z.string().uuid()])
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null)),
+  sectionId: z
+    .union([z.literal(''), z.string().uuid()])
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+  pmuId: z
+    .union([z.literal(''), z.string().uuid()])
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null)),
   supervisorId: z
     .union([z.literal(''), z.string().uuid()])
     .optional()
@@ -286,6 +358,8 @@ export async function updateUserAction(
     contractRole: formData.get('contractRole'),
     divisionId: formData.get('divisionId'),
     subDivisionId: formData.get('subDivisionId'),
+    sectionId: formData.get('sectionId'),
+    pmuId: formData.get('pmuId'),
     supervisorId: formData.get('supervisorId'),
     phone: formData.get('phone'),
     workActivities: formData.get('workActivities'),
@@ -306,6 +380,9 @@ export async function updateUserAction(
       contractRole: true,
       divisionId: true,
       subDivisionId: true,
+      sectionId: true,
+      pmuId: true,
+      isPmu: true,
       supervisorId: true,
     },
   });
@@ -319,6 +396,14 @@ export async function updateUserAction(
     };
   }
 
+  const placementErrors = await validatePlacement({
+    divisionId: parsed.data.divisionId,
+    subDivisionId: parsed.data.subDivisionId,
+    sectionId: parsed.data.sectionId,
+    pmuId: parsed.data.pmuId,
+  });
+  if (placementErrors) return { ok: false, fieldErrors: placementErrors, epoch };
+
   try {
     const updated = await prisma.user.update({
       where: { id: parsed.data.userId },
@@ -329,6 +414,12 @@ export async function updateUserAction(
         contractRole: parsed.data.contractRole,
         divisionId: parsed.data.divisionId,
         subDivisionId: parsed.data.subDivisionId,
+        sectionId: parsed.data.sectionId,
+        pmuId: parsed.data.pmuId,
+        // Selecting a PMU marks the user as a PMU member. Clearing the
+        // dropdown does NOT clear isPmu — legacy PMU users predate pmu_id
+        // and must not silently lose their PMU status on unrelated edits.
+        ...(parsed.data.pmuId ? { isPmu: true } : {}),
         supervisorId: parsed.data.supervisorId,
         phone: parsed.data.phone,
         workActivities: parsed.data.workActivities,
@@ -342,6 +433,8 @@ export async function updateUserAction(
       contractRole: updated.contractRole,
       divisionId: updated.divisionId,
       subDivisionId: updated.subDivisionId,
+      sectionId: updated.sectionId,
+      pmuId: updated.pmuId,
       supervisorId: updated.supervisorId,
     });
 

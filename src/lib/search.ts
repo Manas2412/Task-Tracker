@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import type { Prisma, TaskPriority, TaskStatus } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
@@ -17,6 +17,17 @@ import { buildVisibilityClauses } from '@/lib/visibility';
 const MIN_QUERY_LENGTH = 2;
 const PREVIEW_PER_GROUP = 5;
 const FULL_PER_GROUP = 50;
+
+// URL-sourced filter values are validated against these before being
+// passed to Prisma as enum filters.
+const SEARCHABLE_STATUSES = [
+  'not_started',
+  'in_progress',
+  'awaiting_input',
+  'on_hold',
+  'completed',
+] as const;
+const SEARCHABLE_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
 
 // ============================================================
 // Types
@@ -141,8 +152,12 @@ export async function searchTasksFor(
   const andClauses: Prisma.TaskWhereInput[] = [{ OR: visibility }, filter];
 
   if (filters) {
-    if (filters.status) andClauses.push({ status: filters.status });
-    if (filters.priority) andClauses.push({ priority: filters.priority });
+    if (filters.status && (SEARCHABLE_STATUSES as readonly string[]).includes(filters.status)) {
+      andClauses.push({ status: filters.status as TaskStatus });
+    }
+    if (filters.priority && (SEARCHABLE_PRIORITIES as readonly string[]).includes(filters.priority)) {
+      andClauses.push({ priority: filters.priority as TaskPriority });
+    }
     if (filters.divisionId) andClauses.push({ divisionId: filters.divisionId });
     if (filters.jsPriority) andClauses.push({ jsPriorityLane: { not: null } });
     if (filters.milestone) andClauses.push({ milestone: true });

@@ -131,6 +131,8 @@ enum NotificationType {
   password_reset_by_admin
   task_transferred
   task_pulled
+  division_access_delegated
+  division_access_delegation_revoked
 }
 
 enum AuditAction {
@@ -175,6 +177,7 @@ model User {
 
   isPmu                 Boolean        @default(false) @map("is_pmu")
   pmuRole               PmuRole?       @map("pmu_role")
+  pmuId                 String?        @map("pmu_id") @db.Uuid
 
   supervisorId          String?        @map("supervisor_id") @db.Uuid
 
@@ -191,6 +194,7 @@ model User {
   division              Division       @relation("UserDivision", fields: [divisionId], references: [id])
   subDivision           Division?      @relation("UserSubDivision", fields: [subDivisionId], references: [id])
   section               Division?      @relation("UserSection", fields: [sectionId], references: [id])
+  pmu                   Division?      @relation("UserPmu", fields: [pmuId], references: [id])
 
   supervisor            User?          @relation("UserSupervisor", fields: [supervisorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   subordinates          User[]         @relation("UserSupervisor")
@@ -223,6 +227,11 @@ model User {
   auditLog              AuditLog[]
 
   createdDivisions      Division[]     @relation("DivisionCreatedBy")
+  headedDivisions       Division[]     @relation("DivisionHead")
+
+  delegationsGiven      DivisionAccessDelegation[] @relation("DelegationBy")
+  delegationsReceived   DivisionAccessDelegation[] @relation("DelegationTo")
+  delegationsRevoked    DivisionAccessDelegation[] @relation("DelegationRevokedBy")
 
   @@index([supervisorId])
   @@index([divisionId])
@@ -247,6 +256,10 @@ model Division {
   avatarColour             String        @map("avatar_colour")
   displayOrder             Int           @default(0) @map("display_order")
 
+  // Division-based RBAC: the user who acts as this division's head.
+  // Head powers extend to users holding an active DivisionAccessDelegation.
+  headUserId               String?       @map("head_user_id") @db.Uuid
+
   createdById              String?       @map("created_by") @db.Uuid
   createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -257,16 +270,51 @@ model Division {
   pmuChildren              Division[]    @relation("DivisionPmuParent")
 
   createdBy                User?         @relation("DivisionCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  head                     User?         @relation("DivisionHead", fields: [headUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   usersInDivision          User[]        @relation("UserDivision")
   usersInSubDivision       User[]        @relation("UserSubDivision")
   usersInSection           User[]        @relation("UserSection")
+  usersInPmu               User[]        @relation("UserPmu")
   tasks                    Task[]
   markedTimelineFiles      TimelineFileMarkedTo[]
+  accessDelegations        DivisionAccessDelegation[]
 
   @@index([parentId])
   @@index([kind])
+  @@index([headUserId])
   @@map("divisions")
+}
+
+// ============================================================
+// Division access delegations (temporary head access)
+// ============================================================
+
+/// A Division Head temporarily hands their division access to another
+/// Division Head or to a user in their own division. The window is
+/// calendar-based and inclusive: access is live while
+/// startsAt <= now <= endsAt and revokedAt is null. Expiry is enforced
+/// at query time — no scheduled job is needed.
+model DivisionAccessDelegation {
+  id            String    @id @default(uuid()) @db.Uuid
+  divisionId    String    @map("division_id") @db.Uuid
+  delegatedById String    @map("delegated_by") @db.Uuid
+  delegatedToId String    @map("delegated_to") @db.Uuid
+  startsAt      DateTime  @map("starts_at") @db.Timestamptz(6)
+  endsAt        DateTime  @map("ends_at") @db.Timestamptz(6)
+  revokedAt     DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedById   String?   @map("revoked_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  division    Division @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  delegatedBy User     @relation("DelegationBy", fields: [delegatedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  delegatedTo User     @relation("DelegationTo", fields: [delegatedToId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  revokedBy   User?    @relation("DelegationRevokedBy", fields: [revokedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([delegatedToId, endsAt])
+  @@index([divisionId, endsAt])
+  @@index([delegatedById])
+  @@map("division_access_delegations")
 }
 
 // ============================================================

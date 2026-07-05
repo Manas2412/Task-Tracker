@@ -28,6 +28,8 @@ export type UserRow = {
   divisionColour: string;
   subDivisionName: string | null;
   subDivisionId: string | null;
+  sectionId: string | null;
+  pmuId: string | null;
   divisionId: string;
   supervisorId: string | null;
   isActive: boolean;
@@ -257,6 +259,8 @@ function rowToDefaults(u: UserRow): UserFormDefaults {
     contractRole: u.contractRole ?? '',
     divisionId: u.divisionId,
     subDivisionId: u.subDivisionId,
+    sectionId: u.sectionId,
+    pmuId: u.pmuId,
     supervisorId: u.supervisorId,
     isSuperAdmin: u.isSuperAdmin,
   };

@@ -63,7 +63,7 @@ function revalidateAll() {
 
 async function audit(
   actorId: string,
-  action: 'create' | 'update' | 'delete' | 'hierarchy_change',
+  action: 'create' | 'update' | 'delete' | 'hierarchy_change' | 'role_change',
   entityType: 'division' | 'user',
   entityId: string,
   before: Record<string, unknown>,
@@ -415,5 +415,79 @@ export async function setUserSupervisorAction(
   }
 
   revalidateAll();
+  return ok(epoch);
+}
+
+// ============================================================
+// setDivisionHeadAction — assign or clear a division's head (RBAC)
+// ============================================================
+
+const setDivisionHeadSchema = z.object({
+  divisionId: z.string().uuid(),
+  headUserId: z
+    .union([z.literal(''), z.string().uuid()])
+    .transform((v) => (v && v.length > 0 ? v : null)),
+});
+
+/**
+ * The head mapping drives division-based RBAC (assignment, transfer
+ * targets, delegation rights), so it is Super Admin-only and always
+ * audited. Clearing the head leaves the division without one — its users
+ * fall back to transfers via Super Admin.
+ */
+export async function setDivisionHeadAction(
+  prev: AdminStructureState | undefined,
+  formData: FormData,
+): Promise<AdminStructureState> {
+  const epoch = bump(prev);
+  const guard = await requireSuperAdmin();
+  if (!guard.ok) return fail(guard.error, epoch);
+
+  const parsed = setDivisionHeadSchema.safeParse({
+    divisionId: formData.get('divisionId'),
+    headUserId: formData.get('headUserId') ?? '',
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const division = await prisma.division.findUnique({
+    where: { id: parsed.data.divisionId },
+    select: { id: true, name: true, kind: true, headUserId: true },
+  });
+  if (!division) return fail('Division not found.', epoch);
+  if (division.kind !== 'division') {
+    return fail('Only top-level divisions have a head.', epoch);
+  }
+  if (division.headUserId === parsed.data.headUserId) return ok(epoch);
+
+  let headName: string | null = null;
+  if (parsed.data.headUserId) {
+    const head = await prisma.user.findUnique({
+      where: { id: parsed.data.headUserId },
+      select: { id: true, name: true, isActive: true },
+    });
+    if (!head || !head.isActive) return fail('User not found or disabled.', epoch);
+    headName = head.name;
+  }
+
+  try {
+    await prisma.division.update({
+      where: { id: division.id },
+      data: { headUserId: parsed.data.headUserId },
+    });
+    await audit(
+      guard.userId,
+      'role_change',
+      'division',
+      division.id,
+      { headUserId: division.headUserId },
+      { headUserId: parsed.data.headUserId, headName },
+    );
+  } catch (err) {
+    console.error('setDivisionHeadAction failed:', err);
+    return fail('Could not change the division head.', epoch);
+  }
+
+  revalidateAll();
+  revalidatePath('/profile');
   return ok(epoch);
 }

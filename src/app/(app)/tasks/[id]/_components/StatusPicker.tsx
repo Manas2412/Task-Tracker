@@ -31,10 +31,6 @@ type StatusPickerProps = {
 
 export function StatusPicker({ taskId, current, canEdit }: StatusPickerProps) {
   const [open, setOpen] = useState(false);
-
-  if (!canEdit) {
-    return <Pill variant="status" tone={current} label={LABEL[current]} />;
-  }
   const [chosen, setChosen] = useState<PillStatusTone>(current);
   const [state, formAction] = useFormState<UpdateStatusState, FormData>(
     updateTaskStatusAction,
@@ -51,6 +47,10 @@ export function StatusPicker({ taskId, current, canEdit }: StatusPickerProps) {
   useEffect(() => {
     if (open) setChosen(current);
   }, [open, current]);
+
+  if (!canEdit) {
+    return <Pill variant="status" tone={current} label={LABEL[current]} />;
+  }
 
   return (
     <>
