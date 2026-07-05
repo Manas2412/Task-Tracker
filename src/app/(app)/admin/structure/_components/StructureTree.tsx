@@ -104,6 +104,11 @@ export function StructureTree({ nodes, activeId, allUsers, divisions, supervisor
           </button>
         </header>
 
+        <p className="drop-hint px-3 py-1.5 text-[10px] text-primary bg-primary-soft/60 border-b border-primary-line/30">
+          <i className="ti ti-target-arrow text-[11px] mr-1" aria-hidden="true" />
+          Drop an officer card here to move their whole team into a unit.
+        </p>
+
         <div className="p-1.5">
           {topDivisions.length === 0 ? (
             <p className="text-[11px] text-ink-3 italic px-3 py-2">No divisions yet.</p>
@@ -275,7 +280,11 @@ function TreeNode({
   })}`;
 
   return (
-    <div className="group relative flex items-center">
+    <div
+      className="group relative flex items-center drop-node rounded-md"
+      data-drop-node-id={node.id}
+      data-drop-node-kind={node.kind}
+    >
       {hasChildren && onToggle ? (
         <button
           type="button"

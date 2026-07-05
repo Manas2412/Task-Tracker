@@ -116,3 +116,19 @@ body.sortable-dragging .sortable-empty-target {
 body.sortable-dragging .sortable-target {
   border-style: dashed;
 }
+
+/* Structure tree drop targets — visible only while a card is being dragged
+   out of the hierarchy chart, so the rows read as ordinary nav otherwise. */
+.drop-hint { display: none; }
+body.sortable-dragging .drop-hint { display: block; }
+body.sortable-dragging .drop-node {
+  outline: 1px dashed var(--primary-line);
+  outline-offset: -1px;
+}
+body.sortable-dragging .drop-node:hover {
+  background-color: var(--primary-soft);
+  outline-color: var(--primary);
+}
+
+/* The drag fallback clone must never intercept the drop hit-test. */
+.sortable-fallback { pointer-events: none !important; }
