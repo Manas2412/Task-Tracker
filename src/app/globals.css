@@ -102,3 +102,17 @@ body.sortable-dragging .sortable-target {
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/* Empty drop zones under leaf officers: invisible at rest, expand into
+   visible targets while a drag is in progress. */
+.sortable-empty-target {
+  transition: min-height 0.15s ease, padding 0.15s ease;
+}
+body.sortable-dragging .sortable-empty-target {
+  min-height: 44px;
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+body.sortable-dragging .sortable-target {
+  border-style: dashed;
+}

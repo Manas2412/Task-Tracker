@@ -30,59 +30,98 @@ type HierarchyMapperProps = {
   divisionName: string;
   parentBreadcrumb: string | null;
   officers: OfficerNode[];
-  /** Officers with no supervisor (or supervisor outside this division) */
-  rootOfficerIds: string[];
-  /** Officers in this division who are not in the supervisor chain */
-  unassignedIds: string[];
 };
 
 /**
  * Org chart with Sortable.js drag-and-drop reassignment.
  *
- * Layout: each supervisor's direct reports render as a sortable list
- * underneath the supervisor card. All lists share the group name 'officers'
- * so cards can be dragged between any two — including the Unassigned pool
- * (which sets supervisorId = null).
+ * Every officer passed in is guaranteed to render exactly once:
+ *   - no supervisor           → Unassigned pool
+ *   - supervisor outside view → chart root
+ *   - supervisor in view      → nested under them
+ *   - otherwise unreachable (supervisor sits in the pool, or a data
+ *     cycle) → promoted to a chart root instead of silently vanishing.
  *
- * Phase-1 cycle protection happens server-side in setUserSupervisorAction.
+ * Drops: every card exposes a drop zone (visible while dragging), so a
+ * leaf officer can receive reports too. Dropping on the Unassigned pool
+ * clears the supervisor. Keyboard users change supervisors from the
+ * person inspector instead of dragging.
  */
 export function HierarchyMapper({
   divisionName,
   parentBreadcrumb,
   officers,
-  rootOfficerIds,
-  unassignedIds,
 }: HierarchyMapperProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedId = searchParams.get('selected');
   const [pending, startTransition] = useTransition();
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [savedFlash, setSavedFlash] = useState(false);
 
-  // index officers + reports map
-  const byId = useMemo(() => new Map(officers.map((o) => [o.id, o])), [officers]);
-  const reports = useMemo(() => {
-    const m = new Map<string, OfficerNode[]>();
-    for (const o of officers) {
+  // ----------------------------------------------------------
+  // Partition: pool / roots / children — total by construction.
+  // ----------------------------------------------------------
+  const { byId, reports, rootOfficers, unassignedOfficers } = useMemo(() => {
+    const byId = new Map(officers.map((o) => [o.id, o]));
+
+    const unassigned = officers.filter((o) => !o.supervisorId);
+    const chartOfficers = officers.filter((o) => o.supervisorId);
+
+    const reports = new Map<string, OfficerNode[]>();
+    for (const o of chartOfficers) {
       if (o.supervisorId && byId.has(o.supervisorId)) {
-        if (!m.has(o.supervisorId)) m.set(o.supervisorId, []);
-        m.get(o.supervisorId)!.push(o);
+        if (!reports.has(o.supervisorId)) reports.set(o.supervisorId, []);
+        reports.get(o.supervisorId)!.push(o);
       }
     }
-    return m;
-  }, [officers, byId]);
 
-  const rootOfficers = rootOfficerIds.map((id) => byId.get(id)).filter(Boolean) as OfficerNode[];
-  const unassignedOfficers = unassignedIds
-    .map((id) => byId.get(id))
-    .filter(Boolean) as OfficerNode[];
+    // Roots: supervisor outside the current view.
+    const roots = chartOfficers.filter(
+      (o) => !o.supervisorId || !byId.has(o.supervisorId),
+    );
 
-  // Sortable instances are managed via a registry of refs by parent-id.
+    // Reachability sweep — anything the roots can't reach (supervisor in
+    // the pool, or a cycle) gets promoted to a root so it still renders.
+    const reached = new Set<string>();
+    const queue = roots.map((r) => r.id);
+    while (queue.length > 0) {
+      const id = queue.pop()!;
+      if (reached.has(id)) continue;
+      reached.add(id);
+      for (const kid of reports.get(id) ?? []) queue.push(kid.id);
+    }
+    for (const o of chartOfficers) {
+      if (reached.has(o.id)) continue;
+      roots.push(o);
+      // Sweep the promoted subtree so nested members aren't re-promoted.
+      const sub = [o.id];
+      while (sub.length > 0) {
+        const id = sub.pop()!;
+        if (reached.has(id)) continue;
+        reached.add(id);
+        for (const kid of reports.get(id) ?? []) sub.push(kid.id);
+      }
+      // Their in-pool/cyclic supervisor edge must not ALSO render them as
+      // a child somewhere: drop the edge pointing at them.
+      if (o.supervisorId && reports.has(o.supervisorId)) {
+        reports.set(
+          o.supervisorId,
+          (reports.get(o.supervisorId) ?? []).filter((k) => k.id !== o.id),
+        );
+      }
+    }
+
+    return { byId, reports, rootOfficers: roots, unassignedOfficers: unassigned };
+  }, [officers]);
+
+  // ----------------------------------------------------------
+  // Sortable wiring
+  // ----------------------------------------------------------
   const listRefs = useRef<Map<string, HTMLUListElement | null>>(new Map());
   const sortablesRef = useRef<Sortable[]>([]);
 
   useEffect(() => {
-    // Destroy any prior instances before re-creating.
     sortablesRef.current.forEach((s) => s.destroy());
     sortablesRef.current = [];
 
@@ -96,6 +135,14 @@ export function HierarchyMapper({
         forceFallback: true,
         fallbackOnBody: true,
         emptyInsertThreshold: 28,
+        // Keep touch scrolling usable — a drag starts after a short hold.
+        delay: 150,
+        delayOnTouchOnly: true,
+        touchStartThreshold: 4,
+        // Auto-scroll while dragging near the edges of large charts.
+        scroll: true,
+        scrollSensitivity: 80,
+        scrollSpeed: 14,
         onStart: () => {
           document.body.classList.add('sortable-dragging');
         },
@@ -108,8 +155,18 @@ export function HierarchyMapper({
           const newParentRaw = toContainer.dataset.parentId ?? '';
           const oldParentRaw = fromContainer.dataset.parentId ?? '';
           if (!userId) return;
-          // No-op if same container and same index
-          if (newParentRaw === oldParentRaw && evt.newIndex === evt.oldIndex) return;
+          // Same container → pure reorder, nothing to persist.
+          if (newParentRaw === oldParentRaw) return;
+          // The root strip is not a supervisor — snap back.
+          if (newParentRaw === '__root') {
+            router.refresh();
+            return;
+          }
+          // Self-drop guard (dropping into your own reports list).
+          if (newParentRaw === userId) {
+            router.refresh();
+            return;
+          }
 
           const newSupervisorId = newParentRaw === 'unassigned' ? '' : newParentRaw;
 
@@ -120,10 +177,11 @@ export function HierarchyMapper({
             const result = await setUserSupervisorAction(undefined, fd);
             if (!result.ok && result.error) {
               setErrorBanner(result.error);
-              // Re-fetch to reset DOM to canonical state.
               router.refresh();
               setTimeout(() => setErrorBanner(null), 4000);
             } else {
+              setSavedFlash(true);
+              setTimeout(() => setSavedFlash(false), 2000);
               router.refresh();
             }
           });
@@ -143,26 +201,37 @@ export function HierarchyMapper({
     // Re-init when the org changes structure
   }, [officers, router]);
 
+  // Freeze dragging while a change is saving — prevents queued,
+  // contradictory moves from racing each other.
+  useEffect(() => {
+    sortablesRef.current.forEach((s) => s.option('disabled', pending));
+  }, [pending]);
+
   const renderReportsList = (parentId: string) => {
     const kids = reports.get(parentId) ?? [];
+    const parent = byId.get(parentId);
     return (
       <ul
         ref={(el) => { listRefs.current.set(parentId, el); }}
         data-parent-id={parentId}
+        role="group"
+        aria-label={parent ? `Direct reports of ${parent.name}` : 'Direct reports'}
         className={cn(
-          'mt-2 flex flex-wrap gap-3 justify-center min-h-[60px] rounded-lg px-2 py-2',
-          'border border-dashed border-transparent transition-colors',
+          'mt-2 flex flex-wrap gap-3 justify-center rounded-lg px-2 transition-all',
+          'border border-dashed border-transparent',
           'sortable-target',
+          kids.length > 0 ? 'min-h-[60px] py-2' : 'min-h-[10px] py-0 sortable-empty-target',
         )}
       >
         {kids.map((k) => (
           <li key={k.id} className="flex flex-col items-center">
             <OfficerCard
               officer={k}
+              supervisorName={byId.get(k.supervisorId ?? '')?.name ?? null}
               isSelected={k.id === selectedId}
               onSelect={() => selectOfficer(router, searchParams, k.id)}
             />
-            {(reports.get(k.id)?.length ?? 0) > 0 ? renderReportsList(k.id) : null}
+            {renderReportsList(k.id)}
           </li>
         ))}
       </ul>
@@ -178,16 +247,30 @@ export function HierarchyMapper({
             {parentBreadcrumb}
           </p>
         ) : null}
-        <h3 className="font-serif text-[20px] md:text-[22px] text-ink leading-tight">
-          {divisionName} · reporting hierarchy
-        </h3>
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h3 className="font-serif text-[20px] md:text-[22px] text-ink leading-tight">
+            {divisionName} · reporting hierarchy
+          </h3>
+          <span className="text-[11px] text-ink-3">
+            {officers.length} {officers.length === 1 ? 'person' : 'people'}
+          </span>
+        </div>
         <p className="mt-2 text-[12px] text-primary bg-primary-soft border border-primary-line/40 rounded-lg px-3 py-2 inline-flex items-center gap-1.5">
           <i className="ti ti-arrows-move text-[14px]" aria-hidden="true" />
-          Drag any officer card to reorder them, drop into a new supervisor&apos;s group, or drop into the Unassigned pool.
+          Drag a card onto any officer to make them the supervisor, or into the
+          Unassigned pool. Keyboard: select a card and use the inspector&rsquo;s
+          Reports-to control.
         </p>
-        {pending ? (
-          <p className="mt-2 text-[11px] text-ink-3">Saving…</p>
-        ) : null}
+        <span role="status" aria-live="polite" className="block">
+          {pending ? (
+            <span className="mt-2 inline-block text-[11px] text-ink-3">Saving…</span>
+          ) : savedFlash ? (
+            <span className="mt-2 inline-flex items-center gap-1 text-[11px] text-success">
+              <i className="ti ti-check text-[12px]" aria-hidden="true" />
+              Change saved
+            </span>
+          ) : null}
+        </span>
         {errorBanner ? (
           <p
             role="alert"
@@ -199,29 +282,34 @@ export function HierarchyMapper({
       </div>
 
       {/* Chart */}
-      {rootOfficers.length === 0 && officers.length > 0 ? (
-        <p className="text-[12px] text-ink-3 italic py-4 text-center">
-          Everyone in this division reports outside the division. Drag a card from the Unassigned pool to pin a root.
+      {officers.length === 0 ? (
+        <p className="text-[12px] text-ink-3 italic py-6 text-center">
+          No officers in this unit yet. Add users from <em>Users</em> or{' '}
+          <em>Manage members</em>, then map them here.
         </p>
       ) : rootOfficers.length === 0 ? (
-        <p className="text-[12px] text-ink-3 italic py-6 text-center">
-          No officers in this division yet. Add users from <em>Users</em>, then assign them here.
+        <p className="text-[12px] text-ink-3 italic py-4 text-center">
+          Everyone here is in the Unassigned pool. Drag a card onto another
+          officer to start the chain.
         </p>
       ) : (
         <div className="overflow-x-auto pb-4">
           <ul
             ref={(el) => { listRefs.current.set('__root', el as HTMLUListElement | null); }}
-            data-parent-id={rootOfficers[0]?.supervisorId ?? ''}
+            data-parent-id="__root"
+            role="group"
+            aria-label={`Top of the ${divisionName} chart`}
             className="flex flex-wrap gap-4 justify-center"
           >
             {rootOfficers.map((root) => (
               <li key={root.id} className="flex flex-col items-center">
                 <OfficerCard
                   officer={root}
+                  supervisorName={null}
                   isSelected={root.id === selectedId}
                   onSelect={() => selectOfficer(router, searchParams, root.id)}
                 />
-                {(reports.get(root.id)?.length ?? 0) > 0 ? renderReportsList(root.id) : null}
+                {renderReportsList(root.id)}
               </li>
             ))}
           </ul>
@@ -233,7 +321,12 @@ export function HierarchyMapper({
         <header className="flex items-center justify-between mb-2">
           <h4 className="section-label inline-flex items-center gap-1.5">
             <i className="ti ti-inbox text-[14px]" aria-hidden="true" />
-            Unassigned in this division
+            Unassigned in this unit
+            {unassignedOfficers.length > 0 ? (
+              <span className="text-[10px] text-ink-3 tracking-normal normal-case font-normal">
+                {unassignedOfficers.length}
+              </span>
+            ) : null}
           </h4>
           <span className="text-[10px] text-ink-3">
             Drop here to remove from chain
@@ -242,19 +335,23 @@ export function HierarchyMapper({
         <ul
           ref={(el) => { listRefs.current.set('unassigned', el as HTMLUListElement | null); }}
           data-parent-id="unassigned"
+          role="group"
+          aria-label="Unassigned officers"
           className={cn(
             'flex flex-wrap gap-2.5 min-h-[60px] rounded-lg px-2 py-3 border border-dashed border-line',
+            'sortable-target',
           )}
         >
           {unassignedOfficers.length === 0 ? (
-            <li className="text-[11px] text-ink-3 italic px-2 py-1">
-              All officers in this division are in the chain.
+            <li className="text-[11px] text-ink-3 italic px-2 py-1" data-officer-id="">
+              Everyone in this unit is in the chain.
             </li>
           ) : (
             unassignedOfficers.map((o) => (
               <li key={o.id}>
                 <OfficerCard
                   officer={o}
+                  supervisorName={null}
                   isSelected={o.id === selectedId}
                   onSelect={() => selectOfficer(router, searchParams, o.id)}
                 />
@@ -273,21 +370,29 @@ export function HierarchyMapper({
 
 function OfficerCard({
   officer,
+  supervisorName,
   isSelected,
   onSelect,
 }: {
   officer: OfficerNode;
+  supervisorName: string | null;
   isSelected: boolean;
   onSelect: () => void;
 }) {
+  const slotLabel = HIERARCHY_SLOT_LABEL[officer.hierarchySlot] ?? officer.hierarchySlot;
   return (
     <button
       type="button"
       data-officer-id={officer.id}
       onClick={onSelect}
+      aria-pressed={isSelected}
+      aria-label={`${officer.name}, ${slotLabel}${
+        supervisorName ? `, reports to ${supervisorName}` : ''
+      }. Select to inspect.`}
       className={cn(
         'group relative inline-flex items-center gap-2 px-3 py-2 rounded-xl border bg-panel text-left',
         'transition-shadow hover:shadow-sm cursor-grab active:cursor-grabbing',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2',
         isSelected
           ? 'border-primary shadow-[0_0_0_3px_var(--primary-soft)]'
           : 'border-line',
@@ -318,7 +423,7 @@ function OfficerCard({
           ) : null}
         </span>
         <span className="text-[10px] text-ink-3 leading-tight truncate max-w-[140px]">
-          {HIERARCHY_SLOT_LABEL[officer.hierarchySlot]}
+          {slotLabel}
           {HIERARCHY_SLOT_LEVEL[officer.hierarchySlot]
             ? ` · L${HIERARCHY_SLOT_LEVEL[officer.hierarchySlot]}`
             : ''}

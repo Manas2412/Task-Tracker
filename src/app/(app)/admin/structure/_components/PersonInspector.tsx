@@ -6,6 +6,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { Avatar } from '@/components/ui';
 import { EditUserDialog } from '@/app/(app)/admin/users/_components/EditUserDialog';
 import { ResetPasswordDialog } from '@/app/(app)/admin/users/_components/ResetPasswordDialog';
+import { setUserSupervisorAction } from '@/app/actions/admin-structure';
 import { setUserActiveAction } from '@/app/actions/admin-users';
 import { initialsOf } from '@/lib/format';
 import {
@@ -168,24 +169,7 @@ export function PersonInspector({
             <Row label="PMU role">{PMU_ROLE_LABEL[user.pmuRole]}</Row>
           ) : null}
 
-          <Row label="Reports to">
-            {user.supervisor ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Avatar
-                  initials={initialsOf(user.supervisor.name)}
-                  colour={user.supervisor.division.avatarColour}
-                  size="xs"
-                  ariaLabel={user.supervisor.name}
-                />
-                <span>
-                  <strong className="font-medium text-ink">{user.supervisor.name}</strong>
-                  <span className="text-ink-3"> · {user.supervisor.designation}</span>
-                </span>
-              </span>
-            ) : (
-              <span className="text-ink-3 italic">No supervisor</span>
-            )}
-          </Row>
+          <SupervisorRow user={user} supervisors={supervisors} />
 
           <Row label="Username">
             <span className="font-mono text-[12px]">{user.username}</span>
@@ -262,7 +246,8 @@ export function PersonInspector({
           ) : null}
           <p className="text-[10px] text-ink-3 mt-2 leading-relaxed px-2">
             <i className="ti ti-arrows-move text-[11px] mr-1" aria-hidden="true" />
-            To change supervisor, drag the card in the chart on the left.
+            Change the supervisor by dragging the card in the chart, or with
+            the Change control on the Reports-to row above.
           </p>
         </footer>
       </div>
@@ -296,6 +281,107 @@ export function PersonInspector({
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * Reports-to row with an inline, keyboard-accessible supervisor editor —
+ * the non-drag path to the same setUserSupervisorAction the chart uses.
+ */
+function SupervisorRow({
+  user,
+  supervisors,
+}: {
+  user: InspectorUser;
+  supervisors: UserFormSupervisorOption[];
+}) {
+  const [editing, setEditing] = useState(false);
+  const [choice, setChoice] = useState(user.supervisor?.id ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const save = () => {
+    const fd = new FormData();
+    fd.set('userId', user.id);
+    fd.set('supervisorId', choice);
+    startTransition(async () => {
+      const result = await setUserSupervisorAction(undefined, fd);
+      if (!result.ok && result.error) {
+        setError(result.error);
+      } else {
+        setError(null);
+        setEditing(false);
+      }
+    });
+  };
+
+  return (
+    <div>
+      <dt className="text-[10px] uppercase tracking-[0.08em] font-medium text-ink-3 flex items-center justify-between">
+        Reports to
+        <button
+          type="button"
+          onClick={() => {
+            setEditing((v) => !v);
+            setChoice(user.supervisor?.id ?? '');
+            setError(null);
+          }}
+          aria-expanded={editing}
+          className="text-[10px] font-medium text-primary tracking-normal normal-case px-1.5 py-0.5 rounded hover:bg-primary-soft transition-colors"
+        >
+          {editing ? 'Cancel' : 'Change'}
+        </button>
+      </dt>
+      <dd className="text-[13px] mt-0.5 text-ink font-medium">
+        {editing ? (
+          <span className="flex flex-col gap-1.5 mt-1">
+            <select
+              value={choice}
+              onChange={(e) => setChoice(e.target.value)}
+              aria-label={`New supervisor for ${user.name}`}
+              className="w-full px-2.5 py-1.5 rounded-lg border border-line bg-panel text-[12.5px] font-normal text-ink outline-none focus:border-ink appearance-none"
+            >
+              <option value="">— No supervisor (unassigned) —</option>
+              {supervisors
+                .filter((s) => s.id !== user.id)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} · {s.designation}
+                  </option>
+                ))}
+            </select>
+            {error ? (
+              <span role="alert" className="text-[11px] text-urgent font-normal">
+                {error}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={save}
+              disabled={pending || choice === (user.supervisor?.id ?? '')}
+              className="self-start px-2.5 py-1 rounded-md bg-ink text-white text-[11px] font-medium disabled:opacity-50 transition-opacity"
+            >
+              {pending ? 'Saving…' : 'Save'}
+            </button>
+          </span>
+        ) : user.supervisor ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Avatar
+              initials={initialsOf(user.supervisor.name)}
+              colour={user.supervisor.division.avatarColour}
+              size="xs"
+              ariaLabel={user.supervisor.name}
+            />
+            <span>
+              <strong className="font-medium text-ink">{user.supervisor.name}</strong>
+              <span className="text-ink-3"> · {user.supervisor.designation}</span>
+            </span>
+          </span>
+        ) : (
+          <span className="text-ink-3 italic">No supervisor</span>
+        )}
+      </dd>
+    </div>
   );
 }
 

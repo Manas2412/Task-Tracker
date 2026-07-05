@@ -152,8 +152,8 @@ export default async function StructurePage({ searchParams }: PageProps) {
     return u.sectionId === activeDivision.id;
   });
 
-  const officersInActiveIds = new Set(officersInActive.map((u) => u.id));
-
+  // Pool/roots/reachability are computed inside HierarchyMapper, which
+  // guarantees every officer renders exactly once.
   const officerNodes: OfficerNode[] = officersInActive.map((u) => ({
     id: u.id,
     name: u.name,
@@ -165,33 +165,6 @@ export default async function StructurePage({ searchParams }: PageProps) {
     isActive: u.isActive,
     isSelf: u.id === session.user.id,
   }));
-
-  // "In the chain" = has a parent in division, has a parent outside division,
-  // OR is the parent of someone in division. Otherwise → Unassigned.
-  const inChainIds = new Set<string>();
-  for (const u of officersInActive) {
-    if (u.supervisorId && officersInActiveIds.has(u.supervisorId)) {
-      inChainIds.add(u.id);
-      inChainIds.add(u.supervisorId);
-    } else if (u.supervisorId) {
-      // External supervisor — they're a chart root for this division.
-      inChainIds.add(u.id);
-    }
-  }
-
-  // Chart roots: in chain AND supervisor is not also in this division.
-  const rootsOnlyChartIds = officersInActive
-    .filter(
-      (u) =>
-        inChainIds.has(u.id) &&
-        (!u.supervisorId || !officersInActiveIds.has(u.supervisorId)),
-    )
-    .map((u) => u.id);
-
-  // Unassigned: in this division but not in the chain at all.
-  const unassignedIds = officersInActive
-    .filter((u) => !inChainIds.has(u.id))
-    .map((u) => u.id);
 
   // Build the inspector data for the selected user.
   const selectedUser = searchParams?.selected
@@ -315,8 +288,6 @@ export default async function StructurePage({ searchParams }: PageProps) {
           divisionName={activeDivision.name}
           parentBreadcrumb={parentBreadcrumb}
           officers={officerNodes}
-          rootOfficerIds={rootsOnlyChartIds}
-          unassignedIds={unassignedIds}
         />
       </section>
 
