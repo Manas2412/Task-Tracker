@@ -14,6 +14,9 @@ import {
 } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 
+import { PhoneEditor } from './_components/PhoneEditor';
+import { WorkActivitiesEditor } from './_components/WorkActivitiesEditor';
+
 export default async function ProfilePage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -123,13 +126,9 @@ export default async function ProfilePage() {
             </DetailRow>
           ) : null}
 
-          {me.phone ? (
-            <DetailRow icon="ti-phone" label="Phone" muted>
-              <a href={`tel:+91${me.phone}`} className="hover:underline">
-                {me.phone}
-              </a>
-            </DetailRow>
-          ) : null}
+          <DetailRow icon="ti-phone" label="Phone" muted>
+            <PhoneEditor phone={me.phone} />
+          </DetailRow>
 
           {me.supervisor ? (
             <DetailRow icon="ti-arrow-up" label="Reports to">
@@ -162,17 +161,8 @@ export default async function ProfilePage() {
         </dl>
       </section>
 
-      {/* Work activities */}
-      {me.workActivities ? (
-        <section className="mt-4 bg-panel border border-line rounded-2xl">
-          <h3 className="px-5 md:px-6 pt-5 pb-2 section-label">Work activities</h3>
-          <div className="px-5 md:px-6 pb-5">
-            <p className="text-[13px] text-ink-2 leading-relaxed whitespace-pre-wrap">
-              {me.workActivities}
-            </p>
-          </div>
-        </section>
-      ) : null}
+      {/* Work activities — self-editable */}
+      <WorkActivitiesEditor workActivities={me.workActivities} />
 
       {/* Actions */}
       <section className="mt-4 bg-panel border border-line rounded-2xl p-2">
@@ -219,8 +209,9 @@ export default async function ProfilePage() {
       </section>
 
       <p className="mt-4 text-[11px] text-ink-3 leading-relaxed">
-        Profile details (name, designation, division, hierarchy slot) are managed
-        by your Super Admin. Ask the Super Admin to change them.
+        Your phone number and work activities are yours to edit. Other profile
+        details (name, designation, division, hierarchy slot) are managed by
+        your Super Admin — ask the Super Admin to change them.
       </p>
     </div>
   );
