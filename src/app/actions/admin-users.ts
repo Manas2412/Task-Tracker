@@ -195,18 +195,8 @@ const createUserSchema = z.object({
     .string()
     .optional()
     .transform((v) => v === 'on'),
-  phone: z
-    .string()
-    .trim()
-    .max(20)
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined)),
-  workActivities: z
-    .string()
-    .trim()
-    .max(5000)
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined)),
+  // phone + work activities are self-service on /profile — the admin form
+  // never collects them, so they are intentionally absent here.
 });
 
 type AdminUserState = ActionState;
@@ -234,8 +224,6 @@ export async function createUserAction(
     pmuId: formData.get('pmuId'),
     supervisorId: formData.get('supervisorId'),
     isSuperAdmin: formData.get('isSuperAdmin'),
-    phone: formData.get('phone'),
-    workActivities: formData.get('workActivities'),
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -290,8 +278,6 @@ export async function createUserAction(
         isSuperAdmin: parsed.data.isSuperAdmin ?? false,
         forcePasswordChange: parsed.data.forcePasswordChange ?? true,
         createdById: guard.userId,
-        phone: parsed.data.phone ?? null,
-        workActivities: parsed.data.workActivities ?? null,
       },
     });
 
@@ -329,14 +315,9 @@ const updateUserSchema = z.object({
   sectionId: optionalRelationToNull,
   pmuId: optionalRelationToNull,
   supervisorId: optionalRelationToNull,
-  phone: z
-    .union([z.literal(''), z.string().trim().max(20)])
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : null)),
-  workActivities: z
-    .union([z.literal(''), z.string().trim().max(5000)])
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : null)),
+  // phone + work activities are self-service on /profile — the admin form
+  // never collects them, so they are intentionally absent here (and must
+  // never be written from this action, which would wipe self-set values).
 });
 
 export async function updateUserAction(
@@ -358,8 +339,6 @@ export async function updateUserAction(
     sectionId: formData.get('sectionId'),
     pmuId: formData.get('pmuId'),
     supervisorId: formData.get('supervisorId'),
-    phone: formData.get('phone'),
-    workActivities: formData.get('workActivities'),
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -401,6 +380,17 @@ export async function updateUserAction(
   });
   if (placementErrors) return { ok: false, fieldErrors: placementErrors, epoch };
 
+  // isPmu tracks pmuId, but with one guard: only flip it to false when an
+  // ACTUAL PMU assignment is being removed (before.pmuId was set). Legacy
+  // PMU users (isPmu = true, pmuId = null) predate pmu_id and keep their
+  // status on unrelated edits until they are explicitly attached to a team.
+  const nextIsPmu = parsed.data.pmuId
+    ? true
+    : before.pmuId
+      ? false
+      : before.isPmu;
+  const removingPmu = !nextIsPmu && before.isPmu;
+
   try {
     const updated = await prisma.user.update({
       where: { id: parsed.data.userId },
@@ -413,13 +403,10 @@ export async function updateUserAction(
         subDivisionId: parsed.data.pmuId ? null : parsed.data.subDivisionId,
         sectionId: parsed.data.pmuId ? null : parsed.data.sectionId,
         pmuId: parsed.data.pmuId,
-        // Selecting a PMU marks the user as a PMU member. Clearing the
-        // dropdown does NOT clear isPmu — legacy PMU users predate pmu_id
-        // and must not silently lose their PMU status on unrelated edits.
-        ...(parsed.data.pmuId ? { isPmu: true } : {}),
+        isPmu: nextIsPmu,
+        // Dropping PMU membership clears the now-meaningless PMU role too.
+        ...(removingPmu ? { pmuRole: null } : {}),
         supervisorId: parsed.data.supervisorId,
-        phone: parsed.data.phone,
-        workActivities: parsed.data.workActivities,
       },
     });
 

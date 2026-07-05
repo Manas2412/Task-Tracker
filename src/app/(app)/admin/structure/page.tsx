@@ -68,6 +68,7 @@ export default async function StructurePage({ searchParams }: PageProps) {
     if (d.kind === 'division' && d.headUserId) headUserIdByDivision.set(d.id, d.headUserId);
   }
 
+  const pmuIdByUser = new Map(allUsers.map((u) => [u.id, u.pmuId]));
   const userCountsByDivision = new Map<string, number>();
   const bump = (key: string) =>
     userCountsByDivision.set(key, (userCountsByDivision.get(key) ?? 0) + 1);
@@ -80,11 +81,17 @@ export default async function StructurePage({ searchParams }: PageProps) {
     if (u.subDivisionId) bump(u.subDivisionId);
     if (u.sectionId) bump(u.sectionId);
   }
-  // Each PMU also shows its home division's head.
+  // Each PMU also shows its home division's head — but only add them if
+  // they aren't already counted as a member of this same PMU (a head who
+  // also sits in their division's PMU would otherwise be double-counted,
+  // making the badge disagree with the chart, which dedupes for free).
   for (const d of divisions) {
     if (d.kind !== 'pmu') continue;
     const homeId = d.pmuParentDivisionId ?? d.parentId;
-    if (homeId && headUserIdByDivision.has(homeId)) bump(d.id);
+    if (!homeId) continue;
+    const headId = headUserIdByDivision.get(homeId);
+    if (!headId || pmuIdByUser.get(headId) === d.id) continue;
+    bump(d.id);
   }
 
   const treeNodes: StructureNode[] = divisions.map((d) => ({
