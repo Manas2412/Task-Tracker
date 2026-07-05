@@ -53,6 +53,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const isOsd = me.hierarchySlot === 'osd' || me.isSuperAdmin;
   const isJs = me.hierarchySlot === 'js' || isOsd;
   const canSwitchRole = isOsd && me.isSuperAdmin;
+  // Tour report (external platform) — Super Admins plus the osd.myas
+  // account specifically, which is narrower than the OSD-slot gate.
+  const showTourReport = me.isSuperAdmin || me.username === 'osd.myas';
 
   return (
     <AppShell
@@ -64,6 +67,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         isSuperAdmin: me.isSuperAdmin,
         isOsd,
         isJs,
+        showTourReport,
         canSwitchRole,
       }}
       notifications={{ unreadCount, recent }}
