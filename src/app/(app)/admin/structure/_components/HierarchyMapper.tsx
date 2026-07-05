@@ -10,11 +10,7 @@ import {
   setUserSupervisorAction,
 } from '@/app/actions/admin-structure';
 import { initialsOf } from '@/lib/format';
-import {
-  CONTRACT_ROLE_LABEL,
-  HIERARCHY_SLOT_LABEL,
-  HIERARCHY_SLOT_LEVEL,
-} from '@/lib/labels';
+import { CONTRACT_ROLE_LABEL } from '@/lib/labels';
 import { partitionOrgChart } from '@/lib/org-chart';
 import { cn } from '@/lib/utils';
 
@@ -385,14 +381,13 @@ function OfficerCard({
   isSelected: boolean;
   onSelect: () => void;
 }) {
-  const slotLabel = HIERARCHY_SLOT_LABEL[officer.hierarchySlot] ?? officer.hierarchySlot;
   return (
     <button
       type="button"
       data-officer-id={officer.id}
       onClick={onSelect}
       aria-pressed={isSelected}
-      aria-label={`${officer.name}, ${slotLabel}${
+      aria-label={`${officer.name}, ${officer.designation}${
         supervisorName ? `, reports to ${supervisorName}` : ''
       }. Select to inspect.`}
       className={cn(
@@ -429,10 +424,7 @@ function OfficerCard({
           ) : null}
         </span>
         <span className="text-[10px] text-ink-3 leading-tight truncate max-w-[140px]">
-          {slotLabel}
-          {HIERARCHY_SLOT_LEVEL[officer.hierarchySlot]
-            ? ` · L${HIERARCHY_SLOT_LEVEL[officer.hierarchySlot]}`
-            : ''}
+          {officer.designation}
         </span>
       </span>
     </button>
