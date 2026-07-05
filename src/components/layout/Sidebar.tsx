@@ -24,6 +24,8 @@ type Item = {
   icon: string;
   phase?: 1 | 2 | 3 | 4;
   adminOnly?: boolean;
+  /** External platform — opens in a new tab with an external-link marker. */
+  external?: boolean;
 };
 
 const PRIMARY_ITEMS: Item[] = [
@@ -46,6 +48,8 @@ type SidebarProps = {
   isOsd: boolean;
   /** JS slot — gates JS Dashboard */
   isJs: boolean;
+  /** Super Admins + the osd.myas account — gates the Tour report link */
+  showTourReport?: boolean;
   /** mobile drawer mode renders labels regardless of breakpoint */
   drawerMode?: boolean;
   onNavigate?: () => void;
@@ -65,10 +69,19 @@ const JS_DASHBOARD_ITEM: Item = {
   phase: 1,
 };
 
+const TOUR_REPORT_ITEM: Item = {
+  href: 'https://tourvisits.vercel.app/',
+  label: 'Tour report',
+  icon: 'ti-plane-departure',
+  phase: 1,
+  external: true,
+};
+
 export function Sidebar({
   isSuperAdmin,
   isOsd,
   isJs,
+  showTourReport = false,
   drawerMode = false,
   onNavigate,
 }: SidebarProps) {
@@ -108,6 +121,14 @@ export function Sidebar({
           onClick={onNavigate}
         />
       ))}
+      {showTourReport ? (
+        <NavItem
+          item={TOUR_REPORT_ITEM}
+          active={false}
+          drawerMode={drawerMode}
+          onClick={onNavigate}
+        />
+      ) : null}
 
       {isSuperAdmin || isOsd ? (
         <>
@@ -145,19 +166,9 @@ function NavItem({
   onClick?: () => void;
 }) {
   const soon = item.phase && item.phase > 1;
-  return (
-    <Link
-      href={item.href}
-      onClick={onClick}
-      aria-current={active ? 'page' : undefined}
-      className={cn(
-        'group relative flex items-center gap-3 rounded-lg transition-colors',
-        drawerMode ? 'px-3 py-2.5' : 'px-2.5 py-2 lg:px-3 lg:py-2.5',
-        active
-          ? 'bg-primary-soft text-primary'
-          : 'text-ink-2 hover:bg-line-2 hover:text-ink',
-      )}
-    >
+
+  const inner = (
+    <>
       <i
         className={cn(
           'ti',
@@ -175,6 +186,15 @@ function NavItem({
       >
         {item.label}
       </span>
+      {item.external ? (
+        <i
+          className={cn(
+            'ti ti-external-link text-[13px] text-ink-3',
+            drawerMode ? 'block' : 'hidden lg:block',
+          )}
+          aria-hidden="true"
+        />
+      ) : null}
       {soon ? (
         <span
           className={cn(
@@ -185,6 +205,42 @@ function NavItem({
           Soon
         </span>
       ) : null}
+    </>
+  );
+
+  const classes = cn(
+    'group relative flex items-center gap-3 rounded-lg transition-colors',
+    drawerMode ? 'px-3 py-2.5' : 'px-2.5 py-2 lg:px-3 lg:py-2.5',
+    active
+      ? 'bg-primary-soft text-primary'
+      : 'text-ink-2 hover:bg-line-2 hover:text-ink',
+  );
+
+  // External platforms open in a new tab so the workspace stays put —
+  // no losing scroll position, filters, or an open task mid-thought.
+  if (item.external) {
+    return (
+      <a
+        href={item.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={onClick}
+        aria-label={`${item.label} (opens in a new tab)`}
+        className={classes}
+      >
+        {inner}
+      </a>
+    );
+  }
+
+  return (
+    <Link
+      href={item.href}
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={classes}
+    >
+      {inner}
     </Link>
   );
 }

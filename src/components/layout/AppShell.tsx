@@ -20,6 +20,8 @@ type AppShellProps = {
     isOsd: boolean;
     /** JS slot — gates JS Dashboard */
     isJs: boolean;
+    /** Super Admins + the osd.myas account — gates the Tour report link */
+    showTourReport: boolean;
     /** Show RoleSwitcher when the caller has both Command Centre and Super Admin */
     canSwitchRole: boolean;
   };
@@ -72,6 +74,7 @@ export function AppShell({
         isSuperAdmin={user.isSuperAdmin}
         isOsd={user.isOsd}
         isJs={user.isJs}
+        showTourReport={user.showTourReport}
       />
 
       <div className="flex-1 grid md:grid-cols-[64px_1fr] lg:grid-cols-[240px_1fr]">
@@ -81,7 +84,12 @@ export function AppShell({
           className="hidden md:block border-r border-line bg-panel"
         >
           <div className="sticky top-16">
-            <Sidebar isSuperAdmin={user.isSuperAdmin} isOsd={user.isOsd} isJs={user.isJs} />
+            <Sidebar
+              isSuperAdmin={user.isSuperAdmin}
+              isOsd={user.isOsd}
+              isJs={user.isJs}
+              showTourReport={user.showTourReport}
+            />
           </div>
         </aside>
 
