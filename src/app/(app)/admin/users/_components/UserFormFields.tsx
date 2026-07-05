@@ -101,6 +101,11 @@ export function UserFormFields({
       )
     : [];
 
+  // PMU members sit outside the sub-division/section ladder — selecting a
+  // PMU makes those two fields not applicable (cleared and disabled; the
+  // server nulls them as well).
+  const isPmuMember = pmuId !== '';
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {/* Identity */}
@@ -248,17 +253,23 @@ export function UserFormFields({
           </Field>
           <Field
             label="Sub-division"
-            hint={subDivisions.length === 0 ? 'None available for this division' : undefined}
+            hint={
+              isPmuMember
+                ? 'Not applicable for PMU members'
+                : subDivisions.length === 0
+                  ? 'None available for this division'
+                  : undefined
+            }
           >
             <select
               name="subDivisionId"
-              value={subDivisionId}
+              value={isPmuMember ? '' : subDivisionId}
               onChange={(e) => {
                 setSubDivisionId(e.target.value);
                 setSectionId('');
               }}
               className={selectCn(false)}
-              disabled={subDivisions.length === 0}
+              disabled={isPmuMember || subDivisions.length === 0}
             >
               <option value="">— None —</option>
               {subDivisions.map((s) => (
@@ -272,15 +283,19 @@ export function UserFormFields({
             label="Section"
             error={fieldErrors?.sectionId}
             hint={
-              sections.length === 0 ? 'None available for this sub-division' : undefined
+              isPmuMember
+                ? 'Not applicable for PMU members'
+                : sections.length === 0
+                  ? 'None available for this sub-division'
+                  : undefined
             }
           >
             <select
               name="sectionId"
-              value={sectionId}
+              value={isPmuMember ? '' : sectionId}
               onChange={(e) => setSectionId(e.target.value)}
               className={selectCn(!!fieldErrors?.sectionId)}
-              disabled={sections.length === 0}
+              disabled={isPmuMember || sections.length === 0}
             >
               <option value="">— None —</option>
               {sections.map((s) => (
@@ -302,7 +317,13 @@ export function UserFormFields({
             <select
               name="pmuId"
               value={pmuId}
-              onChange={(e) => setPmuId(e.target.value)}
+              onChange={(e) => {
+                setPmuId(e.target.value);
+                if (e.target.value) {
+                  setSubDivisionId('');
+                  setSectionId('');
+                }
+              }}
               className={selectCn(!!fieldErrors?.pmuId)}
               disabled={pmus.length === 0}
             >

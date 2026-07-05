@@ -59,22 +59,32 @@ export default async function StructurePage({ searchParams }: PageProps) {
     }),
   ]);
 
-  // User counts per division (primary placement = divisionId).
+  // User counts per node. A user attached to a PMU team counts on the PMU
+  // node only — not on the ministry division tree. (The division head is
+  // the one deliberate repeat: they count on their division AND appear at
+  // the top of each of their PMU teams.)
+  const headUserIdByDivision = new Map<string, string>();
+  for (const d of divisions) {
+    if (d.kind === 'division' && d.headUserId) headUserIdByDivision.set(d.id, d.headUserId);
+  }
+
   const userCountsByDivision = new Map<string, number>();
+  const bump = (key: string) =>
+    userCountsByDivision.set(key, (userCountsByDivision.get(key) ?? 0) + 1);
   for (const u of allUsers) {
-    userCountsByDivision.set(u.divisionId, (userCountsByDivision.get(u.divisionId) ?? 0) + 1);
-    if (u.subDivisionId) {
-      userCountsByDivision.set(
-        u.subDivisionId,
-        (userCountsByDivision.get(u.subDivisionId) ?? 0) + 1,
-      );
-    }
-    if (u.sectionId) {
-      userCountsByDivision.set(u.sectionId, (userCountsByDivision.get(u.sectionId) ?? 0) + 1);
-    }
     if (u.pmuId) {
-      userCountsByDivision.set(u.pmuId, (userCountsByDivision.get(u.pmuId) ?? 0) + 1);
+      bump(u.pmuId);
+      continue;
     }
+    bump(u.divisionId);
+    if (u.subDivisionId) bump(u.subDivisionId);
+    if (u.sectionId) bump(u.sectionId);
+  }
+  // Each PMU also shows its home division's head.
+  for (const d of divisions) {
+    if (d.kind !== 'pmu') continue;
+    const homeId = d.pmuParentDivisionId ?? d.parentId;
+    if (homeId && headUserIdByDivision.has(homeId)) bump(d.id);
   }
 
   const treeNodes: StructureNode[] = divisions.map((d) => ({
@@ -120,14 +130,26 @@ export default async function StructurePage({ searchParams }: PageProps) {
     );
   }
 
-  // Officers shown in the chart: users placed in the active node — by
-  // divisionId / subDivisionId / sectionId for ministry units, by pmuId
-  // for PMU teams.
+  // Officers shown in the chart. PMU-team members appear only under their
+  // PMU node — never in the ministry division chart. A PMU chart is the
+  // team plus the home division's head at the top; the head deliberately
+  // repeats between the division tree and the PMU tree.
+  const pmuHomeDivisionId =
+    activeDivision.kind === 'pmu'
+      ? activeDivision.pmuParentDivisionId ?? activeDivision.parentId
+      : null;
+  const pmuHeadUserId = pmuHomeDivisionId
+    ? headUserIdByDivision.get(pmuHomeDivisionId) ?? null
+    : null;
+
   const officersInActive = allUsers.filter((u) => {
+    if (activeDivision.kind === 'pmu') {
+      return u.pmuId === activeDivision.id || u.id === pmuHeadUserId;
+    }
+    if (u.pmuId) return false;
     if (activeDivision.kind === 'division') return u.divisionId === activeDivision.id;
     if (activeDivision.kind === 'sub_division') return u.subDivisionId === activeDivision.id;
-    if (activeDivision.kind === 'section') return u.sectionId === activeDivision.id;
-    return u.pmuId === activeDivision.id;
+    return u.sectionId === activeDivision.id;
   });
 
   const officersInActiveIds = new Set(officersInActive.map((u) => u.id));
