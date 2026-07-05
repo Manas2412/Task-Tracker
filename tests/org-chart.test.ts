@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { partitionOrgChart, type ChartNodeInput } from '@/lib/org-chart';
+import {
+  collectReportingSubtree,
+  partitionOrgChart,
+  resolveUnitPlacement,
+  type ChartNodeInput,
+  type UnitNode,
+} from '@/lib/org-chart';
 
 /**
  * Collect every id the mapper would render: pool + roots + all children.
@@ -117,5 +123,113 @@ describe('partitionOrgChart — totality (nobody is dropped)', () => {
     expect(p.unassignedIds.sort()).toEqual(['a', 'b']);
     expect(p.rootIds).toEqual([]);
     expectRendersEveryoneOnce(nodes);
+  });
+});
+
+describe('collectReportingSubtree', () => {
+  const org: ChartNodeInput[] = [
+    { id: 'tl', supervisorId: 'head' },
+    { id: 'sc1', supervisorId: 'tl' },
+    { id: 'sc2', supervisorId: 'tl' },
+    { id: 'c1', supervisorId: 'sc1' },
+    { id: 'other', supervisorId: 'head' },
+    { id: 'head', supervisorId: null },
+  ];
+
+  it('collects the lead and every transitive report', () => {
+    expect(collectReportingSubtree(org, 'tl').sort()).toEqual(
+      ['c1', 'sc1', 'sc2', 'tl'].sort(),
+    );
+  });
+
+  it('a leaf is a team of one', () => {
+    expect(collectReportingSubtree(org, 'c1')).toEqual(['c1']);
+  });
+
+  it('excludes siblings and superiors', () => {
+    const team = collectReportingSubtree(org, 'tl');
+    expect(team).not.toContain('head');
+    expect(team).not.toContain('other');
+  });
+
+  it('is cycle-safe', () => {
+    const cyclic: ChartNodeInput[] = [
+      { id: 'a', supervisorId: 'b' },
+      { id: 'b', supervisorId: 'a' },
+    ];
+    const team = collectReportingSubtree(cyclic, 'a');
+    expect(new Set(team)).toEqual(new Set(['a', 'b']));
+    expect(team.length).toBe(2); // no duplicates, terminates
+  });
+});
+
+describe('resolveUnitPlacement', () => {
+  const division: UnitNode = { id: 'D', kind: 'division', parentId: null, pmuParentDivisionId: null };
+  const sub: UnitNode = { id: 'S', kind: 'sub_division', parentId: 'D', pmuParentDivisionId: null };
+  const section: UnitNode = { id: 'SEC', kind: 'section', parentId: 'S', pmuParentDivisionId: null };
+  const pmu: UnitNode = { id: 'P', kind: 'pmu', parentId: null, pmuParentDivisionId: 'D' };
+  const byId = new Map<string, UnitNode>([
+    ['D', division],
+    ['S', sub],
+    ['SEC', section],
+    ['P', pmu],
+  ]);
+
+  it('division: clears sub/section/pmu, not a PMU member', () => {
+    expect(resolveUnitPlacement(division, byId)).toEqual({
+      divisionId: 'D',
+      subDivisionId: null,
+      sectionId: null,
+      pmuId: null,
+      isPmu: false,
+    });
+  });
+
+  it('sub-division: sets division + sub, clears section/pmu', () => {
+    expect(resolveUnitPlacement(sub, byId)).toEqual({
+      divisionId: 'D',
+      subDivisionId: 'S',
+      sectionId: null,
+      pmuId: null,
+      isPmu: false,
+    });
+  });
+
+  it('section: sets the full division/sub/section chain', () => {
+    expect(resolveUnitPlacement(section, byId)).toEqual({
+      divisionId: 'D',
+      subDivisionId: 'S',
+      sectionId: 'SEC',
+      pmuId: null,
+      isPmu: false,
+    });
+  });
+
+  it('pmu: sets home division + pmu, clears ladder, marks PMU member', () => {
+    expect(resolveUnitPlacement(pmu, byId)).toEqual({
+      divisionId: 'D',
+      subDivisionId: null,
+      sectionId: null,
+      pmuId: 'P',
+      isPmu: true,
+    });
+  });
+
+  it('pmu with parentId fallback (no pmuParentDivisionId) still resolves home', () => {
+    const legacyPmu: UnitNode = { id: 'P2', kind: 'pmu', parentId: 'D', pmuParentDivisionId: null };
+    const r = resolveUnitPlacement(legacyPmu, byId);
+    expect('error' in r).toBe(false);
+    if (!('error' in r)) expect(r.divisionId).toBe('D');
+  });
+
+  it('errors on a section whose sub-division is missing', () => {
+    const orphan: UnitNode = { id: 'X', kind: 'section', parentId: 'gone', pmuParentDivisionId: null };
+    const r = resolveUnitPlacement(orphan, byId);
+    expect('error' in r).toBe(true);
+  });
+
+  it('errors on a sub-division with no parent', () => {
+    const orphan: UnitNode = { id: 'Y', kind: 'sub_division', parentId: null, pmuParentDivisionId: null };
+    expect('error' in resolveUnitPlacement(orphan, byId)).toBe(true);
   });
 });

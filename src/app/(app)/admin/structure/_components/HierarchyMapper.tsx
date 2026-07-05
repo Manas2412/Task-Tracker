@@ -5,7 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Sortable from 'sortablejs';
 
 import { Avatar } from '@/components/ui';
-import { setUserSupervisorAction } from '@/app/actions/admin-structure';
+import {
+  moveTeamToUnitAction,
+  setUserSupervisorAction,
+} from '@/app/actions/admin-structure';
 import { initialsOf } from '@/lib/format';
 import {
   CONTRACT_ROLE_LABEL,
@@ -118,6 +121,38 @@ export function HierarchyMapper({
           document.body.classList.remove('sortable-dragging');
           const item = evt.item as HTMLElement;
           const userId = item.dataset.officerId;
+
+          // Team move: did the drop land over a unit row in the left tree?
+          // We hit-test the pointer rather than making the tree a Sortable
+          // drop target, so no React-owned card is ever relocated across
+          // component trees, and freshly-expanded rows work with no
+          // registration step. When the drop is over the tree, Sortable
+          // (whose only lists are the chart) left the card in place, so the
+          // chart branch below would be a no-op anyway.
+          const dropNode = unitRowUnderPointer(
+            (evt as unknown as { originalEvent?: Event }).originalEvent,
+          );
+          if (dropNode && userId) {
+            const nodeId = dropNode.dataset.dropNodeId;
+            if (nodeId) {
+              const fd = new FormData();
+              fd.set('userId', userId);
+              fd.set('targetNodeId', nodeId);
+              startTransition(async () => {
+                const result = await moveTeamToUnitAction(undefined, fd);
+                if (!result.ok && result.error) {
+                  setErrorBanner(result.error);
+                  setTimeout(() => setErrorBanner(null), 4000);
+                } else {
+                  setSavedFlash(true);
+                  setTimeout(() => setSavedFlash(false), 2000);
+                }
+                router.refresh();
+              });
+              return;
+            }
+          }
+
           const toContainer = evt.to as HTMLElement;
           const fromContainer = evt.from as HTMLElement;
           const newParentRaw = toContainer.dataset.parentId ?? '';
@@ -192,7 +227,7 @@ export function HierarchyMapper({
         )}
       >
         {kids.map((k) => (
-          <li key={k.id} className="flex flex-col items-center">
+          <li key={k.id} data-officer-id={k.id} className="flex flex-col items-center">
             <OfficerCard
               officer={k}
               supervisorName={byId.get(k.supervisorId ?? '')?.name ?? null}
@@ -223,11 +258,14 @@ export function HierarchyMapper({
             {officers.length} {officers.length === 1 ? 'person' : 'people'}
           </span>
         </div>
-        <p className="mt-2 text-[12px] text-primary bg-primary-soft border border-primary-line/40 rounded-lg px-3 py-2 inline-flex items-center gap-1.5">
-          <i className="ti ti-arrows-move text-[14px]" aria-hidden="true" />
-          Drag a card onto any officer to make them the supervisor, or into the
-          Unassigned pool. Keyboard: select a card and use the inspector&rsquo;s
-          Reports-to control.
+        <p className="mt-2 text-[12px] text-primary bg-primary-soft border border-primary-line/40 rounded-lg px-3 py-2 inline-flex items-start gap-1.5">
+          <i className="ti ti-arrows-move text-[14px] mt-0.5" aria-hidden="true" />
+          <span>
+            Drag a card onto another officer to set the supervisor, or into the
+            Unassigned pool. Drag it onto a unit in the left tree to move that
+            officer and their whole team into it. Keyboard: select a card and
+            use the inspector&rsquo;s Reports-to control.
+          </span>
         </p>
         <span role="status" aria-live="polite" className="block">
           {pending ? (
@@ -270,7 +308,7 @@ export function HierarchyMapper({
             className="flex flex-wrap gap-4 justify-center"
           >
             {rootOfficers.map((root) => (
-              <li key={root.id} className="flex flex-col items-center">
+              <li key={root.id} data-officer-id={root.id} className="flex flex-col items-center">
                 <OfficerCard
                   officer={root}
                   supervisorName={null}
@@ -316,7 +354,7 @@ export function HierarchyMapper({
             </li>
           ) : (
             unassignedOfficers.map((o) => (
-              <li key={o.id}>
+              <li key={o.id} data-officer-id={o.id}>
                 <OfficerCard
                   officer={o}
                   supervisorName={null}
@@ -409,4 +447,30 @@ function selectOfficer(
   const sp = new URLSearchParams(searchParams.toString());
   sp.set('selected', officerId);
   router.replace(`/admin/structure?${sp.toString()}`, { scroll: false });
+}
+
+/**
+ * The structure-tree unit row under the drop pointer, if any. Sortable's
+ * fallback clone is already removed by the time onEnd fires, so
+ * elementFromPoint resolves to the real element beneath the cursor.
+ * Returns null for drops that miss the tree (normal chart drops).
+ */
+function unitRowUnderPointer(originalEvent: Event | undefined): HTMLElement | null {
+  if (!originalEvent) return null;
+  let x: number | undefined;
+  let y: number | undefined;
+  const te = originalEvent as TouchEvent;
+  if (te.changedTouches && te.changedTouches.length > 0) {
+    x = te.changedTouches[0].clientX;
+    y = te.changedTouches[0].clientY;
+  } else {
+    const me = originalEvent as MouseEvent;
+    if (typeof me.clientX === 'number') {
+      x = me.clientX;
+      y = me.clientY;
+    }
+  }
+  if (x == null || y == null) return null;
+  const el = document.elementFromPoint(x, y);
+  return (el?.closest('[data-drop-node-id]') as HTMLElement | null) ?? null;
 }

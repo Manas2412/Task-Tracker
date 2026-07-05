@@ -5,6 +5,11 @@ import { z } from 'zod';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import {
+  collectReportingSubtree,
+  resolveUnitPlacement,
+  type UnitNode,
+} from '@/lib/org-chart';
 
 /**
  * Super Admin actions for managing divisions and hierarchy.
@@ -415,6 +420,172 @@ export async function setUserSupervisorAction(
   }
 
   revalidateAll();
+  return ok(epoch);
+}
+
+// ============================================================
+// moveTeamToUnitAction — relocate a whole reporting team to a unit
+// ============================================================
+
+const moveTeamSchema = z.object({
+  userId: z.string().uuid(),
+  targetNodeId: z.string().uuid(),
+});
+
+/**
+ * Drag a team onto a division / sub-division / section / PMU in the
+ * structure tree. Moves the dragged user AND their entire reporting
+ * subtree into that unit in one transaction, giving every member the
+ * same self-consistent placement (division + ladder or PMU, mutually
+ * exclusive). Internal supervisor links are preserved — only placement
+ * changes — so the team keeps its shape in its new home.
+ *
+ * Super Admin only. Because moving in/out of a PMU flips visibility
+ * isolation, /tasks is revalidated too.
+ */
+export async function moveTeamToUnitAction(
+  prev: AdminStructureState | undefined,
+  formData: FormData,
+): Promise<AdminStructureState> {
+  const epoch = bump(prev);
+  const guard = await requireSuperAdmin();
+  if (!guard.ok) return fail(guard.error, epoch);
+
+  const parsed = moveTeamSchema.safeParse({
+    userId: formData.get('userId'),
+    targetNodeId: formData.get('targetNodeId'),
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const [divisionRows, users, root] = await Promise.all([
+    prisma.division.findMany({
+      select: { id: true, kind: true, parentId: true, pmuParentDivisionId: true },
+    }),
+    prisma.user.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        supervisorId: true,
+        divisionId: true,
+        subDivisionId: true,
+        sectionId: true,
+        pmuId: true,
+        isPmu: true,
+      },
+    }),
+    prisma.user.findUnique({
+      where: { id: parsed.data.userId },
+      select: { id: true, name: true, isActive: true },
+    }),
+  ]);
+  if (!root || !root.isActive) return fail('User not found or inactive.', epoch);
+
+  const nodeById = new Map<string, UnitNode>(
+    divisionRows.map((d) => [
+      d.id,
+      { id: d.id, kind: d.kind, parentId: d.parentId, pmuParentDivisionId: d.pmuParentDivisionId },
+    ]),
+  );
+  const target = nodeById.get(parsed.data.targetNodeId);
+  if (!target) return fail('Target unit not found.', epoch);
+
+  const placement = resolveUnitPlacement(target, nodeById);
+  if ('error' in placement) return fail(placement.error, epoch);
+
+  const rootRow = users.find((u) => u.id === root.id);
+  if (!rootRow) return fail('User not found.', epoch);
+
+  // Scope the "team" to the root's own unit (its division, or its PMU when
+  // the root is a PMU member) before walking the reporting subtree. A
+  // cross-division report is part of nobody's visible chart, so it is left
+  // where it is rather than being silently yanked into the target.
+  const inRootScope = (u: { divisionId: string; pmuId: string | null }) =>
+    rootRow.pmuId != null ? u.pmuId === rootRow.pmuId : u.divisionId === rootRow.divisionId;
+  const scoped = users.filter(inRootScope);
+  const subtreeIds = collectReportingSubtree(
+    scoped.map((u) => ({ id: u.id, supervisorId: u.supervisorId })),
+    root.id,
+  );
+  const subtreeSet = new Set(subtreeIds);
+  const members = users.filter((u) => subtreeSet.has(u.id));
+
+  // Desired isPmu per member. Moving into a PMU makes everyone a member;
+  // moving into a ministry unit only clears the flag for members who held
+  // an actual PMU assignment (pmuId set) — legacy PMU users (isPmu=true,
+  // pmuId=null) keep their status until explicitly attached, matching
+  // updateUserAction's guard.
+  const desiredIsPmu = (u: { pmuId: string | null; isPmu: boolean }) =>
+    placement.isPmu ? true : u.pmuId != null ? false : u.isPmu;
+
+  const placementFields = {
+    divisionId: placement.divisionId,
+    subDivisionId: placement.subDivisionId,
+    sectionId: placement.sectionId,
+    pmuId: placement.pmuId,
+  };
+
+  // Idempotent no-op: skip only when EVERY member already matches the
+  // target placement (so a split team is still repaired).
+  const anyChange = members.some(
+    (u) =>
+      u.divisionId !== placementFields.divisionId ||
+      (u.subDivisionId ?? null) !== placementFields.subDivisionId ||
+      (u.sectionId ?? null) !== placementFields.sectionId ||
+      (u.pmuId ?? null) !== placementFields.pmuId ||
+      u.isPmu !== desiredIsPmu(u),
+  );
+  if (!anyChange) return ok(epoch);
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (placement.isPmu) {
+        await tx.user.updateMany({
+          where: { id: { in: subtreeIds } },
+          data: { ...placementFields, isPmu: true },
+        });
+      } else {
+        // Members leaving an actual PMU: clear isPmu + the now-meaningless
+        // role. Everyone else keeps their isPmu (preserves legacy status).
+        const leavingPmuIds = members.filter((u) => u.pmuId != null).map((u) => u.id);
+        const restIds = subtreeIds.filter((id) => !leavingPmuIds.includes(id));
+        if (leavingPmuIds.length > 0) {
+          await tx.user.updateMany({
+            where: { id: { in: leavingPmuIds } },
+            data: { ...placementFields, isPmu: false, pmuRole: null },
+          });
+        }
+        if (restIds.length > 0) {
+          await tx.user.updateMany({
+            where: { id: { in: restIds } },
+            data: placementFields,
+          });
+        }
+      }
+      await tx.auditLog.create({
+        data: {
+          actorId: guard.userId,
+          action: 'update',
+          entityType: 'user',
+          entityId: root.id,
+          before: {},
+          after: {
+            movedTeam: true,
+            leadName: root.name,
+            memberCount: subtreeIds.length,
+            targetNodeId: target.id,
+            targetKind: target.kind,
+            placement,
+          },
+        },
+      });
+    });
+  } catch (err) {
+    console.error('moveTeamToUnitAction failed:', err);
+    return fail('Could not move the team.', epoch);
+  }
+
+  revalidateAll();
+  revalidatePath('/tasks');
   return ok(epoch);
 }
 
