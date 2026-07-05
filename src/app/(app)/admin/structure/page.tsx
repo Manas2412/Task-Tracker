@@ -68,6 +68,7 @@ export default async function StructurePage({ searchParams }: PageProps) {
     if (d.kind === 'division' && d.headUserId) headUserIdByDivision.set(d.id, d.headUserId);
   }
 
+  const pmuIdByUser = new Map(allUsers.map((u) => [u.id, u.pmuId]));
   const userCountsByDivision = new Map<string, number>();
   const bump = (key: string) =>
     userCountsByDivision.set(key, (userCountsByDivision.get(key) ?? 0) + 1);
@@ -80,11 +81,17 @@ export default async function StructurePage({ searchParams }: PageProps) {
     if (u.subDivisionId) bump(u.subDivisionId);
     if (u.sectionId) bump(u.sectionId);
   }
-  // Each PMU also shows its home division's head.
+  // Each PMU also shows its home division's head — but only add them if
+  // they aren't already counted as a member of this same PMU (a head who
+  // also sits in their division's PMU would otherwise be double-counted,
+  // making the badge disagree with the chart, which dedupes for free).
   for (const d of divisions) {
     if (d.kind !== 'pmu') continue;
     const homeId = d.pmuParentDivisionId ?? d.parentId;
-    if (homeId && headUserIdByDivision.has(homeId)) bump(d.id);
+    if (!homeId) continue;
+    const headId = headUserIdByDivision.get(homeId);
+    if (!headId || pmuIdByUser.get(headId) === d.id) continue;
+    bump(d.id);
   }
 
   const treeNodes: StructureNode[] = divisions.map((d) => ({
@@ -152,8 +159,8 @@ export default async function StructurePage({ searchParams }: PageProps) {
     return u.sectionId === activeDivision.id;
   });
 
-  const officersInActiveIds = new Set(officersInActive.map((u) => u.id));
-
+  // Pool/roots/reachability are computed inside HierarchyMapper, which
+  // guarantees every officer renders exactly once.
   const officerNodes: OfficerNode[] = officersInActive.map((u) => ({
     id: u.id,
     name: u.name,
@@ -165,33 +172,6 @@ export default async function StructurePage({ searchParams }: PageProps) {
     isActive: u.isActive,
     isSelf: u.id === session.user.id,
   }));
-
-  // "In the chain" = has a parent in division, has a parent outside division,
-  // OR is the parent of someone in division. Otherwise → Unassigned.
-  const inChainIds = new Set<string>();
-  for (const u of officersInActive) {
-    if (u.supervisorId && officersInActiveIds.has(u.supervisorId)) {
-      inChainIds.add(u.id);
-      inChainIds.add(u.supervisorId);
-    } else if (u.supervisorId) {
-      // External supervisor — they're a chart root for this division.
-      inChainIds.add(u.id);
-    }
-  }
-
-  // Chart roots: in chain AND supervisor is not also in this division.
-  const rootsOnlyChartIds = officersInActive
-    .filter(
-      (u) =>
-        inChainIds.has(u.id) &&
-        (!u.supervisorId || !officersInActiveIds.has(u.supervisorId)),
-    )
-    .map((u) => u.id);
-
-  // Unassigned: in this division but not in the chain at all.
-  const unassignedIds = officersInActive
-    .filter((u) => !inChainIds.has(u.id))
-    .map((u) => u.id);
 
   // Build the inspector data for the selected user.
   const selectedUser = searchParams?.selected
@@ -315,8 +295,6 @@ export default async function StructurePage({ searchParams }: PageProps) {
           divisionName={activeDivision.name}
           parentBreadcrumb={parentBreadcrumb}
           officers={officerNodes}
-          rootOfficerIds={rootsOnlyChartIds}
-          unassignedIds={unassignedIds}
         />
       </section>
 
