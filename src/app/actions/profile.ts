@@ -136,3 +136,121 @@ export async function changePasswordAction(
 export async function returnToProfileAction() {
   redirect('/profile');
 }
+
+// ============================================================
+// updateMyProfileAction — self-service phone + work activities
+// ============================================================
+
+/**
+ * Every signed-in user can edit these two fields on their OWN row only —
+ * the where clause is bound to the session id, never a submitted id.
+ * Fields absent from the submitted form are left untouched; a field
+ * present but empty is an explicit clear (same absent-vs-empty rule as
+ * the task due-date fix).
+ */
+
+const updateMyProfileSchema = z.object({
+  phone: z
+    .string()
+    .trim()
+    .max(20, 'Phone number is too long')
+    .optional()
+    .transform((v) => {
+      if (v === undefined) return undefined;
+      if (v.length === 0) return null;
+      // Normalize: strip spaces/dashes/parens, drop a +91/91 country prefix.
+      return v.replace(/[\s\-()]/g, '').replace(/^\+?91(?=\d{10}$)/, '');
+    })
+    .refine(
+      (v) => v === undefined || v === null || /^[6-9]\d{9}$/.test(v),
+      'Enter a valid 10-digit mobile number',
+    ),
+  workActivities: z
+    .string()
+    .max(5000, 'Keep work activities under 5000 characters')
+    .optional()
+    .transform((v) => {
+      if (v === undefined) return undefined;
+      const trimmed = v.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }),
+});
+
+type UpdateMyProfileState = {
+  ok: boolean;
+  error?: string;
+  fieldErrors?: Partial<Record<'phone' | 'workActivities', string>>;
+  epoch?: number;
+};
+
+export async function updateMyProfileAction(
+  prev: UpdateMyProfileState | undefined,
+  formData: FormData,
+): Promise<UpdateMyProfileState> {
+  const epoch = (prev?.epoch ?? 0) + 1;
+
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: 'You are signed out.', epoch };
+
+  const parsed = updateMyProfileSchema.safeParse({
+    phone: formData.has('phone') ? (formData.get('phone') as string) : undefined,
+    workActivities: formData.has('workActivities')
+      ? (formData.get('workActivities') as string)
+      : undefined,
+  });
+  if (!parsed.success) {
+    const fieldErrors: Partial<Record<'phone' | 'workActivities', string>> = {};
+    for (const issue of parsed.error.issues) {
+      const key = String(issue.path[0]) as 'phone' | 'workActivities';
+      fieldErrors[key] = issue.message;
+    }
+    return { ok: false, fieldErrors, epoch };
+  }
+
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, phone: true, workActivities: true, isActive: true },
+  });
+  if (!me || !me.isActive) return { ok: false, error: 'Account not found.', epoch };
+
+  const data: Record<string, string | null> = {};
+  const before: Record<string, unknown> = {};
+  const after: Record<string, unknown> = {};
+
+  if (parsed.data.phone !== undefined && parsed.data.phone !== me.phone) {
+    data.phone = parsed.data.phone;
+    before.phone = me.phone;
+    after.phone = parsed.data.phone;
+  }
+  if (
+    parsed.data.workActivities !== undefined &&
+    parsed.data.workActivities !== me.workActivities
+  ) {
+    data.workActivities = parsed.data.workActivities;
+    before.workActivities = me.workActivities;
+    after.workActivities = parsed.data.workActivities;
+  }
+
+  if (Object.keys(data).length === 0) return { ok: true, epoch };
+
+  try {
+    await prisma.user.update({ where: { id: me.id }, data });
+    await prisma.auditLog.create({
+      data: {
+        actorId: me.id,
+        action: 'update',
+        entityType: 'user',
+        entityId: me.id,
+        before: before as object,
+        after: after as object,
+      },
+    });
+  } catch (err) {
+    console.error('updateMyProfileAction failed:', err);
+    return { ok: false, error: 'Could not save changes.', epoch };
+  }
+
+  revalidatePath('/profile');
+  revalidatePath(`/users/${me.id}`);
+  return { ok: true, epoch };
+}
