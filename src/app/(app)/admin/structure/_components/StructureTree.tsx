@@ -28,6 +28,7 @@ export type TreeUser = {
   divisionId: string;
   divisionName: string;
   divisionColour: string;
+  pmuId: string | null;
 };
 
 export type StructureNode = {
@@ -67,16 +68,21 @@ export function StructureTree({ nodes, activeId, allUsers, divisions, supervisor
   const byParent = useMemo(() => {
     const map = new Map<string | null, StructureNode[]>();
     for (const n of nodes) {
-      if (n.kind === 'pmu') continue; // PMUs grouped separately below
-      const key = n.parentId;
+      // PMU teams nest under the division they support.
+      const key = n.kind === 'pmu' ? n.pmuParentDivisionId ?? n.parentId : n.parentId;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(n);
+    }
+    // Sub-divisions and sections before PMU teams within a branch.
+    for (const list of map.values()) {
+      list.sort((a, b) => (a.kind === 'pmu' ? 1 : 0) - (b.kind === 'pmu' ? 1 : 0));
     }
     return map;
   }, [nodes]);
 
-  const pmus = nodes.filter((n) => n.kind === 'pmu');
-  const topDivisions = byParent.get(null) ?? [];
+  // Orphan safety net: a PMU with no parent division still needs a home.
+  const orphanPmus = (byParent.get(null) ?? []).filter((n) => n.kind === 'pmu');
+  const topDivisions = (byParent.get(null) ?? []).filter((n) => n.kind !== 'pmu');
 
   const openCreate = (defaults?: { kind: StructureNode['kind']; parentId?: string }) => {
     setCreateDefaults(defaults ?? { kind: 'division' });
@@ -118,19 +124,20 @@ export function StructureTree({ nodes, activeId, allUsers, divisions, supervisor
           )}
         </div>
 
-        {pmus.length > 0 ? (
+        {orphanPmus.length > 0 ? (
           <>
             <div className="px-3 pt-3 pb-1 border-t border-line-2">
-              <h2 className="section-label">PMUs</h2>
+              <h2 className="section-label">Unattached PMUs</h2>
             </div>
             <div className="p-1.5">
-              {pmus.map((p) => (
+              {orphanPmus.map((p) => (
                 <TreeNode
                   key={p.id}
                   node={p}
                   activeId={activeId}
                   depth={0}
                   onRename={setRenameTarget}
+                  onManageMembers={setMembersTarget}
                 />
               ))}
             </div>
@@ -158,6 +165,15 @@ export function StructureTree({ nodes, activeId, allUsers, divisions, supervisor
         onClose={() => setMembersTarget(null)}
         divisionId={membersTarget?.id ?? ''}
         divisionName={membersTarget?.name ?? ''}
+        pmu={
+          membersTarget?.kind === 'pmu'
+            ? {
+                id: membersTarget.id,
+                homeDivisionId:
+                  membersTarget.pmuParentDivisionId ?? membersTarget.parentId,
+              }
+            : null
+        }
         existingUsers={allUsers}
         divisions={divisions}
         supervisors={supervisors}

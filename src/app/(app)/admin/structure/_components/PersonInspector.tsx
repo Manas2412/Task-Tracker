@@ -289,6 +289,7 @@ export function PersonInspector({
           onClose={() => setMembersOpen(false)}
           divisionId={activeDivision.id}
           divisionName={activeDivision.name}
+          pmu={null}
           existingUsers={allUsers}
           divisions={divisions}
           supervisors={supervisors.filter((s) => s.id !== user.id)}

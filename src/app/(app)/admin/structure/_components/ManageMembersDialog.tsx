@@ -5,7 +5,11 @@ import { useFormState, useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 
 import { Avatar, Sheet } from '@/components/ui';
-import { changeDivisionAction, createUserAction } from '@/app/actions/admin-users';
+import {
+  changeDivisionAction,
+  createUserAction,
+  setUserPmuAction,
+} from '@/app/actions/admin-users';
 import {
   INITIAL_ADMIN_USER_STATE,
   type AdminUserState,
@@ -27,6 +31,7 @@ type ExistingUser = {
   divisionId: string;
   divisionName: string;
   divisionColour: string;
+  pmuId: string | null;
 };
 
 type ManageMembersDialogProps = {
@@ -34,6 +39,12 @@ type ManageMembersDialogProps = {
   onClose: () => void;
   divisionId: string;
   divisionName: string;
+  /**
+   * Set when managing a PMU team instead of a ministry unit. Members are
+   * matched on users.pmu_id and added via setUserPmuAction — sub-division
+   * and section are never required for PMU members.
+   */
+  pmu: { id: string; homeDivisionId: string | null } | null;
   existingUsers: ExistingUser[];
   divisions: UserFormDivisionOption[];
   supervisors: UserFormSupervisorOption[];
@@ -46,6 +57,7 @@ export function ManageMembersDialog({
   onClose,
   divisionId,
   divisionName,
+  pmu,
   existingUsers,
   divisions,
   supervisors,
@@ -65,7 +77,11 @@ export function ManageMembersDialog({
       open={open}
       onClose={onClose}
       title={`Manage members — ${divisionName}`}
-      subtitle="Add an existing user or create a new one in this unit."
+      subtitle={
+        pmu
+          ? 'Add an existing user or create a new one in this PMU team.'
+          : 'Add an existing user or create a new one in this unit.'
+      }
     >
       {open ? (
         <div className="flex flex-col gap-3">
@@ -84,11 +100,13 @@ export function ManageMembersDialog({
               onSearchChange={setSearch}
               users={existingUsers}
               divisionId={divisionId}
+              pmu={pmu}
               onDone={onClose}
             />
           ) : (
             <CreateNewTab
-              divisionId={divisionId}
+              divisionId={pmu ? pmu.homeDivisionId ?? divisionId : divisionId}
+              pmuId={pmu?.id ?? null}
               divisions={divisions}
               supervisors={supervisors}
               onDone={onClose}
@@ -130,48 +148,107 @@ function AddExistingTab({
   onSearchChange,
   users,
   divisionId,
+  pmu,
   onDone,
 }: {
   search: string;
   onSearchChange: (v: string) => void;
   users: ExistingUser[];
   divisionId: string;
+  pmu: { id: string; homeDivisionId: string | null } | null;
   onDone: () => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [movingId, setMovingId] = useState<string | null>(null);
 
-  const otherDivisionUsers = users.filter((u) => u.divisionId !== divisionId);
+  const currentMembers = pmu ? users.filter((u) => u.pmuId === pmu.id) : [];
+  const candidates = pmu
+    ? users.filter((u) => u.pmuId !== pmu.id)
+    : users.filter((u) => u.divisionId !== divisionId);
+
   const q = search.toLowerCase();
   const filtered = q
-    ? otherDivisionUsers.filter(
+    ? candidates.filter(
         (u) =>
           u.name.toLowerCase().includes(q) ||
           u.username.toLowerCase().includes(q) ||
           u.divisionName.toLowerCase().includes(q),
       )
-    : otherDivisionUsers;
+    : candidates;
 
-  const handleAdd = (userId: string) => {
+  const run = (userId: string, fd: FormData) => {
     setMovingId(userId);
-    const fd = new FormData();
-    fd.set('userId', userId);
-    fd.set('divisionId', divisionId);
     startTransition(async () => {
-      const result = await changeDivisionAction(undefined, fd);
+      const result = pmu
+        ? await setUserPmuAction(undefined, fd)
+        : await changeDivisionAction(undefined, fd);
       if (!result.ok && result.error) {
         alert(result.error);
         setMovingId(null);
       } else {
+        setMovingId(null);
         router.refresh();
-        onDone();
       }
     });
   };
 
+  const handleAdd = (userId: string) => {
+    const fd = new FormData();
+    fd.set('userId', userId);
+    if (pmu) {
+      fd.set('pmuId', pmu.id);
+    } else {
+      fd.set('divisionId', divisionId);
+    }
+    run(userId, fd);
+    if (!pmu) onDone();
+  };
+
+  const handleRemove = (userId: string) => {
+    const fd = new FormData();
+    fd.set('userId', userId);
+    fd.set('pmuId', '');
+    run(userId, fd);
+  };
+
   return (
     <div className="flex flex-col gap-2">
+      {pmu && currentMembers.length > 0 ? (
+        <div>
+          <p className="text-[11px] font-medium text-ink-2 mb-1">
+            Team members ({currentMembers.length})
+          </p>
+          <ul className="flex flex-col gap-0.5 max-h-[160px] overflow-y-auto border border-line rounded-lg p-1 mb-1">
+            {currentMembers.map((u) => (
+              <li
+                key={u.id}
+                className="flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-bg transition-colors"
+              >
+                <Avatar
+                  initials={initialsOf(u.name)}
+                  colour={u.divisionColour}
+                  size="xs"
+                  ariaLabel={u.name}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-medium text-ink truncate">{u.name}</div>
+                  <div className="text-[10px] text-ink-3 truncate">{u.designation}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemove(u.id)}
+                  disabled={pending}
+                  className="shrink-0 px-2 py-0.5 rounded-md text-[11px] font-medium text-urgent hover:bg-urgent-soft transition-colors disabled:opacity-60"
+                >
+                  {movingId === u.id ? 'Removing…' : 'Remove'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="relative">
         <i
           className="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[14px] text-ink-3"
@@ -187,7 +264,7 @@ function AddExistingTab({
         />
       </div>
 
-      <div className="max-h-[320px] overflow-y-auto -mx-1 px-1">
+      <div className="max-h-[280px] overflow-y-auto -mx-1 px-1">
         {filtered.length === 0 ? (
           <p className="text-[12px] text-ink-3 italic py-4 text-center">
             {q ? 'No matching users found.' : 'All users are already in this unit.'}
@@ -223,7 +300,7 @@ function AddExistingTab({
                     pending && 'opacity-60',
                   )}
                 >
-                  {movingId === u.id ? 'Moving…' : 'Add'}
+                  {movingId === u.id ? (pmu ? 'Adding…' : 'Moving…') : 'Add'}
                 </button>
               </li>
             ))}
@@ -236,11 +313,13 @@ function AddExistingTab({
 
 function CreateNewTab({
   divisionId,
+  pmuId,
   divisions,
   supervisors,
   onDone,
 }: {
   divisionId: string;
+  pmuId: string | null;
   divisions: UserFormDivisionOption[];
   supervisors: UserFormSupervisorOption[];
   onDone: () => void;
@@ -265,7 +344,7 @@ function CreateNewTab({
         mode="create"
         divisions={divisions}
         supervisors={supervisors}
-        defaults={{ divisionId }}
+        defaults={{ divisionId, pmuId }}
         fieldErrors={state.fieldErrors}
       />
 
