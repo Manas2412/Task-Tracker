@@ -72,6 +72,9 @@ export default async function StructurePage({ searchParams }: PageProps) {
     if (u.sectionId) {
       userCountsByDivision.set(u.sectionId, (userCountsByDivision.get(u.sectionId) ?? 0) + 1);
     }
+    if (u.pmuId) {
+      userCountsByDivision.set(u.pmuId, (userCountsByDivision.get(u.pmuId) ?? 0) + 1);
+    }
   }
 
   const treeNodes: StructureNode[] = divisions.map((d) => ({
@@ -92,6 +95,7 @@ export default async function StructurePage({ searchParams }: PageProps) {
     divisionId: u.divisionId,
     divisionName: u.division.name,
     divisionColour: u.division.avatarColour,
+    pmuId: u.pmuId,
   }));
 
   // Pick the active division — default to the first top-level division.
@@ -116,21 +120,15 @@ export default async function StructurePage({ searchParams }: PageProps) {
     );
   }
 
-  // Officers shown in the chart: users whose primary divisionId equals the active division.
-  // Sub-divisions and sections inherit the parent's chart — we use the active node's id directly.
-  const isContainer =
-    activeDivision.kind === 'division' ||
-    activeDivision.kind === 'sub_division' ||
-    activeDivision.kind === 'section';
-
-  const officersInActive = isContainer
-    ? allUsers.filter((u) => {
-        if (activeDivision.kind === 'division') return u.divisionId === activeDivision.id;
-        if (activeDivision.kind === 'sub_division')
-          return u.subDivisionId === activeDivision.id;
-        return u.sectionId === activeDivision.id;
-      })
-    : allUsers.filter((u) => u.divisionId === activeDivision.id);
+  // Officers shown in the chart: users placed in the active node — by
+  // divisionId / subDivisionId / sectionId for ministry units, by pmuId
+  // for PMU teams.
+  const officersInActive = allUsers.filter((u) => {
+    if (activeDivision.kind === 'division') return u.divisionId === activeDivision.id;
+    if (activeDivision.kind === 'sub_division') return u.subDivisionId === activeDivision.id;
+    if (activeDivision.kind === 'section') return u.sectionId === activeDivision.id;
+    return u.pmuId === activeDivision.id;
+  });
 
   const officersInActiveIds = new Set(officersInActive.map((u) => u.id));
 

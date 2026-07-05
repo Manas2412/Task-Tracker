@@ -661,6 +661,100 @@ export async function setUserSuperAdminAction(
 }
 
 // ============================================================
+// setUserPmuAction — add to / remove from a PMU team
+// ============================================================
+
+const setPmuSchema = z.object({
+  userId: z.string().uuid(),
+  pmuId: z
+    .union([z.literal(''), z.string().uuid()])
+    .transform((v) => (v && v.length > 0 ? v : null)),
+});
+
+/**
+ * Explicit PMU membership management (Structure → PMU team → Manage
+ * members). Assigning also moves the user into the PMU's home division
+ * so placement stays consistent; removing clears the PMU flag and role
+ * but leaves the division placement alone. Sub-division and section are
+ * never required for PMU members.
+ */
+export async function setUserPmuAction(
+  prev: AdminUserState | undefined,
+  formData: FormData,
+): Promise<AdminUserState> {
+  const epoch = bump(prev);
+  const guard = await requireSuperAdmin();
+  if (!guard.ok) return fail(guard.error, epoch);
+
+  const parsed = setPmuSchema.safeParse({
+    userId: formData.get('userId'),
+    pmuId: formData.get('pmuId') ?? '',
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const before = await prisma.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { id: true, divisionId: true, pmuId: true, isPmu: true, pmuRole: true },
+  });
+  if (!before) return fail('User not found.', epoch);
+  if (before.pmuId === parsed.data.pmuId) return ok(epoch);
+
+  try {
+    if (parsed.data.pmuId) {
+      const pmu = await prisma.division.findUnique({
+        where: { id: parsed.data.pmuId },
+        select: { id: true, kind: true, parentId: true, pmuParentDivisionId: true },
+      });
+      if (!pmu || pmu.kind !== 'pmu') return fail('PMU team not found.', epoch);
+
+      const homeDivisionId = pmu.pmuParentDivisionId ?? pmu.parentId;
+      const movesDivision =
+        homeDivisionId !== null && homeDivisionId !== before.divisionId;
+
+      await prisma.user.update({
+        where: { id: before.id },
+        data: {
+          pmuId: pmu.id,
+          isPmu: true,
+          ...(movesDivision
+            ? { divisionId: homeDivisionId, subDivisionId: null, sectionId: null }
+            : {}),
+        },
+      });
+      await audit(guard.userId, 'update', before.id, {
+        pmuId: before.pmuId,
+        isPmu: before.isPmu,
+        divisionId: before.divisionId,
+      }, {
+        pmuId: pmu.id,
+        isPmu: true,
+        divisionId: homeDivisionId ?? before.divisionId,
+      });
+    } else {
+      await prisma.user.update({
+        where: { id: before.id },
+        data: { pmuId: null, isPmu: false, pmuRole: null },
+      });
+      await audit(guard.userId, 'update', before.id, {
+        pmuId: before.pmuId,
+        isPmu: before.isPmu,
+        pmuRole: before.pmuRole,
+      }, {
+        pmuId: null,
+        isPmu: false,
+        pmuRole: null,
+      });
+    }
+
+    revalidateAll();
+    return ok(epoch);
+  } catch (err) {
+    console.error('setUserPmuAction failed:', err);
+    return fail('Could not update PMU membership.', epoch);
+  }
+}
+
+// ============================================================
 // changeDivisionAction — quick division reassignment
 // ============================================================
 
