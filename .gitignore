@@ -43,3 +43,6 @@ coverage/
 # Excel scratch file (kept out of the app repo)
 Project_Task_Tracker.xlsx
 Task Tracker/
+
+# Local Claude Code session config
+.claude/

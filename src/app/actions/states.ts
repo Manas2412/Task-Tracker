@@ -102,3 +102,10 @@ export const INITIAL_STRUCTURE_STATE: AdminStructureState = { ...ZERO };
 
 export type TimelineFileState = Base & { id?: string; refNo?: string };
 export const INITIAL_TF_STATE: TimelineFileState = { ...ZERO };
+
+// ------------------------------------------------------------
+// Division access delegations (src/app/actions/delegations.ts)
+// ------------------------------------------------------------
+
+export type DelegationState = Base;
+export const INITIAL_DELEGATION_STATE: DelegationState = { ...ZERO };

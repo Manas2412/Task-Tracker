@@ -1,7 +1,6 @@
-import type { Prisma } from '@prisma/client';
-
 import { prisma } from '@/lib/db';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
+import { buildVisibilityClauses } from '@/lib/visibility';
 
 /**
  * Milestone Calendar — data fetch + grid helpers.
@@ -27,56 +26,6 @@ export type CalendarEvent = {
 };
 
 // ============================================================
-// Visibility builders (duplicated minimal version of the task scoper —
-// the existing scoper doesn't take a date range and isn't worth refactoring
-// just yet)
-// ============================================================
-
-type CallerSummary = {
-  id: string;
-  hierarchySlot: string;
-  isSuperAdmin: boolean;
-  divisionId: string;
-};
-
-async function buildTaskVisibilityForCalendar(
-  me: CallerSummary,
-): Promise<Prisma.TaskWhereInput[]> {
-  // Same shape as src/lib/visibility.ts but inlined to avoid coupling.
-  const clauses: Prisma.TaskWhereInput[] = [
-    { ownerId: me.id },
-    { collaborators: { some: { userId: me.id } } },
-  ];
-  if (me.isSuperAdmin || me.hierarchySlot === 'osd') {
-    clauses.push({ visibility: 'division' });
-    return clauses;
-  }
-  if (me.hierarchySlot === 'js') {
-    clauses.push({
-      visibility: 'division',
-      jsPriorityLane: { not: null },
-    });
-    return clauses;
-  }
-  if (me.hierarchySlot === 'director') {
-    clauses.push({ visibility: 'division', divisionId: me.divisionId });
-    return clauses;
-  }
-  // Phase 1 simplification — own + direct reports' tasks
-  const directReports = await prisma.user.findMany({
-    where: { supervisorId: me.id },
-    select: { id: true },
-  });
-  if (directReports.length > 0) {
-    clauses.push({
-      visibility: 'division',
-      ownerId: { in: directReports.map((u) => u.id) },
-    });
-  }
-  return clauses;
-}
-
-// ============================================================
 // fetchCalendarEvents
 // ============================================================
 
@@ -92,11 +41,14 @@ export async function fetchCalendarEvents(opts: {
       hierarchySlot: true,
       isSuperAdmin: true,
       divisionId: true,
+      isPmu: true,
     },
   });
   if (!me) return [];
 
-  const taskVisibility = await buildTaskVisibilityForCalendar(me);
+  // Same scoper as /tasks and search — a task visible on the list is
+  // visible on the calendar, including delegated-division access.
+  const taskVisibility = await buildVisibilityClauses(me);
   const tfVisibility = await buildTfVisibilityClause(me);
 
   const [tasks, tfs] = await Promise.all([

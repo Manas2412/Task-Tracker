@@ -8,6 +8,13 @@ import { isS3Configured } from '@/lib/s3';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { initialsOf } from '@/lib/format';
+import {
+  canTransferTaskTo,
+  fetchTransferTargets,
+  getHeadedDivisionsByUser,
+  getRbacActor,
+  getSubordinateIds,
+} from '@/lib/rbac';
 import { buildVisibilityClauses } from '@/lib/visibility';
 import { CollaboratorsSection, type Candidate, type CollaboratorRow, type SubtaskScope } from './_components/CollaboratorsSection';
 import { JsLanePicker } from './_components/JsLanePicker';
@@ -99,7 +106,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
           <div className="w-14 h-14 rounded-full bg-line grid place-items-center">
             <i className="ti ti-lock text-[24px] text-ink-3" aria-hidden="true" />
           </div>
-          <h1 className="font-serif text-[20px] text-ink">You don't have access to this task</h1>
+          <h1 className="font-serif text-[20px] text-ink">You don&rsquo;t have access to this task</h1>
           <p className="text-[13px] text-ink-3 max-w-sm">
             Ask the task owner to add you on the task as a collaborator.
           </p>
@@ -120,14 +127,22 @@ export default async function TaskDetailPage({ params }: PageProps) {
   const canDelete =
     task.createdById === session.user.id || isOwner;
 
-  // Field editing: owner, creator, Director+ in same division, OSD, JS, Super Admin.
+  // Division-based RBAC context — heads (direct or delegated) get
+  // director-like powers over the divisions they head.
+  const actor = await getRbacActor(session.user.id);
+  const isHeadOfTaskDivision =
+    actor !== null && actor.headedDivisionIds.includes(task.divisionId);
+
+  // Field editing: owner, creator, Director+ in same division, division
+  // head of the task's division, OSD, JS, Super Admin.
   const canEditFields =
     task.ownerId === session.user.id ||
     task.createdById === session.user.id ||
     session.user.isSuperAdmin ||
     session.user.hierarchySlot === 'osd' ||
     session.user.hierarchySlot === 'js' ||
-    (session.user.hierarchySlot === 'director' && session.user.divisionId === task.divisionId);
+    (session.user.hierarchySlot === 'director' && session.user.divisionId === task.divisionId) ||
+    isHeadOfTaskDivision;
 
   // Collaborator editing: owner, creator, or OSD / Super Admin can manage.
   const canEditCollaborators =
@@ -225,23 +240,10 @@ export default async function TaskDetailPage({ params }: PageProps) {
     divisionColour: u.division.avatarColour,
   }));
 
-  const transferCandidates = isOwner
-    ? (await prisma.user.findMany({
-        where: { isActive: true, divisionId: task.divisionId, id: { not: task.ownerId } },
-        select: {
-          id: true,
-          name: true,
-          designation: true,
-          division: { select: { avatarColour: true } },
-        },
-        orderBy: { name: 'asc' },
-      })).map((u) => ({
-        id: u.id,
-        name: u.name,
-        designation: u.designation,
-        divisionColour: u.division.avatarColour,
-      }))
-    : [];
+  // Transfer targets follow the RBAC matrix: own division, division
+  // head(s), Super Admin — or everyone for a Super Admin owner.
+  const transferCandidates =
+    isOwner && actor ? await fetchTransferTargets(actor) : [];
 
   // Attachment editing — share the same permission as task tags.
   const canEditAttachments = await canEditTaskAttachments(session.user.id, task.id);
@@ -289,48 +291,73 @@ export default async function TaskDetailPage({ params }: PageProps) {
     task.ownerId === session.user.id ||
     task.createdById === session.user.id ||
     session.user.isSuperAdmin ||
-    session.user.hierarchySlot === 'osd';
+    session.user.hierarchySlot === 'osd' ||
+    isHeadOfTaskDivision;
 
   const canChangeDivision =
     session.user.isSuperAdmin || session.user.hierarchySlot === 'osd';
 
-  const [reassignCandidateRows, pendingReassignmentRow, allDivisions] = await Promise.all([
-    canReassign
-      ? prisma.user.findMany({
-          where: { isActive: true, id: { not: task.ownerId } },
-          select: {
-            id: true,
-            name: true,
-            designation: true,
-            division: { select: { name: true, avatarColour: true } },
-          },
-          orderBy: { name: 'asc' },
-        })
-      : Promise.resolve([]),
-    prisma.reassignmentRequest.findFirst({
-      where: { taskId: task.id, status: 'pending' },
-      include: {
-        proposedOwner: { select: { name: true } },
-        requestedBy: { select: { name: true } },
-        approver: { select: { name: true } },
-      },
-    }),
-    canChangeDivision
-      ? prisma.division.findMany({
-          where: { kind: 'division' },
-          orderBy: { displayOrder: 'asc' },
-          select: { id: true, name: true, avatarColour: true },
-        })
-      : Promise.resolve([]),
-  ]);
+  // Super Admin and OSD may reassign anywhere; everyone else only sees
+  // targets the RBAC matrix (or the legacy downward-chain rule) allows.
+  const reassignAnywhere =
+    session.user.isSuperAdmin || session.user.hierarchySlot === 'osd';
 
-  const reassignCandidates = reassignCandidateRows.map((u) => ({
-    id: u.id,
-    name: u.name,
-    designation: u.designation,
-    divisionName: u.division.name,
-    divisionColour: u.division.avatarColour,
-  }));
+  const [reassignCandidateRows, pendingReassignmentRow, allDivisions, headedByUser, subordinateIds] =
+    await Promise.all([
+      canReassign
+        ? prisma.user.findMany({
+            where: { isActive: true, id: { not: task.ownerId } },
+            select: {
+              id: true,
+              name: true,
+              designation: true,
+              divisionId: true,
+              isSuperAdmin: true,
+              division: { select: { name: true, avatarColour: true } },
+            },
+            orderBy: { name: 'asc' },
+          })
+        : Promise.resolve([]),
+      prisma.reassignmentRequest.findFirst({
+        where: { taskId: task.id, status: 'pending' },
+        include: {
+          proposedOwner: { select: { name: true } },
+          requestedBy: { select: { name: true } },
+          approver: { select: { name: true } },
+        },
+      }),
+      canChangeDivision
+        ? prisma.division.findMany({
+            where: { kind: 'division' },
+            orderBy: { displayOrder: 'asc' },
+            select: { id: true, name: true, avatarColour: true },
+          })
+        : Promise.resolve([]),
+      canReassign && !reassignAnywhere ? getHeadedDivisionsByUser() : Promise.resolve(new Map<string, string[]>()),
+      canReassign && !reassignAnywhere ? getSubordinateIds(session.user.id) : Promise.resolve(new Set<string>()),
+    ]);
+
+  const reassignCandidates = reassignCandidateRows
+    .filter(
+      (u) =>
+        reassignAnywhere ||
+        subordinateIds.has(u.id) ||
+        (actor !== null &&
+          canTransferTaskTo(actor, {
+            id: u.id,
+            divisionId: u.divisionId,
+            isSuperAdmin: u.isSuperAdmin,
+            headedDivisionIds: headedByUser.get(u.id) ?? [],
+            isActive: true,
+          })),
+    )
+    .map((u) => ({
+      id: u.id,
+      name: u.name,
+      designation: u.designation,
+      divisionName: u.division.name,
+      divisionColour: u.division.avatarColour,
+    }));
 
   const pendingReassignment = pendingReassignmentRow
     ? {

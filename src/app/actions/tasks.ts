@@ -8,6 +8,14 @@ import { Prisma } from '@prisma/client';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { parseDueDateInput } from '@/lib/format';
+import {
+  canActAsHeadOf,
+  canAssignTaskTo,
+  canTransferTaskTo,
+  getRbacActor,
+  getRbacTarget,
+} from '@/lib/rbac';
+import { buildTfVisibilityClause } from '@/lib/timeline-files';
 
 async function nextTaskRefNumber(
   divisionId: string,
@@ -85,7 +93,10 @@ async function canEditTask(
   if (caller.isSuperAdmin) return true;
   if (caller.hierarchySlot === 'js' || caller.hierarchySlot === 'osd') return true;
   if (caller.hierarchySlot === 'director' && caller.divisionId === task.divisionId) return true;
-  return false;
+  // Division heads (direct or via active delegation) manage the tasks of
+  // divisions they head — heads are not always director-slot users.
+  const actor = await getRbacActor(callerId);
+  return actor !== null && canActAsHeadOf(actor, task.divisionId);
 }
 
 // ============================================================
@@ -159,12 +170,45 @@ export async function createTaskAction(
 
   const meRow = await prisma.user.findUnique({
     where: { id: me.id },
-    select: { id: true, divisionId: true },
+    select: { id: true, divisionId: true, isSuperAdmin: true, hierarchySlot: true },
   });
   if (!meRow) return fail('Your account could not be found.', epoch);
 
+  // Division guard: creating a task in another division is a head / OSD /
+  // Super Admin power — everyone else creates in their own division. The
+  // one exception is spawning from a Timeline File: any viewer of the
+  // file may target a division it is marked to (PERMISSIONS.md §3).
+  const targetDivisionId = parsed.data.divisionId ?? meRow.divisionId;
+  if (targetDivisionId !== meRow.divisionId) {
+    const actor = await getRbacActor(me.id);
+    let allowed =
+      meRow.isSuperAdmin ||
+      meRow.hierarchySlot === 'osd' ||
+      (actor !== null && canActAsHeadOf(actor, targetDivisionId));
+    if (!allowed && parsed.data.linkedTimelineFileId) {
+      const tfClause = await buildTfVisibilityClause({
+        id: meRow.id,
+        hierarchySlot: meRow.hierarchySlot,
+        isSuperAdmin: meRow.isSuperAdmin,
+        divisionId: meRow.divisionId,
+      });
+      const visibleAndMarked = await prisma.timelineFile.count({
+        where: {
+          AND: [
+            { id: parsed.data.linkedTimelineFileId, archivedAt: null },
+            { markedTo: { some: { divisionId: targetDivisionId } } },
+            tfClause,
+          ],
+        },
+      });
+      allowed = visibleAndMarked > 0;
+    }
+    if (!allowed) {
+      return fail('You can only create tasks in your own division.', epoch);
+    }
+  }
+
   try {
-    const targetDivisionId = parsed.data.divisionId ?? meRow.divisionId;
     const task = await prisma.$transaction(async (tx) => {
       const refNumber = await nextTaskRefNumber(targetDivisionId, tx);
       return tx.task.create({
@@ -327,7 +371,7 @@ export async function updateTaskStatusAction(
     });
 
     if (!noChange) {
-      const notifs: { userId: string; type: string; payload: Record<string, unknown> }[] = [];
+      const notifs: Prisma.NotificationCreateManyInput[] = [];
 
       if (task.ownerId !== me.id) {
         notifs.push({
@@ -1536,7 +1580,7 @@ export async function reassignTaskAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, ownerId: true, dueDate: true },
+    select: { id: true, name: true, ownerId: true, createdById: true, divisionId: true, dueDate: true },
   });
   if (!task) return fail('Task not found.', epoch);
   if (task.ownerId === parsed.data.newOwnerId) return fail('Already the owner.', epoch);
@@ -1553,8 +1597,42 @@ export async function reassignTaskAction(
   });
   if (!meRow) return fail('User not found.', epoch);
 
+  const [actor, targetRbac] = await Promise.all([
+    getRbacActor(me.id),
+    getRbacTarget(parsed.data.newOwnerId),
+  ]);
+  if (!actor || !targetRbac) return fail('User not found.', epoch);
+
+  // Initiation guard: owner, creator, Super Admin, OSD, or the head of the
+  // task's division. Matches the surface the UI shows, enforced here.
+  const mayInitiate =
+    task.ownerId === me.id ||
+    task.createdById === me.id ||
+    meRow.isSuperAdmin ||
+    meRow.hierarchySlot === 'osd' ||
+    canActAsHeadOf(actor, task.divisionId);
+  if (!mayInitiate) {
+    return fail('Only the owner, creator, or head of division can reassign this task.', epoch);
+  }
+
   const isDownward = await isSubordinateOf(parsed.data.newOwnerId, me.id);
-  const isFree = isDownward || meRow.isSuperAdmin || meRow.hierarchySlot === 'osd';
+  // Free (no approval): Super Admin / OSD anywhere; downward within own
+  // chain (existing hierarchy rule); a Division Head assigning the tasks
+  // of a division they head to users within their division scope.
+  const isFree =
+    isDownward ||
+    meRow.isSuperAdmin ||
+    meRow.hierarchySlot === 'osd' ||
+    (canActAsHeadOf(actor, task.divisionId) && canAssignTaskTo(actor, targetRbac));
+
+  if (!isFree && !canTransferTaskTo(actor, targetRbac)) {
+    // Approval requests must still stay inside the transfer matrix —
+    // no proposing owners across division lines.
+    return fail(
+      'You can reassign within your division, to your division head, or to Super Admin.',
+      epoch,
+    );
+  }
 
   if (isFree) {
     await prisma.$transaction([
@@ -1750,12 +1828,25 @@ export async function resolveReassignmentAction(
 }
 
 // ============================================================
-// transferTask — owner transfers task to another same-division user
+// transferTask — owner hands the task off per the RBAC transfer matrix
 // ============================================================
 
+/**
+ * Allowed targets (enforced in `canTransferTaskTo`, src/lib/rbac/rules.ts):
+ *   Super Admin   → anyone
+ *   Division Head → own division(s), another Division Head, Super Admin
+ *   Division User → own division, their Division Head, Super Admin
+ * A comment is mandatory on every transfer. The full trail lands in
+ * task_activity (with the comment), the comment thread, and audit_log.
+ */
 const transferTaskSchema = z.object({
   taskId: z.string().uuid(),
   targetUserId: z.string().uuid(),
+  comment: z
+    .string()
+    .trim()
+    .min(1, 'A comment is required to transfer a task')
+    .max(2000, 'Comment is too long'),
 });
 
 export async function transferTaskAction(
@@ -1769,8 +1860,14 @@ export async function transferTaskAction(
   const parsed = transferTaskSchema.safeParse({
     taskId: formData.get('taskId'),
     targetUserId: formData.get('targetUserId'),
+    comment: formData.get('comment'),
   });
-  if (!parsed.success) return fail('Invalid input.', epoch);
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues)
+      fieldErrors[String(issue.path[0])] = issue.message;
+    return { ok: false, error: fieldErrors.comment, fieldErrors, epoch };
+  }
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
@@ -1787,7 +1884,21 @@ export async function transferTaskAction(
     select: { id: true, name: true, isActive: true, divisionId: true },
   });
   if (!target || !target.isActive) return fail('Target user not found or inactive.', epoch);
-  if (target.divisionId !== task.divisionId) return fail('You can only transfer to a user in the same division.', epoch);
+
+  const [actor, targetRbac] = await Promise.all([
+    getRbacActor(me.id),
+    getRbacTarget(target.id),
+  ]);
+  if (!actor) return fail('Your account could not be found.', epoch);
+  if (!targetRbac || !canTransferTaskTo(actor, targetRbac)) {
+    return fail(
+      'You can transfer within your division, to your division head, or to Super Admin.',
+      epoch,
+    );
+  }
+
+  const comment = parsed.data.comment;
+  const mentions = await resolveMentions(comment);
 
   const updates: Parameters<typeof prisma.task.update>[0]['data'] = {
     ownerId: target.id,
@@ -1796,17 +1907,48 @@ export async function transferTaskAction(
     updates.visibility = 'division';
   }
 
-  await prisma.$transaction([
-    prisma.task.update({ where: { id: task.id }, data: updates }),
-    prisma.taskActivity.create({
-      data: {
-        taskId: task.id,
-        actorId: me.id,
-        eventType: 'task_transferred',
-        payload: { from: me.id, fromName: me.name, to: target.id, toName: target.name },
-      },
-    }),
-  ]);
+  try {
+    await prisma.$transaction([
+      prisma.task.update({ where: { id: task.id }, data: updates }),
+      prisma.taskActivity.create({
+        data: {
+          taskId: task.id,
+          actorId: me.id,
+          eventType: 'task_transferred',
+          payload: {
+            from: me.id,
+            fromName: me.name,
+            to: target.id,
+            toName: target.name,
+            comment,
+          },
+        },
+      }),
+      // The mandatory transfer note joins the comment thread so the
+      // hand-off reason is visible where the discussion lives.
+      prisma.taskComment.create({
+        data: {
+          taskId: task.id,
+          userId: me.id,
+          body: comment,
+          mentions,
+        },
+      }),
+      prisma.auditLog.create({
+        data: {
+          actorId: me.id,
+          action: 'update',
+          entityType: 'task',
+          entityId: task.id,
+          before: { ownerId: task.ownerId },
+          after: { ownerId: target.id, transfer: true, comment },
+        },
+      }),
+    ]);
+  } catch (err) {
+    console.error('transferTaskAction failed:', err);
+    return fail('Could not transfer the task.', epoch);
+  }
 
   const notifications = [
     prisma.notification.create({
@@ -1819,6 +1961,7 @@ export async function transferTaskAction(
           assignedById: me.id,
           assignedByName: me.name ?? null,
           dueDate: task.dueDate?.toISOString() ?? null,
+          comment,
         },
       },
     }),
@@ -1830,7 +1973,7 @@ export async function transferTaskAction(
         data: {
           userId: task.createdById,
           type: 'task_transferred',
-          payload: { taskId: task.id, taskName: task.name, fromName: me.name, toName: target.name },
+          payload: { taskId: task.id, taskName: task.name, fromName: me.name, toName: target.name, comment },
         },
       }),
     );

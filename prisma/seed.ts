@@ -936,6 +936,26 @@ async function main() {
     }
   }
 
+  // ── Set division heads (division-based RBAC) ────────────
+  console.log('Setting division heads…');
+  const HEAD_BY_DIVISION: Record<string, string> = {
+    [DIV.OFFICE]: BOOTSTRAP_USERNAME,
+    [DIV.NSDF]: 'zuber',
+    [DIV.SGM]: 'harilal',
+    [DIV.ABD]: 'zuber',
+    [DIV.KI]: 'chanchal',
+    [DIV.MEDIA]: 'ayushman',
+  };
+  for (const [divName, username] of Object.entries(HEAD_BY_DIVISION)) {
+    const headId = usernameToId[username];
+    if (headId && divMap[divName]) {
+      await prisma.division.update({
+        where: { id: divMap[divName] },
+        data: { headUserId: headId },
+      });
+    }
+  }
+
   console.log('\nSeed complete.');
   console.log(`Created ${Object.keys(divMap).length} divisions, ${USERS.length + 1} users.`);
   console.log(`Sign in at /login. OSD: existing password preserved. Others: division-wise passwords.`);

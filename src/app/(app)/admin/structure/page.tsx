@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 
+import { DivisionHeadCard, type HeadCandidate } from './_components/DivisionHeadCard';
 import { HierarchyMapper, type OfficerNode } from './_components/HierarchyMapper';
 import {
   PersonInspector,
@@ -18,6 +19,24 @@ import type {
 type PageProps = {
   searchParams?: { division?: string; selected?: string };
 };
+
+function headCandidateOf(
+  u: {
+    id: string;
+    name: string;
+    designation: string;
+    division: { name: string; avatarColour: string };
+  } | null,
+): HeadCandidate | null {
+  if (!u) return null;
+  return {
+    id: u.id,
+    name: u.name,
+    designation: u.designation,
+    divisionName: u.division.name,
+    divisionColour: u.division.avatarColour,
+  };
+}
 
 export default async function StructurePage({ searchParams }: PageProps) {
   const session = await auth();
@@ -204,6 +223,8 @@ export default async function StructurePage({ searchParams }: PageProps) {
         contractRole: selectedUser.contractRole ?? '',
         divisionId: selectedUser.divisionId,
         subDivisionId: selectedUser.subDivisionId,
+        sectionId: selectedUser.sectionId,
+        pmuId: selectedUser.pmuId,
         supervisorId: selectedUser.supervisorId,
         isSuperAdmin: selectedUser.isSuperAdmin,
       },
@@ -215,6 +236,7 @@ export default async function StructurePage({ searchParams }: PageProps) {
     id: d.id,
     name: d.name,
     parentId: d.parentId,
+    pmuParentDivisionId: d.pmuParentDivisionId,
     kind: d.kind as 'division' | 'sub_division' | 'section' | 'pmu',
   }));
 
@@ -248,8 +270,27 @@ export default async function StructurePage({ searchParams }: PageProps) {
         />
       </aside>
 
-      {/* Centre — Hierarchy Mapper */}
+      {/* Centre — Division head + Hierarchy Mapper */}
       <section>
+        {activeDivision.kind === 'division' ? (
+          <DivisionHeadCard
+            divisionId={activeDivision.id}
+            divisionName={activeDivision.name}
+            currentHead={headCandidateOf(
+              allUsers.find((u) => u.id === activeDivision.headUserId) ?? null,
+            )}
+            candidates={allUsers
+              .filter((u) => u.isActive)
+              .map((u) => ({
+                id: u.id,
+                name: u.name,
+                designation: u.designation,
+                divisionName: u.division.name,
+                divisionColour: u.division.avatarColour,
+              }))}
+            canEdit={session.user.isSuperAdmin === true}
+          />
+        ) : null}
         <HierarchyMapper
           divisionName={activeDivision.name}
           parentBreadcrumb={parentBreadcrumb}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { initialsOf } from '@/lib/format';
@@ -38,6 +38,7 @@ export function UserPicker({
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const listboxId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -149,7 +150,9 @@ export function UserPicker({
           placeholder={placeholder}
           disabled={disabled}
           autoComplete="off"
+          role="combobox"
           aria-expanded={open}
+          aria-controls={listboxId}
           aria-haspopup="listbox"
           aria-autocomplete="list"
           className={cn(
@@ -174,6 +177,7 @@ export function UserPicker({
 
       {open && filtered.length > 0 ? (
         <ul
+          id={listboxId}
           role="listbox"
           className="absolute left-0 right-0 top-full mt-1 z-30 rounded-xl border border-line bg-panel shadow-xl overflow-hidden max-h-[240px] overflow-y-auto"
         >

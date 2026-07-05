@@ -57,6 +57,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     id: d.id,
     name: d.name,
     parentId: d.parentId,
+    pmuParentDivisionId: d.pmuParentDivisionId,
     kind: d.kind as 'division' | 'sub_division' | 'section' | 'pmu',
   }));
 
@@ -76,6 +77,8 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     divisionColour: u.division.avatarColour,
     subDivisionId: u.subDivisionId,
     subDivisionName: u.subDivision?.name ?? null,
+    sectionId: u.sectionId,
+    pmuId: u.pmuId,
     supervisorId: u.supervisorId,
     isActive: u.isActive,
     isSuperAdmin: u.isSuperAdmin,
