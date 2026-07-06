@@ -97,33 +97,37 @@ export default async function TasksPage({ searchParams }: PageProps) {
             </span>
           </div>
 
-          {tasks.length === 0 ? (
-            <EmptyState filter={filter} />
-          ) : grouped ? (
-            <div className="space-y-6">
-              {grouped.map((group) => (
-                <section key={group.divisionId}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: group.colour }}
-                    />
-                    <h3 className="text-[12px] font-medium text-ink-2 uppercase tracking-[0.06em]">
-                      {group.divisionName}
-                    </h3>
-                    <span className="text-[11px] text-ink-3">
-                      {group.tasks.length}
-                    </span>
-                  </div>
-                  <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
-                    {group.tasks.map((t) => (
-                      <TaskRow key={t.id} task={t} meId={me.id} isAdminLike={isAdminLike} />
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
+          {grouped ? (
+            grouped.length === 0 ? (
+              <EmptyState filter={filter} />
+            ) : (
+              <div className="space-y-6">
+                {grouped.map((group) => (
+                  <section key={group.divisionId}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: group.colour }}
+                      />
+                      <h3 className="text-[12px] font-medium text-ink-2 uppercase tracking-[0.06em]">
+                        {group.divisionName}
+                      </h3>
+                      <span className="text-[11px] text-ink-3">
+                        {group.tasks.length}
+                      </span>
+                    </div>
+                    <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
+                      {group.tasks.map((t) => (
+                        <TaskRow key={t.id} task={t} meId={me.id} isAdminLike={isAdminLike} />
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            )
           ) : (
+            // Always render all three segments — even empty ones — so the
+            // three-part structure is visible on every login.
             <div className="space-y-6">
               {segments!.map((segment) => (
                 <section key={segment.key} aria-label={segment.label}>
@@ -144,11 +148,17 @@ export default async function TasksPage({ searchParams }: PageProps) {
                       </span>
                     ) : null}
                   </div>
-                  <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
-                    {segment.tasks.map((t) => (
-                      <TaskRow key={t.id} task={t} meId={me.id} isAdminLike={isAdminLike} />
-                    ))}
-                  </ul>
+                  {segment.tasks.length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-line bg-panel px-3 py-3 text-[12px] text-ink-3">
+                      {segment.emptyLabel}
+                    </p>
+                  ) : (
+                    <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
+                      {segment.tasks.map((t) => (
+                        <TaskRow key={t.id} task={t} meId={me.id} isAdminLike={isAdminLike} />
+                      ))}
+                    </ul>
+                  )}
                 </section>
               ))}
             </div>
@@ -215,12 +225,14 @@ function TaskRow({
  *                             for a PMU member, the rest of their PMU team's)
  *   3. Personal tasks — my personal-visibility tasks, visible to me only
  * Every visible task falls in exactly one segment (personal vs division,
- * division split by ownership). Empty segments are hidden.
+ * division split by ownership). All three segments are always shown, even
+ * when empty, so the structure is consistent on every login.
  */
 type RelationSegment = {
   key: 'assigned' | 'others' | 'personal';
   label: string;
   subtitle?: string;
+  emptyLabel: string;
   icon: string;
   tasks: VisibleTask[];
 };
@@ -234,11 +246,20 @@ function segmentTasksByRelation(
   const assigned = tasks.filter((t) => t.visibility === 'division' && t.ownerId === meId);
   const others = tasks.filter((t) => t.visibility === 'division' && t.ownerId !== meId);
 
-  const segments: RelationSegment[] = [
-    { key: 'assigned', label: 'Tasks assigned to me', icon: 'ti-user-check', tasks: assigned },
+  return [
+    {
+      key: 'assigned',
+      label: 'Tasks assigned to me',
+      emptyLabel: 'No tasks are assigned to you.',
+      icon: 'ti-user-check',
+      tasks: assigned,
+    },
     {
       key: 'others',
       label: isPmu ? 'Other tasks of my PMU team' : 'Other tasks of my division',
+      emptyLabel: isPmu
+        ? 'No other tasks in your PMU team.'
+        : 'No other tasks in your division.',
       icon: 'ti-building',
       tasks: others,
     },
@@ -246,11 +267,11 @@ function segmentTasksByRelation(
       key: 'personal',
       label: 'Personal tasks',
       subtitle: 'Visible to me only',
+      emptyLabel: 'You have not created any personal tasks.',
       icon: 'ti-lock',
       tasks: personal,
     },
   ];
-  return segments.filter((s) => s.tasks.length > 0);
 }
 
 type DivisionGroup = {
