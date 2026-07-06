@@ -109,3 +109,22 @@ export const INITIAL_TF_STATE: TimelineFileState = { ...ZERO };
 
 export type DelegationState = Base;
 export const INITIAL_DELEGATION_STATE: DelegationState = { ...ZERO };
+
+// ------------------------------------------------------------
+// JS Engagements (src/app/actions/engagements.ts)
+// ------------------------------------------------------------
+
+export type EngagementState = Base & { engagementId?: string };
+export const INITIAL_ENGAGEMENT_STATE: EngagementState = { ...ZERO };
+
+/** Full engagement returned by the detail read (used by the detail sheet). */
+export type EngagementDetailData = {
+  id: string;
+  title: string;
+  startsAt: string; // ISO — serialised across the RSC/action boundary
+  venue: string | null;
+  momNotes: string | null;
+  createdBy: { id: string; name: string };
+  participants: { id: string; name: string }[];
+  attachments: { id: string; fileName: string; fileUrl: string }[];
+};

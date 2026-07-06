@@ -180,3 +180,15 @@ Archived items remain in the database and surface via the audit trail. The Super
 - Spawning a task from a Timeline File always produces a division-level task, so the same rule applies there; the former "any viewer of the file" exception is removed.
 - Subtasks still inherit the parent's visibility — an owner breaking down a head-given division task produces division-visible subtasks by design.
 - Known residual path: a same-division ownership transfer of a `personal` task still auto-flips it to `division` (§5.6) so it does not vanish from the recipient's view.
+
+### 5.12 JS Engagements (Office of JS meetings on the calendar)
+
+The planning calendar (`/calendar`) shows three item kinds — **JS engagements** (blue), **task deadlines** (red), and **Timeline file deadlines** (amber). Tasks and Timeline files reuse their existing visibility scopers (`buildVisibilityClauses`, `buildTfVisibilityClause`), so a division user sees only their division's task deadlines and a PMU member only their team's (§5.2) — calendar and lists stay consistent.
+
+JS Engagements are the Office of JS's own layer:
+
+- **Seeing and managing engagements is limited to Office-of-JS members and Super Admins.** "Office-of-JS member" = `users.division_id` equals the seeded `Office of JS` division. Everyone else does not see engagements on the calendar at all, and cannot create or edit them.
+- Both gates are the single predicate `canAccessEngagements` (src/lib/engagements.ts); the server actions (`createEngagementAction` / `updateEngagementAction` / `deleteEngagementAction` / `getEngagementDetail`) re-check it from the DB.
+- Fields: title (required), date + start time (required; stored as one `starts_at` instant, IST wall-clock), venue or meeting link (optional), participants (existing active users), MoM notes, and optional attachment links. Attachments reuse the polymorphic `attachments` table (`owner_type = 'js_engagement'`).
+- Every engagement is anchored to the Office of JS division, so the caller's own membership is the only visibility gate needed.
+- From any date the calendar offers quick actions: **Add JS engagement** (managers only), **Create task** (opens Quick Create pre-dated), and **Create timeline file** (OSD / Super Admin). Clicking a task/TF opens its page; clicking an engagement opens its detail sheet with edit/delete for managers.

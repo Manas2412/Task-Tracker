@@ -1,9 +1,9 @@
-import Link from 'next/link';
-
 import { cn } from '@/lib/utils';
 
 import type { CalendarEvent, MonthDay } from '@/lib/calendar';
 import { isoDay } from '@/lib/calendar';
+import { DayCellButton } from './DateControls';
+import { EventChip } from './EventItem';
 
 type MonthViewProps = {
   grid: MonthDay[];
@@ -40,40 +40,43 @@ export function MonthView({ grid, events }: MonthViewProps) {
         {grid.map((cell, i) => {
           const key = isoDay(cell.date);
           const dayEvents = byDay.get(key) ?? [];
-          const visible = dayEvents.slice(0, 2);
+          const visible = dayEvents.slice(0, 3);
           const overflow = dayEvents.length - visible.length;
 
           return (
             <div
               key={i}
               className={cn(
-                'border-r border-b border-line-2 min-h-[88px] md:min-h-[110px] p-1.5 flex flex-col gap-1',
-                // Right edge / bottom edge clean-up
+                'border-r border-b border-line-2 min-h-[92px] md:min-h-[116px] p-1.5 flex flex-col gap-1',
                 (i + 1) % 7 === 0 && 'border-r-0',
                 i >= 35 && 'border-b-0',
                 !cell.isCurrentMonth && 'bg-bg/50',
               )}
             >
               <div className="flex items-center justify-between">
-                <span
-                  className={cn(
-                    'text-[11px] font-medium leading-none',
-                    cell.isCurrentMonth ? 'text-ink-2' : 'text-ink-4',
-                    cell.isToday && 'text-accent',
-                  )}
+                <DayCellButton
+                  dateIso={key}
+                  ariaLabel={`Add on ${key}`}
+                  className="px-1 py-0.5 -mx-0.5"
                 >
-                  {cell.isToday ? (
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent text-white text-[10px] font-medium">
-                      {cell.date.getDate()}
-                    </span>
-                  ) : (
-                    cell.date.getDate()
-                  )}
-                </span>
-                {dayEvents.length > 0 ? (
-                  <span className="text-[9px] text-ink-3 leading-none">
-                    {dayEvents.length}
+                  <span
+                    className={cn(
+                      'text-[11px] font-medium leading-none',
+                      cell.isCurrentMonth ? 'text-ink-2' : 'text-ink-4',
+                      cell.isToday && 'text-accent',
+                    )}
+                  >
+                    {cell.isToday ? (
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent text-white text-[10px] font-medium">
+                        {cell.date.getDate()}
+                      </span>
+                    ) : (
+                      cell.date.getDate()
+                    )}
                   </span>
+                </DayCellButton>
+                {dayEvents.length > 0 ? (
+                  <span className="text-[9px] text-ink-3 leading-none">{dayEvents.length}</span>
                 ) : null}
               </div>
 
@@ -92,31 +95,5 @@ export function MonthView({ grid, events }: MonthViewProps) {
         })}
       </div>
     </div>
-  );
-}
-
-// ------------------------------------------------------------
-// EventChip
-// ------------------------------------------------------------
-
-function EventChip({ event }: { event: CalendarEvent }) {
-  const isTask = event.kind === 'task';
-  return (
-    <Link
-      href={event.href}
-      title={`${event.title}\n${event.sub}`}
-      className={cn(
-        'flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate transition-colors',
-        isTask
-          ? 'bg-primary-soft text-primary hover:bg-primary-soft/80'
-          : 'bg-accent-soft text-accent hover:bg-accent-soft/80',
-      )}
-    >
-      <i
-        className={cn('ti text-[10px] shrink-0', isTask ? 'ti-flag-3' : 'ti-file-stack')}
-        aria-hidden="true"
-      />
-      <span className="truncate">{event.title}</span>
-    </Link>
   );
 }

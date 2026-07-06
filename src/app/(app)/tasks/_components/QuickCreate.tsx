@@ -27,13 +27,16 @@ import { cn } from '@/lib/utils';
 // Context
 // ------------------------------------------------------------
 
+/** Optional values to prefill when opening the sheet (e.g. from the calendar). */
+export type QuickCreatePrefill = { dueDate?: string };
+
 type QuickCreateContextValue = {
-  open: () => void;
+  open: (prefill?: QuickCreatePrefill) => void;
 };
 
 const QuickCreateContext = createContext<QuickCreateContextValue | null>(null);
 
-function useQuickCreate(): QuickCreateContextValue {
+export function useQuickCreate(): QuickCreateContextValue {
   const ctx = useContext(QuickCreateContext);
   if (!ctx) throw new Error('useQuickCreate must be used inside QuickCreateProvider');
   return ctx;
@@ -58,8 +61,12 @@ export function QuickCreateProvider({
   children,
 }: ProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [prefill, setPrefill] = useState<QuickCreatePrefill | null>(null);
   const close = () => setIsOpen(false);
-  const open = () => setIsOpen(true);
+  const open = (p?: QuickCreatePrefill) => {
+    setPrefill(p ?? null);
+    setIsOpen(true);
+  };
 
   return (
     <QuickCreateContext.Provider value={{ open }}>
@@ -72,6 +79,7 @@ export function QuickCreateProvider({
             defaultDivisionId={defaultDivisionId}
             s3Configured={s3Configured}
             canCreateDivisionTasks={canCreateDivisionTasks}
+            prefillDueDate={prefill?.dueDate}
           />
         ) : null}
       </Sheet>
@@ -106,6 +114,8 @@ type FormProps = {
   defaultDivisionId: string;
   s3Configured: boolean;
   canCreateDivisionTasks: boolean;
+  /** Prefilled due date (YYYY-MM-DD), e.g. when created from the calendar. */
+  prefillDueDate?: string;
 };
 
 const PRIORITIES = [
@@ -133,6 +143,7 @@ function QuickCreateForm({
   defaultDivisionId,
   s3Configured,
   canCreateDivisionTasks,
+  prefillDueDate,
 }: FormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -141,7 +152,8 @@ function QuickCreateForm({
     INITIAL_CREATE_STATE,
   );
 
-  const [showMore, setShowMore] = useState(false);
+  // Open the details section when a due date is prefilled so it is visible.
+  const [showMore, setShowMore] = useState(!!prefillDueDate);
   const [priority, setPriority] = useState<(typeof PRIORITIES)[number]['value']>('low');
   const [visibility, setVisibility] = useState<(typeof VISIBILITIES)[number]['value']>(
     canCreateDivisionTasks ? 'division' : 'personal',
@@ -312,6 +324,7 @@ function QuickCreateForm({
             <input
               name="dueDate"
               type="date"
+              defaultValue={prefillDueDate}
               className={cn(
                 'w-full px-3 py-2.5 rounded-lg border bg-panel text-[14px] text-ink outline-none focus:border-ink',
                 state.fieldErrors?.dueDate ? 'border-urgent' : 'border-line',

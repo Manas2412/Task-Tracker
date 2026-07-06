@@ -169,6 +169,10 @@ Deletion vs archive:
 - Archive (soft-delete, recoverable) — anyone with edit rights (owner, creator, director/head of the division, OSD, JS, Super Admin).
 - Timeline File — hard-delete is Super Admin only (any file, regardless of creator); archive is OSD or Super Admin.
 
+Planning calendar (`/calendar`):
+- One view for three kinds — **JS engagements** (blue), **task deadlines** (red, every visible task with a due date), **Timeline file deadlines** (amber). Tasks/TFs reuse their normal scopers, so division-only and PMU-team-only visibility hold on the calendar exactly as on the lists.
+- **JS Engagements are Office-of-JS-only**: only members of the seeded `Office of JS` division and Super Admins can see or manage them (`canAccessEngagements`, `src/lib/engagements.ts`; model `JsEngagement`). See PERMISSIONS.md §5.12.
+
 Full matrix lives in [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
 
 ## Do NOT build yet — out of Phase 1 scope

@@ -101,6 +101,7 @@ enum AttachmentOwnerType {
   timeline_file
   timeline_file_source
   timeline_file_action
+  js_engagement
 }
 
 enum AttachmentSource {
@@ -233,6 +234,9 @@ model User {
   delegationsReceived   DivisionAccessDelegation[] @relation("DelegationTo")
   delegationsRevoked    DivisionAccessDelegation[] @relation("DelegationRevokedBy")
 
+  createdEngagements    JsEngagement[]             @relation("EngagementCreatedBy")
+  engagementParts       JsEngagementParticipant[]  @relation("EngagementParticipant")
+
   @@index([supervisorId])
   @@index([divisionId])
   @@index([hierarchySlot])
@@ -279,6 +283,7 @@ model Division {
   tasks                    Task[]
   markedTimelineFiles      TimelineFileMarkedTo[]
   accessDelegations        DivisionAccessDelegation[]
+  engagements              JsEngagement[] @relation("EngagementDivision")
 
   @@index([parentId])
   @@index([kind])
@@ -624,4 +629,46 @@ model AuditLog {
   @@index([actorId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@map("audit_log")
+}
+
+// ============================================================
+// JS Engagements (Office of JS meetings on the calendar)
+// ============================================================
+
+/// A meeting/engagement scheduled by the Office of JS. Visible to and
+/// managed by Office-of-JS members and Super Admins only. `startsAt`
+/// carries both the date and the start time; `venue` doubles as a free-
+/// text venue or meeting link. Attachments reuse the polymorphic
+/// Attachment table with ownerType `js_engagement`.
+model JsEngagement {
+  id                       String    @id @default(uuid()) @db.Uuid
+  title                    String
+  startsAt                 DateTime  @map("starts_at") @db.Timestamptz(6)
+  venue                    String?
+  momNotes                 String?   @map("mom_notes")
+  divisionId               String    @map("division_id") @db.Uuid
+  createdById              String    @map("created_by") @db.Uuid
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt               DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  division                 Division  @relation("EngagementDivision", fields: [divisionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy                User      @relation("EngagementCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  participants             JsEngagementParticipant[]
+
+  @@index([startsAt])
+  @@index([divisionId])
+  @@map("js_engagements")
+}
+
+model JsEngagementParticipant {
+  engagementId             String    @map("engagement_id") @db.Uuid
+  userId                   String    @map("user_id") @db.Uuid
+
+  engagement               JsEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  user                     User         @relation("EngagementParticipant", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([engagementId, userId])
+  @@index([userId])
+  @@map("js_engagement_participants")
 }

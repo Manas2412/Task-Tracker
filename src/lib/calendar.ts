@@ -1,30 +1,60 @@
-import { nowIST, isoDay as isoDayIST } from '@/lib/date';
+import { nowIST, isoDay as isoDayIST, formatTimeIST } from '@/lib/date';
 import { prisma } from '@/lib/db';
 import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
+import {
+  canAccessEngagements,
+  fetchEngagements,
+  getOfficeOfJsDivisionId,
+} from '@/lib/engagements';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
 import { buildVisibilityClauses } from '@/lib/visibility';
 
 /**
- * Milestone Calendar — data fetch + grid helpers.
+ * Unified planning calendar — data fetch + grid helpers.
  *
- * "What appears" per PRD §5.4:
- *   - Tasks with the milestone toggle on
- *   - All Timeline File deadlines
+ * Three item kinds share one grid, each visibility-scoped to the caller:
+ *   - engagement — Office of JS meetings (only OJS members + Super Admins)
+ *   - task       — every visible task with a due date (same scoper as /tasks,
+ *                  so division users see only their division and PMU members
+ *                  only their team)
+ *   - tf         — Timeline File deadlines the caller can see
  *
- * Both surfaces are visibility-scoped per the caller's permissions.
+ * Filters (kinds, my-items, division, priority, status) are applied at the
+ * query layer so the grid only ever holds what should be shown.
  */
+
+export type CalendarKind = 'engagement' | 'task' | 'tf';
 
 export type CalendarEvent = {
   id: string;
-  /** "task" → /tasks/[id]; "tf" → /timeline-files/[id] */
-  kind: 'task' | 'tf';
+  kind: CalendarKind;
   title: string;
   date: Date;
-  href: string;
-  /** Extra context shown on hover / in list view */
+  /** Detail link for tasks/TFs; null for engagements (open a detail sheet). */
+  href: string | null;
+  /** For engagements — opens the detail sheet by id. */
+  engagementId?: string;
+  /** Extra context shown on hover / in list view. */
   sub: string;
-  /** Optional priority for tasks; drives the colour dot */
+  /** Task/TF priority; drives an optional dot. */
   priority?: string;
+  /** IST clock time for engagements, e.g. "2:30 pm". */
+  time?: string;
+  /** Task milestone flag — shown with a small marker. */
+  milestone?: boolean;
+};
+
+export type CalendarFilters = {
+  /** Which kinds to include. */
+  kinds: Set<CalendarKind>;
+  /** Only items that are "mine" (owned / created / participating). */
+  mine: boolean;
+  /** Narrow divisional items (tasks + TFs) to one division. */
+  divisionId?: string;
+  /** Task/TF priority. */
+  priority?: string;
+  /** Task status (tasks only — TFs use a different status vocabulary). */
+  status?: string;
 };
 
 // ============================================================
@@ -35,7 +65,9 @@ export async function fetchCalendarEvents(opts: {
   callerId: string;
   from: Date;
   to: Date;
+  filters: CalendarFilters;
 }): Promise<CalendarEvent[]> {
+  const { filters } = opts;
   const me = await prisma.user.findUnique({
     where: { id: opts.callerId },
     select: {
@@ -48,44 +80,62 @@ export async function fetchCalendarEvents(opts: {
   });
   if (!me) return [];
 
-  // Same scoper as /tasks and search — a task visible on the list is
-  // visible on the calendar, including delegated-division access.
-  const taskVisibility = await buildVisibilityClauses(me);
-  const tfVisibility = await buildTfVisibilityClause(me);
+  const officeOfJsDivisionId = await getOfficeOfJsDivisionId();
+  const maySeeEngagements = canAccessEngagements(me, officeOfJsDivisionId);
 
-  const [tasks, tfs] = await Promise.all([
-    prisma.task.findMany({
-      where: {
-        archivedAt: null,
-        parentTaskId: null,
-        milestone: true,
-        dueDate: { gte: opts.from, lte: opts.to },
-        AND: [{ OR: taskVisibility }],
-      },
-      include: {
-        owner: { select: USER_SUMMARY_SELECT },
-        division: true,
-      },
-    }),
-    prisma.timelineFile.findMany({
-      where: {
-        archivedAt: null,
-        deadlineDate: { gte: opts.from, lte: opts.to },
-        AND: [tfVisibility],
-      },
-      select: {
-        id: true,
-        refNo: true,
-        subject: true,
-        deadlineDate: true,
-        status: true,
-        markedTo: {
-          select: {
-            division: { select: { name: true } },
+  const wantTasks = filters.kinds.has('task');
+  const wantTfs = filters.kinds.has('tf');
+  const wantEngagements = filters.kinds.has('engagement') && maySeeEngagements;
+
+  // Same scoper as /tasks and search — visibility parity across surfaces.
+  const taskVisibility = wantTasks ? await buildVisibilityClauses(me) : [];
+  const tfVisibility = wantTfs ? await buildTfVisibilityClause(me) : null;
+
+  const [tasks, tfs, engagements] = await Promise.all([
+    wantTasks
+      ? prisma.task.findMany({
+          where: {
+            archivedAt: null,
+            parentTaskId: null,
+            dueDate: { gte: opts.from, lte: opts.to },
+            AND: [{ OR: taskVisibility }],
+            ...(filters.mine ? { ownerId: me.id } : {}),
+            ...(filters.divisionId ? { divisionId: filters.divisionId } : {}),
+            ...(filters.priority ? { priority: filters.priority as never } : {}),
+            ...(filters.status ? { status: filters.status as never } : {}),
           },
-        },
-      },
-    }),
+          include: {
+            owner: { select: USER_SUMMARY_SELECT },
+            division: true,
+          },
+        })
+      : Promise.resolve([]),
+    wantTfs && tfVisibility
+      ? prisma.timelineFile.findMany({
+          where: {
+            archivedAt: null,
+            deadlineDate: { gte: opts.from, lte: opts.to },
+            AND: [tfVisibility],
+            ...(filters.mine ? { createdById: me.id } : {}),
+            ...(filters.divisionId
+              ? { markedTo: { some: { divisionId: filters.divisionId } } }
+              : {}),
+            ...(filters.priority ? { priority: filters.priority as never } : {}),
+          },
+          select: {
+            id: true,
+            refNo: true,
+            subject: true,
+            deadlineDate: true,
+            status: true,
+            priority: true,
+            markedTo: { select: { division: { select: { name: true } } } },
+          },
+        })
+      : Promise.resolve([]),
+    wantEngagements
+      ? fetchEngagements({ from: opts.from, to: opts.to })
+      : Promise.resolve([]),
   ]);
 
   const events: CalendarEvent[] = [];
@@ -100,6 +150,7 @@ export async function fetchCalendarEvents(opts: {
       href: `/tasks/${t.id}`,
       sub: `${t.division.name} · ${t.owner.name}`,
       priority: t.priority,
+      milestone: t.milestone,
     });
   }
 
@@ -116,6 +167,28 @@ export async function fetchCalendarEvents(opts: {
       date: tf.deadlineDate,
       href: `/timeline-files/${tf.id}`,
       sub: `${tf.refNo} · ${markedList}`,
+      priority: tf.priority,
+    });
+  }
+
+  for (const e of engagements) {
+    // "My items" for engagements = created by me or I'm a participant.
+    if (filters.mine && e.createdBy.id !== me.id && !e.participants.some((p) => p.id === me.id)) {
+      continue;
+    }
+    const who =
+      e.participants.length > 0
+        ? `${e.participants.length} ${e.participants.length === 1 ? 'participant' : 'participants'}`
+        : e.createdBy.name;
+    events.push({
+      id: `engagement:${e.id}`,
+      kind: 'engagement',
+      engagementId: e.id,
+      title: e.title,
+      date: e.startsAt,
+      href: null,
+      sub: `${formatTimeIST(e.startsAt)}${e.venue ? ` · ${e.venue}` : ` · ${who}`}`,
+      time: formatTimeIST(e.startsAt),
     });
   }
 
