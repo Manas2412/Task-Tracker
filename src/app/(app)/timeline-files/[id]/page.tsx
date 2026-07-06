@@ -11,6 +11,7 @@ import { canEditTfAttachments } from '@/app/actions/attachments';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { initialsOf } from '@/lib/format';
+import { canCreateDivisionTask, getRbacActor } from '@/lib/rbac';
 import { isS3Configured } from '@/lib/s3';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
 import { cn } from '@/lib/utils';
@@ -108,7 +109,16 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
     me.hierarchySlot === 'osd' ||
     (me.hierarchySlot === 'director' &&
       tf.markedTo.some((m) => m.division.id === me.divisionId));
-  const canCreateTasks = true; // anyone with view access can create from a TF
+  // Spawning a task from a TF always produces a division-level task, so
+  // the head rule applies: Super Admin, OSD, or head/delegate of a marked
+  // division. Others see the linked-task list without the create button.
+  const actor = await getRbacActor(me.id);
+  const creatableDivisionIds = actor
+    ? tf.markedTo
+        .map((m) => m.division.id)
+        .filter((id) => canCreateDivisionTask(actor, id))
+    : [];
+  const canCreateTasks = creatableDivisionIds.length > 0;
 
   // Attachments — same gate as TF field editing for non-OSD directors of marked-to.
   const canEditAtt = await canEditTfAttachments(me.id, tf.id);
@@ -180,10 +190,14 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
     ? tf.deadlineDate.toISOString().slice(0, 10)
     : null;
 
-  const markedToOptions = tf.markedTo.map((m) => ({
-    id: m.division.id,
-    name: m.division.name,
-  }));
+  // Only divisions the caller may give tasks in — a head of one marked
+  // division must not spawn tasks into the other marked divisions.
+  const markedToOptions = tf.markedTo
+    .filter((m) => creatableDivisionIds.includes(m.division.id))
+    .map((m) => ({
+      id: m.division.id,
+      name: m.division.name,
+    }));
 
   // Stable signature line for the secretary's quote.
   const secretarySignature = `Secretary, Sports · ${format(tf.receivedDate, 'd LLL')}`;

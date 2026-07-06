@@ -49,7 +49,13 @@ export async function getHeadedDivisionIds(
 export async function getRbacActor(userId: string): Promise<RbacActor | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, divisionId: true, isSuperAdmin: true, isActive: true },
+    select: {
+      id: true,
+      divisionId: true,
+      isSuperAdmin: true,
+      isActive: true,
+      hierarchySlot: true,
+    },
   });
   if (!user || !user.isActive) return null;
   const headedDivisionIds = await getHeadedDivisionIds(userId);
@@ -57,6 +63,7 @@ export async function getRbacActor(userId: string): Promise<RbacActor | null> {
     id: user.id,
     divisionId: user.divisionId,
     isSuperAdmin: user.isSuperAdmin,
+    isOsd: user.hierarchySlot === 'osd',
     headedDivisionIds,
   };
 }

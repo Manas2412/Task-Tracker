@@ -55,6 +55,8 @@ type SectionDetailsProps = {
   pendingReassignment: PendingReassignment | null;
   canReassign: boolean;
   canEditFields: boolean;
+  /** Visibility is a head power — stricter than canEditFields. */
+  canEditVisibility: boolean;
   canChangeDivision: boolean;
   divisions: DivisionOption[];
   canViewProfiles: boolean;
@@ -98,7 +100,7 @@ export function SectionDetails(props: SectionDetailsProps) {
           divisions={props.divisions}
         />
 
-        <VisibilityRow taskId={props.taskId} visibility={props.visibility} canEdit={props.canEditFields} />
+        <VisibilityRow taskId={props.taskId} visibility={props.visibility} canEdit={props.canEditVisibility} />
 
         <MilestoneRow taskId={props.taskId} milestone={props.milestone} canEdit={props.canEditFields} />
 

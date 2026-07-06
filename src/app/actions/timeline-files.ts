@@ -621,6 +621,17 @@ export async function removeMarkedToAction(
   });
   if (!parsed.success) return fail('Invalid input.', epoch);
 
+  // A Timeline File must always stay marked to at least one division
+  // (creation enforces this too). Without the floor a file can reach zero
+  // marked divisions, where it stays visible to OSD/JS via the master
+  // view but offers no division to spawn tasks into.
+  const markedCount = await prisma.timelineFileMarkedTo.count({
+    where: { timelineFileId: parsed.data.id },
+  });
+  if (markedCount <= 1) {
+    return fail('A file must stay marked to at least one division.', epoch);
+  }
+
   try {
     await prisma.timelineFileMarkedTo.delete({
       where: {

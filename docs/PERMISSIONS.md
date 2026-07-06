@@ -34,7 +34,8 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 | **See other divisions** |  | ✓ |  |  |  |  |  |  | ✓ |
 | **See JS Priority Board** | ✓ | ✓ | partial² | partial² | partial² | partial² | partial² |  | ✓ |
 | **See Personal-visibility tasks of others** |  |  |  |  |  |  |  |  | ✓ (audit only) |
-| **Create task** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (in own division, will be PMU-tagged) | ✓ |
+| **Create task (personal visibility)** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (in own division, will be PMU-tagged) | ✓ |
+| **Create division-level task** | head³ | ✓ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ |
 | **Edit task they own** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Edit any task they can see** |  | ✓ |  |  |  |  |  |  | ✓ |
 | **Comment / @mention on tasks they can see** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -47,7 +48,7 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 | **Add cross-division collaborators (division leads)** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |
 | **Set JS Priority lane** |  | ✓ |  |  |  |  |  |  | ✓ |
 | **Toggle milestone** | own | ✓ | own | own | own | own | own | own | ✓ |
-| **Toggle visibility** | own | ✓ (own/visible) | own | own | own | own | own | own | ✓ |
+| **Toggle visibility** | head³ | ✓ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ |
 | **Delete solo task (no collaborators / no comments)** | own | own | own | own | own | own | own | own | ✓ (any) |
 | **Archive shared task** | own | ✓ | own | own | own | own | own | own | ✓ (any) |
 | **Hard-delete** |  |  |  |  |  |  |  |  | ✓ (from audit page) |
@@ -55,6 +56,8 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 
 ¹ "Needs approval" = the request is created; the proposed new owner's superior must tap-approve before the reassignment takes effect.
 ² "partial" = only sees tasks owned by self or own subordinates that happen to be on the board, plus the visible-to-them JS Priority badge on every task they can already see. The full board is OSD + JS + Super Admin.
+
+³ "head" = only when the user is that division's head (`divisions.head_user_id`) or holds an active `division_access_delegations` row for it — the hierarchy slot itself grants nothing. Giving tasks on a division's board is a head power; everyone else creates personal tasks (see §5.11).
 
 ---
 
@@ -71,7 +74,7 @@ Timeline Files are visible only to divisions they are marked to, plus OSD/JS via
 | **Add / edit Secretary's comments** |  | ✓ |  |  |  |  | ✓ |
 | **Upload source documents** |  | ✓ | ✓ |  |  |  | ✓ |
 | **Upload action document** |  | ✓ | ✓ | ✓ (officer of section taking action) |  |  | ✓ |
-| **Spawn task from Timeline File ("Create task from this file")** |  | ✓ | ✓ | ✓ (per their chain) |  |  | ✓ |
+| **Spawn task from Timeline File ("Create task from this file")** | head³ | ✓ | head³ | head³ |  |  | ✓ |
 | **Forward to division / change marked-to** |  | ✓ |  |  |  |  | ✓ |
 | **Share link (read-only)** | ✓ | ✓ | ✓ |  |  |  | ✓ |
 | **Archive** |  | ✓ |  |  |  |  | ✓ |
@@ -169,3 +172,12 @@ Archived items remain in the database and surface via the audit trail. The Super
 - The first Super Admin account is created by the deployer (out-of-band).
 - That account has `is_super_admin = true` and `hierarchy_slot = 'osd'`.
 - No other Super Admin can exist until that account creates one and ticks the Super Admin Access toggle in the inspector.
+
+### 5.11 Division-level task creation is a head power
+
+- Only **Super Admin**, **OSD**, a division's **head** (`divisions.head_user_id`), or an **active delegate** (an unrevoked `division_access_delegations` row whose inclusive window covers now) may create a task with `division` visibility in that division. Enforced in `createTaskAction` via `canCreateDivisionTask` (src/lib/rbac/rules.ts).
+- Everyone else creates **personal** tasks only; the Quick Create sheet does not offer the Division option to them and defaults to Personal.
+- The same rule gates **changing** a task's visibility in either direction (`updateTaskFieldsAction`) — an owner may not promote a personal task onto the division board, nor hide a division task.
+- Spawning a task from a Timeline File always produces a division-level task, so the same rule applies there; the former "any viewer of the file" exception is removed.
+- Subtasks still inherit the parent's visibility — an owner breaking down a head-given division task produces division-visible subtasks by design.
+- Known residual path: a same-division ownership transfer of a `personal` task still auto-flips it to `division` (§5.6) so it does not vanish from the recipient's view.

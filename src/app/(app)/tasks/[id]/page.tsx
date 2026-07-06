@@ -297,6 +297,13 @@ export default async function TaskDetailPage({ params }: PageProps) {
   const canChangeDivision =
     session.user.isSuperAdmin || session.user.hierarchySlot === 'osd';
 
+  // Visibility is a head power in both directions — mirrors the
+  // canCreateDivisionTask gate in updateTaskFieldsAction.
+  const canEditVisibility =
+    session.user.isSuperAdmin ||
+    session.user.hierarchySlot === 'osd' ||
+    isHeadOfTaskDivision;
+
   // Super Admin and OSD may reassign anywhere; everyone else only sees
   // targets the RBAC matrix (or the legacy downward-chain rule) allows.
   const reassignAnywhere =
@@ -473,6 +480,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         pendingReassignment={pendingReassignment}
         canReassign={canReassign}
         canEditFields={canEditFields}
+        canEditVisibility={canEditVisibility}
         canChangeDivision={canChangeDivision}
         divisions={allDivisions}
         canViewProfiles={canChangeDivision}
