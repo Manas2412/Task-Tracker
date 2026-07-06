@@ -185,7 +185,7 @@ Archived items remain in the database and surface via the audit trail. The Super
 
 ### 5.12 JS Engagements (Office of JS meetings on the calendar)
 
-The planning calendar (`/calendar`) shows three item kinds — **JS engagements** (blue), **task deadlines** (red), and **Timeline file deadlines** (amber). Tasks and Timeline files reuse their existing visibility scopers (`buildVisibilityClauses`, `buildTfVisibilityClause`), so a division user sees only their division's task deadlines and a PMU member only their team's (§5.2) — calendar and lists stay consistent.
+The planning calendar (`/calendar`) shows three item kinds — **JS engagements** (teal), **task deadlines** (dark blue), and **Timeline file deadlines** (red). Tasks and Timeline files reuse their existing visibility scopers (`buildVisibilityClauses`, `buildTfVisibilityClause`), so a division user sees only their division's task deadlines and a PMU member only their team's (§5.2) — calendar and lists stay consistent.
 
 JS Engagements are the Office of JS's own layer:
 
