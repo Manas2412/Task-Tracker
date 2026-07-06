@@ -93,7 +93,7 @@ Distinct from `task_status` — Timeline Files have their own list.
 
 ### 1.11 `attachment_owner_type`
 ```
-'task' | 'task_comment' | 'timeline_file' | 'timeline_file_source' | 'timeline_file_action'
+'task' | 'task_comment' | 'timeline_file' | 'timeline_file_source' | 'timeline_file_action' | 'js_engagement'
 ```
 
 ### 1.12 `attachment_source`
@@ -548,3 +548,24 @@ Optimised for the dominant read patterns: "tasks I own", "tasks in my division",
 | Password reset | Super Admin sets a new hash on the row and optionally flips `force_password_change` |
 | Row-level access control | Enforced in app code (the data layer), not Postgres RLS. Every read goes through a helper that filters by the caller's `hierarchy_slot` / chain / division / PMU flag — see [PERMISSIONS.md](PERMISSIONS.md) |
 | Bootstrap | A one-off Prisma seed script (`prisma/seed.ts`) inserts the first Super Admin. After that, Super Admin creates all other users from the console |
+
+---
+
+## 6. JS Engagements (`js_engagements`)
+
+Office of JS meetings shown on the planning calendar (`/calendar`). Seeing and managing them is limited to Office-of-JS members and Super Admins — see [PERMISSIONS.md §5.12](PERMISSIONS.md).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `title` | text | required |
+| `starts_at` | timestamptz | date + start time as one IST-wall-clock instant (stored UTC) |
+| `venue` | text? | free text: venue or meeting link |
+| `mom_notes` | text? | minutes of meeting |
+| `division_id` | uuid FK → `divisions` | always the seeded `Office of JS` division |
+| `created_by` | uuid FK → `users` | |
+| `created_at` / `updated_at` / `archived_at` | timestamptz | soft-archive via `archived_at` |
+
+- `js_engagement_participants (engagement_id, user_id)` — join to `users`, cascades on engagement delete.
+- Attachments reuse the polymorphic `attachments` table with `owner_type = 'js_engagement'` (added to `AttachmentOwnerType`).
+- Indexes: `starts_at`, `division_id`, and `(user_id)` on the participants table.

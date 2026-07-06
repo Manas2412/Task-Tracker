@@ -15,148 +15,220 @@ import {
   shiftDay,
   shiftMonth,
   weekBounds,
+  type CalendarEvent,
 } from '@/lib/calendar';
+import { prisma } from '@/lib/db';
+import { canAccessEngagements, getOfficeOfJsDivisionId } from '@/lib/engagements';
 
+import { CalendarProvider } from './_components/CalendarProvider';
+import { NewButton } from './_components/DateControls';
+import { FilterBar } from './_components/FilterBar';
+import { parseCalendarFilters, buildCalendarHref, type RawParams } from './_components/filter-params';
+import { KIND_META, KIND_ORDER } from './_components/kind-style';
 import { ListView } from './_components/ListView';
 import { MonthView } from './_components/MonthView';
 import { ViewTabs } from './_components/ViewTabs';
 import { WeekView } from './_components/WeekView';
+import type { PickUser } from './_components/types';
 
 type PageProps = {
-  searchParams?: { view?: string; date?: string };
+  searchParams?: RawParams;
 };
 
 export default async function CalendarPage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user) redirect('/login');
 
-  const rawView = searchParams?.view;
+  const sp: RawParams = searchParams ?? {};
   const view: 'month' | 'week' | 'list' =
-    rawView === 'week' ? 'week' : rawView === 'list' ? 'list' : 'month';
+    sp.view === 'week' ? 'week' : sp.view === 'list' ? 'list' : 'month';
+  const filters = parseCalendarFilters(sp);
 
-  if (view === 'month') {
-    return <MonthShell callerId={session.user.id} dateParam={searchParams?.date} />;
-  }
-  if (view === 'week') {
-    return <WeekShell callerId={session.user.id} dateParam={searchParams?.date} />;
-  }
-  return <ListShell callerId={session.user.id} dateParam={searchParams?.date} />;
+  const me = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, divisionId: true, isSuperAdmin: true, hierarchySlot: true },
+  });
+  if (!me) redirect('/login');
+
+  const officeOfJsDivisionId = await getOfficeOfJsDivisionId();
+  const canManageEngagements = canAccessEngagements(me, officeOfJsDivisionId);
+  const canCreateTf = me.isSuperAdmin || me.hierarchySlot === 'osd';
+  // Only cross-division viewers get a division filter; everyone else is
+  // already scoped to their own division by the visibility rules.
+  const canFilterByDivision = me.isSuperAdmin || me.hierarchySlot === 'osd';
+
+  // Per-view window + navigation.
+  const win = resolveWindow(view, sp.date);
+
+  const [events, divisions, candidates] = await Promise.all([
+    fetchCalendarEvents({ callerId: me.id, from: win.from, to: win.to, filters }),
+    canFilterByDivision
+      ? prisma.division.findMany({
+          where: { kind: 'division' },
+          select: { id: true, name: true },
+          orderBy: { displayOrder: 'asc' },
+        })
+      : Promise.resolve<{ id: string; name: string }[]>([]),
+    canManageEngagements
+      ? prisma.user.findMany({
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            designation: true,
+            division: { select: { name: true } },
+          },
+          orderBy: { name: 'asc' },
+          take: 400,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const participantCandidates: PickUser[] = candidates.map((u) => ({
+    id: u.id,
+    name: u.name,
+    designation: u.designation,
+    divisionName: u.division.name,
+  }));
+
+  return (
+    <CalendarProvider
+      canManageEngagements={canManageEngagements}
+      canCreateTf={canCreateTf}
+      participantCandidates={participantCandidates}
+    >
+      <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 pt-4 md:pt-6 pb-12">
+        <header className="mb-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.08em] text-ink-3 font-medium mb-1 inline-flex items-center gap-1">
+                <i className="ti ti-calendar text-[11px] text-primary" aria-hidden="true" />
+                Planning calendar
+              </p>
+              <h1 className="font-serif text-[22px] md:text-[28px] leading-tight text-ink">
+                {win.title}
+              </h1>
+              <p className="mt-1.5 text-[12px] text-ink-2 max-w-2xl leading-relaxed">
+                Engagements, task deadlines, and Timeline file deadlines you can see — in one view.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <ViewTabs active={view} sp={sp} />
+              <NewButton />
+            </div>
+          </div>
+        </header>
+
+        <FilterBar
+          sp={sp}
+          filters={filters}
+          showEngagements={canManageEngagements}
+          divisions={divisions}
+        />
+
+        {view !== 'list' ? (
+          <NavStrip
+            prevHref={buildCalendarHref(sp, { date: win.prevDate })}
+            nextHref={buildCalendarHref(sp, { date: win.nextDate })}
+            title={win.navTitle}
+            todayHref={win.isCurrent ? null : buildCalendarHref(sp, { date: null })}
+            prevLabel={view === 'week' ? 'Previous week' : 'Previous month'}
+            nextLabel={view === 'week' ? 'Next week' : 'Next month'}
+          />
+        ) : (
+          <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[12px] text-ink-3">
+              {events.length} {events.length === 1 ? 'item' : 'items'} in the next 60 days
+            </p>
+          </div>
+        )}
+
+        <Legend showEngagements={canManageEngagements} />
+
+        {view === 'month' ? (
+          <MonthView grid={win.monthGrid!} events={events} />
+        ) : view === 'week' ? (
+          <WeekView grid={win.weekGrid!} events={events} />
+        ) : (
+          <ListView events={events} />
+        )}
+      </div>
+    </CalendarProvider>
+  );
 }
 
 // ============================================================
-// Month shell
+// Per-view window resolution
 // ============================================================
 
-async function MonthShell({
-  callerId,
-  dateParam,
-}: {
-  callerId: string;
-  dateParam?: string;
-}) {
+type Window = {
+  from: Date;
+  to: Date;
+  title: string;
+  navTitle: string;
+  prevDate: string;
+  nextDate: string;
+  isCurrent: boolean;
+  monthGrid?: ReturnType<typeof getMonthGrid>;
+  weekGrid?: ReturnType<typeof buildWeekGrid>;
+};
+
+function resolveWindow(view: 'month' | 'week' | 'list', dateParam: string | undefined): Window {
+  if (view === 'week') {
+    const { year, month, day } = parseDayParam(dateParam);
+    const grid = buildWeekGrid(year, month, day);
+    const { from, to } = weekBounds(grid);
+    const prev = shiftDay(year, month, day, -7);
+    const next = shiftDay(year, month, day, +7);
+    const label = `${format(grid[0].date, 'd MMM')} – ${format(grid[6].date, 'd MMM yyyy')}`;
+    return {
+      from,
+      to,
+      title: label,
+      navTitle: label,
+      prevDate: dayParam(prev.year, prev.month, prev.day),
+      nextDate: dayParam(next.year, next.month, next.day),
+      isCurrent: grid.some((d) => d.isToday),
+      weekGrid: grid,
+    };
+  }
+
+  if (view === 'list') {
+    const start = parseListStart(dateParam);
+    const from = new Date(start);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(start);
+    to.setDate(start.getDate() + 60);
+    to.setHours(23, 59, 59, 999);
+    return {
+      from,
+      to,
+      title: 'Upcoming',
+      navTitle: 'Upcoming',
+      prevDate: '',
+      nextDate: '',
+      isCurrent: true,
+    };
+  }
+
+  // month
   const { year, monthIndex } = parseMonthParam(dateParam);
   const grid = getMonthGrid(year, monthIndex);
   const { from, to } = monthBounds(year, monthIndex);
-  const events = await fetchCalendarEvents({ callerId, from, to });
-
   const prev = shiftMonth(year, monthIndex, -1);
   const next = shiftMonth(year, monthIndex, +1);
   const today = new Date();
-  const isViewingThisMonth =
-    today.getFullYear() === year && today.getMonth() === monthIndex;
-  const monthLabel = format(new Date(year, monthIndex, 1), 'LLLL yyyy');
-  const param = monthParam(year, monthIndex);
-
-  return (
-    <Frame view="month" date={param} title={monthLabel}>
-      <NavStrip
-        prevHref={`/calendar?view=month&date=${monthParam(prev.year, prev.monthIndex)}`}
-        nextHref={`/calendar?view=month&date=${monthParam(next.year, next.monthIndex)}`}
-        title={monthLabel}
-        todayHref={isViewingThisMonth ? null : '/calendar?view=month'}
-      />
-      <Legend />
-      <MonthView grid={grid} events={events} />
-    </Frame>
-  );
-}
-
-// ============================================================
-// Week shell
-// ============================================================
-
-async function WeekShell({
-  callerId,
-  dateParam: rawDate,
-}: {
-  callerId: string;
-  dateParam?: string;
-}) {
-  const { year, month, day } = parseDayParam(rawDate);
-  const grid = buildWeekGrid(year, month, day);
-  const { from, to } = weekBounds(grid);
-  const events = await fetchCalendarEvents({ callerId, from, to });
-
-  const prev = shiftDay(year, month, day, -7);
-  const next = shiftDay(year, month, day, +7);
-  const today = new Date();
-  const todayParam = dayParam(today.getFullYear(), today.getMonth(), today.getDate());
-  const currentParam = dayParam(year, month, day);
-  const isViewingThisWeek = grid.some((d) => d.isToday);
-
-  const weekLabel = `${format(grid[0].date, 'd MMM')} – ${format(grid[6].date, 'd MMM yyyy')}`;
-
-  return (
-    <Frame view="week" date={currentParam} title={weekLabel}>
-      <NavStrip
-        prevHref={`/calendar?view=week&date=${dayParam(prev.year, prev.month, prev.day)}`}
-        nextHref={`/calendar?view=week&date=${dayParam(next.year, next.month, next.day)}`}
-        title={weekLabel}
-        todayHref={isViewingThisWeek ? null : `/calendar?view=week&date=${todayParam}`}
-        prevLabel="Previous week"
-        nextLabel="Next week"
-      />
-      <Legend />
-      <WeekView grid={grid} events={events} />
-    </Frame>
-  );
-}
-
-// ============================================================
-// List shell
-// ============================================================
-
-async function ListShell({
-  callerId,
-  dateParam,
-}: {
-  callerId: string;
-  dateParam?: string;
-}) {
-  // List view: show 60 days starting from the chosen date (default: today)
-  const start = parseListStart(dateParam);
-  const from = new Date(start);
-  from.setHours(0, 0, 0, 0);
-  const to = new Date(start);
-  to.setDate(start.getDate() + 60);
-  to.setHours(23, 59, 59, 999);
-
-  const events = await fetchCalendarEvents({ callerId, from, to });
-  const title = `Next ${Math.round(
-    (to.getTime() - from.getTime()) / 86_400_000,
-  )} days`;
-
-  return (
-    <Frame view="list" date={undefined} title="Upcoming">
-      <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-[12px] text-ink-3">
-          {title} · {events.length} {events.length === 1 ? 'event' : 'events'}
-        </p>
-        <Legend />
-      </div>
-      <ListView events={events} />
-    </Frame>
-  );
+  const label = format(new Date(year, monthIndex, 1), 'LLLL yyyy');
+  return {
+    from,
+    to,
+    title: label,
+    navTitle: label,
+    prevDate: monthParam(prev.year, prev.monthIndex),
+    nextDate: monthParam(next.year, next.monthIndex),
+    isCurrent: today.getFullYear() === year && today.getMonth() === monthIndex,
+    monthGrid: grid,
+  };
 }
 
 function parseListStart(raw: string | undefined): Date {
@@ -169,77 +241,39 @@ function parseListStart(raw: string | undefined): Date {
 }
 
 // ============================================================
-// Shared chrome
+// Chrome
 // ============================================================
-
-function Frame({
-  view,
-  date,
-  title,
-  children,
-}: {
-  view: 'month' | 'week' | 'list';
-  date: string | undefined;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 pt-4 md:pt-6 pb-12">
-      <header className="mb-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.08em] text-ink-3 font-medium mb-1 inline-flex items-center gap-1">
-              <i
-                className="ti ti-calendar text-[11px] text-primary"
-                aria-hidden="true"
-              />
-              Milestones &amp; deadlines
-            </p>
-            <h1 className="font-serif text-[22px] md:text-[28px] leading-tight text-ink">
-              {title}
-            </h1>
-            <p className="mt-1.5 text-[12px] text-ink-2 max-w-2xl leading-relaxed">
-              Task milestones and Timeline File deadlines that you can see.
-            </p>
-          </div>
-          <ViewTabs active={view} date={date} />
-        </div>
-      </header>
-      {children}
-    </div>
-  );
-}
 
 function NavStrip({
   prevHref,
   nextHref,
   title,
   todayHref,
-  prevLabel = 'Previous month',
-  nextLabel = 'Next month',
+  prevLabel,
+  nextLabel,
 }: {
   prevHref: string;
   nextHref: string;
   title: string;
   todayHref: string | null;
-  prevLabel?: string;
-  nextLabel?: string;
+  prevLabel: string;
+  nextLabel: string;
 }) {
   return (
     <div className="flex items-center justify-between mb-3 gap-3">
       <div className="inline-flex items-center gap-1">
         <Link
           href={prevHref}
+          scroll={false}
           aria-label={prevLabel}
           className="w-8 h-8 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 transition-colors"
         >
           <i className="ti ti-chevron-left text-[16px]" aria-hidden="true" />
         </Link>
-        <span className="font-serif text-[16px] text-ink min-w-[140px] text-center">
-          {title}
-        </span>
+        <span className="font-serif text-[16px] text-ink min-w-[140px] text-center">{title}</span>
         <Link
           href={nextHref}
+          scroll={false}
           aria-label={nextLabel}
           className="w-8 h-8 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 transition-colors"
         >
@@ -249,6 +283,7 @@ function NavStrip({
       {todayHref ? (
         <Link
           href={todayHref}
+          scroll={false}
           className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-line text-[12px] font-medium text-ink-2 hover:bg-line-2 transition-colors"
         >
           <i className="ti ti-calendar-event text-[13px]" aria-hidden="true" />
@@ -259,17 +294,16 @@ function NavStrip({
   );
 }
 
-function Legend() {
+function Legend({ showEngagements }: { showEngagements: boolean }) {
+  const kinds = KIND_ORDER.filter((k) => k !== 'engagement' || showEngagements);
   return (
-    <div className="inline-flex items-center gap-3 text-[11px] text-ink-3 mb-3">
-      <span className="inline-flex items-center gap-1.5">
-        <span className="w-2.5 h-2.5 rounded-sm bg-primary-soft border border-primary-line/40" />
-        Task milestone
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="w-2.5 h-2.5 rounded-sm bg-accent-soft border border-accent-line" />
-        Timeline file
-      </span>
+    <div className="flex flex-wrap items-center gap-3 text-[11px] text-ink-3 mb-3">
+      {kinds.map((k) => (
+        <span key={k} className="inline-flex items-center gap-1.5">
+          <span className={`w-2.5 h-2.5 rounded-full ${KIND_META[k].dot}`} />
+          {KIND_META[k].label}
+        </span>
+      ))}
     </div>
   );
 }

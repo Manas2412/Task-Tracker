@@ -32,3 +32,33 @@ export function isoDay(d: Date): string {
   const shifted = new Date(d.getTime() + IST_OFFSET_MS);
   return shifted.toISOString().slice(0, 10);
 }
+
+/**
+ * Combine an IST wall-clock date (`YYYY-MM-DD`) and time (`HH:mm`) into the
+ * UTC instant to store. India has a fixed +05:30 offset (no DST), so the
+ * offset suffix parse is exact. Returns null on malformed input.
+ */
+export function istWallClockToUtc(dateStr: string, timeStr: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || !/^\d{2}:\d{2}$/.test(timeStr)) return null;
+  const d = new Date(`${dateStr}T${timeStr}:00.000+05:30`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** IST wall-clock time of a stored instant as `HH:mm`, for a `<input type="time">`. */
+export function istTimeInput(d: Date): string {
+  const shifted = new Date(d.getTime() + IST_OFFSET_MS);
+  return `${String(shifted.getUTCHours()).padStart(2, '0')}:${String(
+    shifted.getUTCMinutes(),
+  ).padStart(2, '0')}`;
+}
+
+/** Format a stored UTC instant as an IST clock time, e.g. "2:30 pm". */
+export function formatTimeIST(d: Date): string {
+  const shifted = new Date(d.getTime() + IST_OFFSET_MS);
+  let h = shifted.getUTCHours();
+  const m = shifted.getUTCMinutes();
+  const meridiem = h < 12 ? 'am' : 'pm';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${String(m).padStart(2, '0')} ${meridiem}`;
+}
