@@ -208,7 +208,7 @@ export async function createTaskAction(
   try {
     const task = await prisma.$transaction(async (tx) => {
       const refNumber = await nextTaskRefNumber(targetDivisionId, tx);
-      return tx.task.create({
+      const created = await tx.task.create({
         data: {
           refNumber,
           name: parsed.data.name,
@@ -224,66 +224,68 @@ export async function createTaskAction(
           createdById: meRow.id,
         },
       });
-    });
 
-    // Mirror the link on TimelineFileTaskLink so the TF detail page can
-    // list child tasks without a full Task scan, and emit a TF activity row.
-    if (parsed.data.linkedTimelineFileId) {
-      await prisma.timelineFileTaskLink.create({
-        data: {
-          timelineFileId: parsed.data.linkedTimelineFileId,
-          taskId: task.id,
-          linkedById: meRow.id,
-        },
-      });
-      await prisma.timelineFileActivity.create({
-        data: {
-          timelineFileId: parsed.data.linkedTimelineFileId,
-          actorId: meRow.id,
-          eventType: 'task_linked',
-          payload: { taskId: task.id, taskName: task.name },
-        },
-      });
-      revalidatePath(`/timeline-files/${parsed.data.linkedTimelineFileId}`);
-    }
-
-    await prisma.taskActivity.create({
-      data: {
-        taskId: task.id,
-        actorId: meRow.id,
-        eventType: 'task_created',
-        payload: { name: task.name, priority: task.priority, milestone: task.milestone },
-      },
-    });
-
-    if (parsed.data.driveUrl) {
-      const url = parsed.data.driveUrl;
-      let fileName = 'Linked file';
-      try {
-        const urlObj = new URL(url);
-        const pathParts = urlObj.pathname.split('/').filter(Boolean);
-        if (pathParts.length > 0) {
-          const last = pathParts[pathParts.length - 1];
-          if (last.length > 0 && last.length < 100) fileName = decodeURIComponent(last);
-        }
-      } catch {
-        // Keep default fileName
+      if (parsed.data.linkedTimelineFileId) {
+        await tx.timelineFileTaskLink.create({
+          data: {
+            timelineFileId: parsed.data.linkedTimelineFileId,
+            taskId: created.id,
+            linkedById: meRow.id,
+          },
+        });
+        await tx.timelineFileActivity.create({
+          data: {
+            timelineFileId: parsed.data.linkedTimelineFileId,
+            actorId: meRow.id,
+            eventType: 'task_linked',
+            payload: { taskId: created.id, taskName: created.name },
+          },
+        });
       }
 
-      await prisma.attachment.create({
+      await tx.taskActivity.create({
         data: {
-          ownerType: 'task',
-          ownerId: task.id,
-          fileName,
-          fileUrl: url,
-          mimeType: null,
-          sizeBytes: null,
-          source: 'drive_link',
-          uploadedById: meRow.id,
+          taskId: created.id,
+          actorId: meRow.id,
+          eventType: 'task_created',
+          payload: { name: created.name, priority: created.priority, milestone: created.milestone },
         },
       });
-    }
 
+      if (parsed.data.driveUrl) {
+        const url = parsed.data.driveUrl;
+        let fileName = 'Linked file';
+        try {
+          const urlObj = new URL(url);
+          const pathParts = urlObj.pathname.split('/').filter(Boolean);
+          if (pathParts.length > 0) {
+            const last = pathParts[pathParts.length - 1];
+            if (last.length > 0 && last.length < 100) fileName = decodeURIComponent(last);
+          }
+        } catch {
+          // Keep default fileName
+        }
+
+        await tx.attachment.create({
+          data: {
+            ownerType: 'task',
+            ownerId: created.id,
+            fileName,
+            fileUrl: url,
+            mimeType: null,
+            sizeBytes: null,
+            source: 'drive_link',
+            uploadedById: meRow.id,
+          },
+        });
+      }
+
+      return created;
+    });
+
+    if (parsed.data.linkedTimelineFileId) {
+      revalidatePath(`/timeline-files/${parsed.data.linkedTimelineFileId}`);
+    }
     revalidatePath('/tasks');
     return { ok: true, taskId: task.id, epoch };
   } catch (err) {

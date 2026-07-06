@@ -49,7 +49,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
   const isAdminLike = me.isSuperAdmin || me.hierarchySlot === 'osd';
 
-  const [tasks, counts, divisions] = await Promise.all([
+  const [taskResult, counts, divisions] = await Promise.all([
     fetchVisibleTasks({ callerId: me.id, filter, divisionId: divisionFilter || undefined, sort }),
     fetchTaskCounts(me.id),
     prisma.division.findMany({
@@ -58,6 +58,8 @@ export default async function TasksPage({ searchParams }: PageProps) {
       orderBy: { displayOrder: 'asc' },
     }),
   ]);
+
+  const { tasks, total, capped } = taskResult;
 
   const grouped = groupByDivision ? groupTasksByDivision(tasks) : null;
   const segments = groupByDivision ? null : segmentTasksByRelation(tasks, me.id, me.isPmu);
@@ -93,7 +95,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
           <div className="flex items-center justify-between mb-2">
             <h2 className="section-label">Tasks</h2>
             <span className="text-[11px] text-ink-3">
-              {tasks.length} {tasks.length === 1 ? 'item' : 'items'}
+              {capped ? `Showing ${tasks.length} of ${total}` : `${tasks.length} ${tasks.length === 1 ? 'item' : 'items'}`}
             </span>
           </div>
 
@@ -170,7 +172,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
   );
 }
 
-type VisibleTask = Awaited<ReturnType<typeof fetchVisibleTasks>>[number];
+type VisibleTask = Awaited<ReturnType<typeof fetchVisibleTasks>>['tasks'][number];
 
 function TaskRow({
   task: t,

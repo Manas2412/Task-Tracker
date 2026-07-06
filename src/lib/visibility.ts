@@ -104,12 +104,14 @@ export type VisibleTask = Task & {
   hasAttachment: boolean;
 };
 
+const TASK_PAGE_LIMIT = 200;
+
 export async function fetchVisibleTasks(opts: {
   callerId: string;
   filter: TaskFilter;
   divisionId?: string;
   sort?: TaskSort;
-}): Promise<VisibleTask[]> {
+}): Promise<{ tasks: VisibleTask[]; total: number; capped: boolean }> {
   const me = await prisma.user.findUnique({
     where: { id: opts.callerId },
     select: {
@@ -120,7 +122,7 @@ export async function fetchVisibleTasks(opts: {
       isPmu: true,
     },
   });
-  if (!me) return [];
+  if (!me) return { tasks: [], total: 0, capped: false };
 
   const visibilityClauses = await buildVisibilityClauses(me);
   const filterClause = buildFilterClause(opts.filter, me.id);
@@ -133,28 +135,34 @@ export async function fetchVisibleTasks(opts: {
     andClauses.push({ divisionId: opts.divisionId });
   }
 
-  const tasks = await prisma.task.findMany({
-    where: {
-      archivedAt: null,
-      parentTaskId: null,
-      AND: andClauses,
-    },
-    include: {
-      owner: { select: USER_SUMMARY_SELECT },
-      division: true,
-      subtasks: { select: { status: true } },
-      collaborators: { select: { role: true } },
-    },
-    orderBy:
-      opts.sort === 'latest'
-        ? [{ createdAt: 'desc' }]
-        : [
-            { jsPriorityLane: { sort: 'asc', nulls: 'last' } },
-            { dueDate: { sort: 'asc', nulls: 'last' } },
-            { priority: 'desc' },
-            { createdAt: 'desc' },
-          ],
-  });
+  const where: Prisma.TaskWhereInput = {
+    archivedAt: null,
+    parentTaskId: null,
+    AND: andClauses,
+  };
+
+  const [tasks, total] = await Promise.all([
+    prisma.task.findMany({
+      where,
+      include: {
+        owner: { select: USER_SUMMARY_SELECT },
+        division: true,
+        subtasks: { select: { status: true } },
+        collaborators: { select: { role: true } },
+      },
+      orderBy:
+        opts.sort === 'latest'
+          ? [{ createdAt: 'desc' }]
+          : [
+              { jsPriorityLane: { sort: 'asc', nulls: 'last' } },
+              { dueDate: { sort: 'asc', nulls: 'last' } },
+              { priority: 'desc' },
+              { createdAt: 'desc' },
+            ],
+      take: TASK_PAGE_LIMIT,
+    }),
+    prisma.task.count({ where }),
+  ]);
 
   const taskIds = tasks.map((t) => t.id);
   const attachedIds = new Set<string>();
@@ -167,10 +175,12 @@ export async function fetchVisibleTasks(opts: {
     for (const r of rows) attachedIds.add(r.ownerId);
   }
 
-  return tasks.map((t) => ({
+  const mapped = tasks.map((t) => ({
     ...t,
     hasAttachment: attachedIds.has(t.id),
   })) as VisibleTask[];
+
+  return { tasks: mapped, total, capped: total > TASK_PAGE_LIMIT };
 }
 
 /**

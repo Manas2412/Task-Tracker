@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { Avatar, Pill } from '@/components/ui';
 import { auth } from '@/lib/auth';
+import { nowIST, startOfDayIST, endOfDayIST } from '@/lib/date';
 import { prisma } from '@/lib/db';
 import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { initialsOf, formatDue } from '@/lib/format';
@@ -43,11 +44,9 @@ export default async function JsDashboardPage() {
     session.user.isSuperAdmin;
   if (!isJs) redirect('/tasks');
 
-  const now = new Date();
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
-  const endOfToday = new Date(now);
-  endOfToday.setHours(23, 59, 59, 999);
+  const now = nowIST();
+  const startOfToday = startOfDayIST();
+  const endOfToday = endOfDayIST();
 
   const userId = session.user.id;
   const baseFilter = { archivedAt: null, parentTaskId: null };
@@ -631,7 +630,7 @@ function Stat({
 // ------------------------------------------------------------
 
 function timeOfDay(now: Date): string {
-  const h = now.getHours();
+  const h = now.getUTCHours();
   if (h < 12) return 'morning';
   if (h < 17) return 'afternoon';
   return 'evening';
