@@ -11,11 +11,11 @@ import { parseDueDateInput } from '@/lib/format';
 import {
   canActAsHeadOf,
   canAssignTaskTo,
+  canCreateDivisionTask,
   canTransferTaskTo,
   getRbacActor,
   getRbacTarget,
 } from '@/lib/rbac';
-import { buildTfVisibilityClause } from '@/lib/timeline-files';
 import { buildVisibilityClauses } from '@/lib/visibility';
 
 async function nextTaskRefNumber(
@@ -184,42 +184,25 @@ export async function createTaskAction(
 
   const meRow = await prisma.user.findUnique({
     where: { id: me.id },
-    select: { id: true, divisionId: true, isSuperAdmin: true, hierarchySlot: true },
+    select: { id: true, divisionId: true },
   });
   if (!meRow) return fail('Your account could not be found.', epoch);
 
-  // Division guard: creating a task in another division is a head / OSD /
-  // Super Admin power — everyone else creates in their own division. The
-  // one exception is spawning from a Timeline File: any viewer of the
-  // file may target a division it is marked to (PERMISSIONS.md §3).
   const targetDivisionId = parsed.data.divisionId ?? meRow.divisionId;
-  if (targetDivisionId !== meRow.divisionId) {
-    const actor = await getRbacActor(me.id);
-    let allowed =
-      meRow.isSuperAdmin ||
-      meRow.hierarchySlot === 'osd' ||
-      (actor !== null && canActAsHeadOf(actor, targetDivisionId));
-    if (!allowed && parsed.data.linkedTimelineFileId) {
-      const tfClause = await buildTfVisibilityClause({
-        id: meRow.id,
-        hierarchySlot: meRow.hierarchySlot,
-        isSuperAdmin: meRow.isSuperAdmin,
-        divisionId: meRow.divisionId,
-      });
-      const visibleAndMarked = await prisma.timelineFile.count({
-        where: {
-          AND: [
-            { id: parsed.data.linkedTimelineFileId, archivedAt: null },
-            { markedTo: { some: { divisionId: targetDivisionId } } },
-            tfClause,
-          ],
-        },
-      });
-      allowed = visibleAndMarked > 0;
-    }
-    if (!allowed) {
-      return fail('You can only create tasks in your own division.', epoch);
-    }
+  const actor = await getRbacActor(me.id);
+  if (!actor) return fail('Your account could not be found.', epoch);
+
+  // Division-level tasks are given by heads: only Super Admin, OSD, the
+  // target division's head, or an active delegate may create a task with
+  // 'division' visibility. Everyone else creates personal tasks. The same
+  // predicate covers creating in another division — including spawning
+  // from a Timeline File, which always produces a division-level task.
+  const hasDivisionPower = canCreateDivisionTask(actor, targetDivisionId);
+  if (parsed.data.visibility === 'division' && !hasDivisionPower) {
+    return fail('Only the division head can create division-level tasks.', epoch);
+  }
+  if (targetDivisionId !== meRow.divisionId && !hasDivisionPower) {
+    return fail('You can only create tasks in your own division.', epoch);
   }
 
   try {
@@ -610,6 +593,14 @@ export async function updateTaskFieldsAction(
     }
   }
   if (parsed.data.visibility !== undefined && parsed.data.visibility !== task.visibility) {
+    // Visibility is a head power in both directions — the same rule as
+    // creating a division-level task. Owners/creators who can edit other
+    // fields may neither promote a task onto the division board nor hide
+    // a division task from it.
+    const actor = await getRbacActor(me.id);
+    if (!actor || !canCreateDivisionTask(actor, task.divisionId)) {
+      return fail('Only the division head can change task visibility.', epoch);
+    }
     data.visibility = parsed.data.visibility;
     events.push({
       eventType: 'visibility_changed',
@@ -708,12 +699,25 @@ export async function addSubtaskAction(
 
   const parent = await prisma.task.findUnique({
     where: { id: parsed.data.parentTaskId },
-    select: { id: true, divisionId: true, visibility: true, ownerId: true, createdById: true, dueDate: true },
+    select: {
+      id: true,
+      divisionId: true,
+      visibility: true,
+      ownerId: true,
+      createdById: true,
+      dueDate: true,
+    },
   });
   if (!parent) return fail('Parent task not found.', epoch);
 
+  // A subtask inherits the parent's visibility, so adding one to a
+  // division task creates another division-level task. Gate it the same
+  // way as every other subtask mutation (updateSubtaskAction) — owner,
+  // creator, or a head/OSD/Super Admin of the parent's division — so a
+  // division user cannot mint division tasks by breaking down a task
+  // they merely collaborate on.
   if (!(await canEditTask(me.id, parent))) {
-    return fail('You do not have permission to modify this task.', epoch);
+    return fail('Only the task owner, creator, or head of division can add subtasks.', epoch);
   }
 
   if (parsed.data.dueDate && parent.dueDate) {

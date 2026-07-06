@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { initialsOf } from '@/lib/format';
 import { buildNotificationTaskContext } from '@/lib/notification-context';
+import { getHeadedDivisionIds } from '@/lib/rbac';
 import { isS3Configured } from '@/lib/s3';
 
 import {
@@ -16,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await auth();
   if (!session?.user) redirect('/login');
 
-  const [me, unreadCount, recentRaw] = await Promise.all([
+  const [me, unreadCount, recentRaw, headedDivisionIds] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       include: { division: true },
@@ -36,8 +37,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         createdAt: true,
       },
     }),
+    getHeadedDivisionIds(session.user.id),
   ]);
   if (!me) redirect('/login');
+
+  // Quick Create targets the user's home division, so the Division
+  // visibility option is offered only to those who can give tasks there:
+  // Super Admin, OSD, the division's head, or an active delegate.
+  const canCreateDivisionTasks =
+    me.isSuperAdmin ||
+    me.hierarchySlot === 'osd' ||
+    headedDivisionIds.includes(me.divisionId);
 
   const taskContext = await buildNotificationTaskContext(recentRaw);
 
@@ -72,7 +82,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       }}
       notifications={{ unreadCount, recent }}
     >
-      <QuickCreateProvider defaultDivisionId={me.divisionId} s3Configured={isS3Configured()}>
+      <QuickCreateProvider
+        defaultDivisionId={me.divisionId}
+        s3Configured={isS3Configured()}
+        canCreateDivisionTasks={canCreateDivisionTasks}
+      >
         {children}
         <QuickCreateFab />
       </QuickCreateProvider>

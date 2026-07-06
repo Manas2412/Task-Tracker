@@ -46,10 +46,17 @@ function useQuickCreate(): QuickCreateContextValue {
 type ProviderProps = {
   defaultDivisionId: string;
   s3Configured: boolean;
+  /** Division-level creation is a head power — see canCreateDivisionTask. */
+  canCreateDivisionTasks: boolean;
   children: ReactNode;
 };
 
-export function QuickCreateProvider({ defaultDivisionId, s3Configured, children }: ProviderProps) {
+export function QuickCreateProvider({
+  defaultDivisionId,
+  s3Configured,
+  canCreateDivisionTasks,
+  children,
+}: ProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const close = () => setIsOpen(false);
   const open = () => setIsOpen(true);
@@ -64,6 +71,7 @@ export function QuickCreateProvider({ defaultDivisionId, s3Configured, children 
             onSuccess={close}
             defaultDivisionId={defaultDivisionId}
             s3Configured={s3Configured}
+            canCreateDivisionTasks={canCreateDivisionTasks}
           />
         ) : null}
       </Sheet>
@@ -97,6 +105,7 @@ type FormProps = {
   onSuccess: () => void;
   defaultDivisionId: string;
   s3Configured: boolean;
+  canCreateDivisionTasks: boolean;
 };
 
 const PRIORITIES = [
@@ -119,7 +128,12 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function QuickCreateForm({ onSuccess, defaultDivisionId, s3Configured }: FormProps) {
+function QuickCreateForm({
+  onSuccess,
+  defaultDivisionId,
+  s3Configured,
+  canCreateDivisionTasks,
+}: FormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [state, formAction] = useFormState<CreateTaskState, FormData>(
@@ -129,8 +143,9 @@ function QuickCreateForm({ onSuccess, defaultDivisionId, s3Configured }: FormPro
 
   const [showMore, setShowMore] = useState(false);
   const [priority, setPriority] = useState<(typeof PRIORITIES)[number]['value']>('low');
-  const [visibility, setVisibility] =
-    useState<(typeof VISIBILITIES)[number]['value']>('division');
+  const [visibility, setVisibility] = useState<(typeof VISIBILITIES)[number]['value']>(
+    canCreateDivisionTasks ? 'division' : 'personal',
+  );
 
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
@@ -334,33 +349,43 @@ function QuickCreateForm({ onSuccess, defaultDivisionId, s3Configured }: FormPro
             </div>
           </Field>
 
-          {/* Visibility segmented */}
+          {/* Visibility segmented — division-level creation is a head power */}
           <Field label="Visibility">
-            <div
-              role="radiogroup"
-              aria-label="Visibility"
-              className="grid grid-cols-2 gap-1 p-[3px] bg-line-2 rounded-[10px]"
-            >
-              {VISIBILITIES.map((v) => {
-                const isActive = visibility === v.value;
-                return (
-                  <button
-                    key={v.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={isActive}
-                    onClick={() => setVisibility(v.value)}
-                    className={cn(
-                      'py-2 text-[12px] font-medium rounded-md transition-colors inline-flex items-center justify-center gap-1.5',
-                      isActive ? 'bg-panel text-ink shadow-sm' : 'text-ink-2 hover:text-ink',
-                    )}
-                  >
-                    <i className={cn('ti', v.icon, 'text-[13px]')} aria-hidden="true" />
-                    {v.label}
-                  </button>
-                );
-              })}
-            </div>
+            {canCreateDivisionTasks ? (
+              <div
+                role="radiogroup"
+                aria-label="Visibility"
+                className="grid grid-cols-2 gap-1 p-[3px] bg-line-2 rounded-[10px]"
+              >
+                {VISIBILITIES.map((v) => {
+                  const isActive = visibility === v.value;
+                  return (
+                    <button
+                      key={v.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={isActive}
+                      onClick={() => setVisibility(v.value)}
+                      className={cn(
+                        'py-2 text-[12px] font-medium rounded-md transition-colors inline-flex items-center justify-center gap-1.5',
+                        isActive ? 'bg-panel text-ink shadow-sm' : 'text-ink-2 hover:text-ink',
+                      )}
+                    >
+                      <i className={cn('ti', v.icon, 'text-[13px]')} aria-hidden="true" />
+                      {v.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-line bg-bg text-[12px] text-ink-2">
+                <i className="ti ti-lock text-[14px] mt-px shrink-0" aria-hidden="true" />
+                <span>
+                  Personal — visible only to you. Division tasks are given by the
+                  division head.
+                </span>
+              </p>
+            )}
           </Field>
 
           {/* Milestone */}

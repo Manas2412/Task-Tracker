@@ -158,6 +158,7 @@ PMU isolation:
 Visibility flag on each task:
 - `Personal` — visible only to the creator, **not even to superiors**.
 - `Division` — follows the hierarchy rules above.
+- **Creating a `Division` task (or changing visibility either way) is a head power**: Super Admin, OSD, the division's head (`divisions.head_user_id`), or an active delegate (`division_access_delegations`). Everyone else creates `Personal` tasks only — enforced by `canCreateDivisionTask` in `src/lib/rbac/rules.ts` and gated again in `createTaskAction` / `updateTaskFieldsAction`. The same rule covers spawning tasks from a Timeline File.
 
 Reassignment:
 - Downward within own chain — free.

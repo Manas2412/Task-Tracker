@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canActAsHeadOf,
   canAssignTaskTo,
+  canCreateDivisionTask,
   canDelegateDivision,
   canTransferTaskTo,
   isEligibleDelegate,
@@ -163,6 +164,41 @@ describe('canActAsHeadOf', () => {
     expect(canActAsHeadOf(head, NSDF)).toBe(true);
     expect(canActAsHeadOf(head, KI)).toBe(false);
     expect(canActAsHeadOf(actor({ isSuperAdmin: true }), KI)).toBe(true);
+  });
+});
+
+describe('canCreateDivisionTask', () => {
+  it('super admin creates division-level tasks anywhere', () => {
+    const sa = actor({ isSuperAdmin: true, divisionId: OJS });
+    expect(canCreateDivisionTask(sa, MEDIA)).toBe(true);
+    expect(canCreateDivisionTask(sa, KI)).toBe(true);
+  });
+
+  it('OSD creates division-level tasks anywhere', () => {
+    const osd = actor({ isOsd: true, divisionId: OJS });
+    expect(canCreateDivisionTask(osd, MEDIA)).toBe(true);
+    expect(canCreateDivisionTask(osd, KI)).toBe(true);
+  });
+
+  it('a head only within divisions they head — home does not count', () => {
+    // Zuber-style: home ABD, heads NSDF only.
+    const head = actor({ divisionId: ABD, headedDivisionIds: [NSDF] });
+    expect(canCreateDivisionTask(head, NSDF)).toBe(true);
+    expect(canCreateDivisionTask(head, ABD)).toBe(false);
+    expect(canCreateDivisionTask(head, KI)).toBe(false);
+  });
+
+  it('an active delegate gains the power for the delegated division', () => {
+    // headedDivisionIds already folds in active delegations.
+    const delegate = actor({ divisionId: KI, headedDivisionIds: [SGM] });
+    expect(canCreateDivisionTask(delegate, SGM)).toBe(true);
+    expect(canCreateDivisionTask(delegate, KI)).toBe(false);
+  });
+
+  it('a division user cannot create division-level tasks, even at home', () => {
+    const user = actor({ divisionId: KI });
+    expect(canCreateDivisionTask(user, KI)).toBe(false);
+    expect(canCreateDivisionTask(user, SGM)).toBe(false);
   });
 });
 

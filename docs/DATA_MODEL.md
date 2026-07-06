@@ -67,7 +67,7 @@ A non-null value means the task carries a JS Priority badge that propagates ever
 'personal' | 'division'
 ```
 
-`personal` is creator-only — not visible even to superiors. `division` follows hierarchy rules.
+`personal` is creator-only — not visible even to superiors. `division` follows hierarchy rules. Setting `division` at creation, or toggling visibility either way afterwards, is a head power (Super Admin, OSD, the division's head, or an active delegate); everyone else creates `personal` tasks only. See PERMISSIONS.md §5.11.
 
 ### 1.8 `recurrence_rule`
 Super Admin can extend this list at runtime. Seed set:

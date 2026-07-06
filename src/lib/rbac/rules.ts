@@ -24,6 +24,8 @@ export type RbacActor = {
   id: string;
   divisionId: string;
   isSuperAdmin: boolean;
+  /** hierarchy_slot = 'osd' — the JS-office coordinator acts across divisions. */
+  isOsd?: boolean;
   /** Divisions where the actor holds head powers — direct + delegated. */
   headedDivisionIds: string[];
 };
@@ -104,6 +106,18 @@ export function canAssignTaskTo(actor: RbacActor, target: RbacTarget): boolean {
 /** Head powers over one specific division (curation, free reassignment of its tasks). */
 export function canActAsHeadOf(actor: RbacActor, divisionId: string): boolean {
   if (actor.isSuperAdmin) return true;
+  return actor.headedDivisionIds.includes(divisionId);
+}
+
+/**
+ * Division-level task creation (visibility: 'division') — giving work on a
+ * division's board is reserved for Super Admin, OSD, the division's head,
+ * or an active delegate (`headedDivisionIds` covers direct + delegated).
+ * Everyone else creates personal tasks only. The same rule gates changing
+ * an existing task's visibility.
+ */
+export function canCreateDivisionTask(actor: RbacActor, divisionId: string): boolean {
+  if (actor.isSuperAdmin || actor.isOsd) return true;
   return actor.headedDivisionIds.includes(divisionId);
 }
 
