@@ -37,7 +37,11 @@ export default async function PriorityBoardPage() {
       owner: { select: USER_SUMMARY_SELECT },
       division: true,
     },
-    orderBy: [{ priority: 'desc' }, { dueDate: { sort: 'asc', nulls: 'last' } }],
+    orderBy: [
+      { jsPrioritySortOrder: { sort: 'asc', nulls: 'last' } },
+      { priority: 'desc' },
+      { dueDate: { sort: 'asc', nulls: 'last' } },
+    ],
   });
 
   const tasksByLane: Record<PillJsLane, BoardTask[]> = {

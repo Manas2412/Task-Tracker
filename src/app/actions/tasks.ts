@@ -81,6 +81,79 @@ function revalidateTask(taskId: string) {
   revalidatePath('/tasks');
 }
 
+function nextOccurrence(
+  base: Date,
+  rule: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'half_yearly',
+): Date {
+  const d = new Date(base);
+  switch (rule) {
+    case 'daily':
+      d.setUTCDate(d.getUTCDate() + 1);
+      break;
+    case 'weekly':
+      d.setUTCDate(d.getUTCDate() + 7);
+      break;
+    case 'monthly':
+      d.setUTCMonth(d.getUTCMonth() + 1);
+      break;
+    case 'quarterly':
+      d.setUTCMonth(d.getUTCMonth() + 3);
+      break;
+    case 'half_yearly':
+      d.setUTCMonth(d.getUTCMonth() + 6);
+      break;
+  }
+  return d;
+}
+
+async function spawnRecurringTask(taskId: string, actorId: string): Promise<void> {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      name: true,
+      description: true,
+      ownerId: true,
+      divisionId: true,
+      priority: true,
+      visibility: true,
+      dueDate: true,
+      recurrenceRule: true,
+      createdById: true,
+      linkedTimelineFileId: true,
+    },
+  });
+  if (!task?.recurrenceRule || !task.dueDate) return;
+
+  const nextDue = nextOccurrence(task.dueDate, task.recurrenceRule);
+
+  await prisma.$transaction(async (tx) => {
+    const refNumber = await nextTaskRefNumber(task.divisionId, tx);
+    const spawned = await tx.task.create({
+      data: {
+        refNumber,
+        name: task.name,
+        description: task.description,
+        ownerId: task.ownerId,
+        divisionId: task.divisionId,
+        priority: task.priority,
+        visibility: task.visibility,
+        dueDate: nextDue,
+        recurrenceRule: task.recurrenceRule,
+        createdById: task.createdById,
+        linkedTimelineFileId: task.linkedTimelineFileId,
+      },
+    });
+    await tx.taskActivity.create({
+      data: {
+        taskId: spawned.id,
+        actorId,
+        eventType: 'recurrence_spawned',
+        payload: { sourceTaskId: taskId },
+      },
+    });
+  });
+}
+
 async function canEditTask(
   callerId: string,
   task: { ownerId: string; createdById: string; divisionId: string },
@@ -329,7 +402,7 @@ export async function updateTaskStatusAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, status: true, ownerId: true, createdById: true, divisionId: true },
+    select: { id: true, name: true, status: true, ownerId: true, createdById: true, divisionId: true, recurrenceRule: true },
   });
   if (!task) return fail('Task not found.', epoch);
 
@@ -411,6 +484,10 @@ export async function updateTaskStatusAction(
       if (notifs.length > 0) {
         await prisma.notification.createMany({ data: notifs });
       }
+    }
+
+    if (parsed.data.status === 'completed' && task.recurrenceRule) {
+      await spawnRecurringTask(task.id, me.id);
     }
   } catch (err) {
     console.error('updateTaskStatusAction failed:', err);
@@ -1423,6 +1500,55 @@ export async function setJsPriorityLaneAction(
 
   revalidatePath('/priority-board');
   revalidateTask(task.id);
+  return ok(epoch);
+}
+
+// ============================================================
+// reorderBoardAction — persist within-lane drag-drop order
+// ============================================================
+
+const reorderSchema = z.object({
+  lane: z.enum(['today', 'week', 'month', 'watchlist']),
+  taskIds: z.array(z.string().uuid()),
+});
+
+export async function reorderBoardAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  if (!me.isSuperAdmin && me.hierarchySlot !== 'osd') {
+    return fail('Only OSD or Super Admin can reorder the board.', epoch);
+  }
+
+  const raw = formData.get('payload');
+  if (typeof raw !== 'string') return fail('Invalid input.', epoch);
+
+  let parsed: z.infer<typeof reorderSchema>;
+  try {
+    parsed = reorderSchema.parse(JSON.parse(raw));
+  } catch {
+    return fail('Invalid input.', epoch);
+  }
+
+  try {
+    await prisma.$transaction(
+      parsed.taskIds.map((id, i) =>
+        prisma.task.updateMany({
+          where: { id, jsPriorityLane: parsed.lane },
+          data: { jsPrioritySortOrder: i },
+        }),
+      ),
+    );
+  } catch (err) {
+    console.error('reorderBoardAction failed:', err);
+    return fail('Could not save order.', epoch);
+  }
+
+  revalidatePath('/priority-board');
   return ok(epoch);
 }
 

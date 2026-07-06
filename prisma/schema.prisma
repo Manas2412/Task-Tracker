@@ -344,6 +344,8 @@ model Task {
   milestone                Boolean         @default(false)
   recurrenceRule           RecurrenceRule? @map("recurrence_rule")
 
+  jsPrioritySortOrder      Int?            @map("js_priority_sort_order")
+
   parentTaskId             String?         @map("parent_task_id") @db.Uuid
   linkedTimelineFileId     String?         @map("linked_timeline_file_id") @db.Uuid
 

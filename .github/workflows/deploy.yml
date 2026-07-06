@@ -41,5 +41,9 @@ jobs:
             pnpm install --frozen-lockfile
             npx prisma generate
             npx prisma migrate deploy
-            pnpm build
+            NEXT_BUILD_DIR=.next-build pnpm build
+            rm -rf .next-old
+            [ -d .next ] && mv .next .next-old
+            mv .next-build .next
             pm2 restart myas
+            rm -rf .next-old

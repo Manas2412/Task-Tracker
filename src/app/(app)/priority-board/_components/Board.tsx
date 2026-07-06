@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Sortable from 'sortablejs';
 
 import { Avatar, Pill } from '@/components/ui';
-import { setJsPriorityLaneAction } from '@/app/actions/tasks';
+import { setJsPriorityLaneAction, reorderBoardAction } from '@/app/actions/tasks';
 import { formatDue, initialsOf } from '@/lib/format';
 import { TASK_STATUS_LABEL } from '@/lib/labels';
 import { cn } from '@/lib/utils';
@@ -86,18 +86,33 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
           if (!taskId || !toLane) return;
           if (toLane === fromLane && evt.newIndex === evt.oldIndex) return;
 
-          const fd = new FormData();
-          fd.set('taskId', taskId);
-          fd.set('lane', toLane);
+          const targetList = evt.to as HTMLElement;
+          const orderedIds = Array.from(
+            targetList.querySelectorAll<HTMLElement>('[data-task-id]'),
+          ).map((el) => el.dataset.taskId!);
+
           startTransition(async () => {
-            const result = await setJsPriorityLaneAction(undefined, fd);
-            if (!result.ok && result.error) {
-              setErrorBanner(result.error);
-              router.refresh();
-              setTimeout(() => setErrorBanner(null), 4000);
-            } else {
-              router.refresh();
+            if (toLane !== fromLane) {
+              const fd = new FormData();
+              fd.set('taskId', taskId);
+              fd.set('lane', toLane);
+              const laneResult = await setJsPriorityLaneAction(undefined, fd);
+              if (!laneResult.ok && laneResult.error) {
+                setErrorBanner(laneResult.error);
+                router.refresh();
+                setTimeout(() => setErrorBanner(null), 4000);
+                return;
+              }
             }
+
+            const reorderFd = new FormData();
+            reorderFd.set('payload', JSON.stringify({ lane: toLane, taskIds: orderedIds }));
+            const reorderResult = await reorderBoardAction(undefined, reorderFd);
+            if (!reorderResult.ok && reorderResult.error) {
+              setErrorBanner(reorderResult.error);
+              setTimeout(() => setErrorBanner(null), 4000);
+            }
+            router.refresh();
           });
         },
       });
