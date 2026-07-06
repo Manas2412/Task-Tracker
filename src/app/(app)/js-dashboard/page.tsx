@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { Avatar, Pill } from '@/components/ui';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { initialsOf, formatDue } from '@/lib/format';
 import { TASK_STATUS_LABEL } from '@/lib/labels';
 import { cn } from '@/lib/utils';
@@ -97,7 +98,7 @@ export default async function JsDashboardPage() {
     prisma.task.findMany({
       where: { ...baseFilter, jsPriorityLane: { not: null } },
       include: {
-        owner: { include: { division: true } },
+        owner: { select: USER_SUMMARY_SELECT },
         division: true,
       },
       orderBy: [{ priority: 'desc' }, { dueDate: { sort: 'asc', nulls: 'last' } }],
@@ -110,7 +111,7 @@ export default async function JsDashboardPage() {
         status: { not: 'completed' },
       },
       include: {
-        owner: { include: { division: true } },
+        owner: { select: USER_SUMMARY_SELECT },
         division: true,
       },
       orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }],
@@ -124,7 +125,7 @@ export default async function JsDashboardPage() {
         status: { not: 'completed' },
       },
       include: {
-        owner: { include: { division: true } },
+        owner: { select: USER_SUMMARY_SELECT },
         division: true,
       },
       orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }, { priority: 'desc' }],

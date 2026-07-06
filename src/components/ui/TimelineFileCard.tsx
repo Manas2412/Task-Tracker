@@ -1,9 +1,10 @@
 import Link from 'next/link';
 
 import { Pill } from '@/components/ui/Pill';
+import { TASK_PRIORITY_LABEL } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 
-import type { PillStatusTone } from '@/components/ui/Pill';
+import type { PillPriorityTone, PillStatusTone } from '@/components/ui/Pill';
 
 /**
  * TimelineFileCard — per docs/COMPONENTS.md §4.
@@ -38,6 +39,7 @@ type FullProps = {
   receivedDate: Date;
   deadlineDate: Date | null;
   status: string;
+  priority: string;
   markedTo: Array<{ id: string; name: string; avatarColour: string }>;
   taskLinkCount: number;
   href: string;
@@ -80,11 +82,16 @@ function Full(p: FullProps) {
         p.className,
       )}
     >
-      {/* Header — ref no + status + deadline */}
+      {/* Header — ref no + priority + status + deadline */}
       <header className="flex items-start gap-2 flex-wrap mb-2.5">
         <span className="font-mono text-[11px] font-medium text-primary bg-primary-soft border border-primary-line/40 px-2 py-0.5 rounded-md">
           {p.refNo}
         </span>
+        <Pill
+          variant="priority"
+          tone={(p.priority as PillPriorityTone) ?? 'medium'}
+          label={TASK_PRIORITY_LABEL[p.priority] ?? p.priority}
+        />
         <Pill
           variant="status"
           tone={TF_STATUS_TONE[p.status] ?? 'pending_action'}

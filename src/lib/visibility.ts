@@ -1,6 +1,7 @@
 import type { Prisma, Task } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
+import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { getHeadedDivisionIds } from '@/lib/rbac';
 import {
   buildVisibilityClausesFrom,
@@ -77,7 +78,7 @@ function buildFilterClause(filter: TaskFilter, callerId: string): Prisma.TaskWhe
 }
 
 export type VisibleTask = Task & {
-  owner: { id: string; name: string; divisionId: string; division: { name: string; avatarColour: string } };
+  owner: { id: string; name: string; designation: string; division: { id: string; name: string; avatarColour: string } };
   division: { id: string; name: string; avatarColour: string };
   subtasks: { status: string }[];
   collaborators: { role: string }[];
@@ -120,7 +121,7 @@ export async function fetchVisibleTasks(opts: {
       AND: andClauses,
     },
     include: {
-      owner: { include: { division: true } },
+      owner: { select: USER_SUMMARY_SELECT },
       division: true,
       subtasks: { select: { status: true } },
       collaborators: { select: { role: true } },

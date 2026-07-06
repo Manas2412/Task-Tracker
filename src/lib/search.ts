@@ -1,6 +1,7 @@
 import type { Prisma, TaskPriority, TaskStatus } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
+import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
 import { buildVisibilityClauses } from '@/lib/visibility';
 
@@ -181,7 +182,7 @@ export async function searchTasksFor(
     prisma.task.findMany({
       where,
       include: {
-        owner: { include: { division: true } },
+        owner: { select: USER_SUMMARY_SELECT },
         division: true,
       },
       orderBy: [{ updatedAt: 'desc' }],

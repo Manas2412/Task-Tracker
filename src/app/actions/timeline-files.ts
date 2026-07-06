@@ -77,6 +77,9 @@ const TF_STATUSES = [
   'closed',
 ] as const;
 
+// Reuses the task priority scale so the tag stays consistent across the app.
+const TF_PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const;
+
 // ============================================================
 // createTimelineFileAction
 // ============================================================
@@ -96,6 +99,7 @@ const createSchema = z.object({
     .refine((s) => Number(s) > 0, 'File number must be greater than zero'),
   subject: z.string().trim().min(1, 'Subject is required').max(200, 'Subject is too long'),
   fromWhom: z.string().trim().min(1, 'From-whom is required').max(120),
+  priority: z.enum(TF_PRIORITIES).optional().default('medium'),
   receivedDate: z
     .string()
     .min(1, 'Received date is required')
@@ -130,6 +134,7 @@ export async function createTimelineFileAction(
     fileNumber: formData.get('fileNumber'),
     subject: formData.get('subject'),
     fromWhom: formData.get('fromWhom'),
+    priority: formData.get('priority') ?? undefined,
     receivedDate: formData.get('receivedDate'),
     deadlineDate: formData.get('deadlineDate'),
     secretaryComments: formData.get('secretaryComments'),
@@ -160,6 +165,7 @@ export async function createTimelineFileAction(
         receivedDate: received,
         deadlineDate: deadline,
         status: 'pending_action',
+        priority: parsed.data.priority,
         secretaryComments: parsed.data.secretaryComments ?? null,
         createdById: guard.userId,
         markedTo: {
@@ -287,6 +293,74 @@ export async function updateTimelineFileStatusAction(
   } catch (err) {
     console.error('updateTimelineFileStatusAction failed:', err);
     return fail('Could not update status.', epoch);
+  }
+
+  revalidateTf(tf.id);
+  return ok(epoch);
+}
+
+// ============================================================
+// updateTimelineFilePriorityAction
+// ============================================================
+
+const updatePrioritySchema = z.object({
+  id: z.string().uuid(),
+  priority: z.enum(TF_PRIORITIES),
+});
+
+export async function updateTimelineFilePriorityAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const parsed = updatePrioritySchema.safeParse({
+    id: formData.get('id'),
+    priority: formData.get('priority'),
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const tf = await prisma.timelineFile.findUnique({
+    where: { id: parsed.data.id },
+    include: { markedTo: { select: { divisionId: true } } },
+  });
+  if (!tf) return fail('Timeline file not found.', epoch);
+  if (tf.priority === parsed.data.priority) return ok(epoch);
+
+  // Same gate as status: OSD/Super Admin OR Director of a marked-to
+  // division — priority is a triage signal those officers own.
+  const meRow = await prisma.user.findUnique({
+    where: { id: me.id },
+    select: { hierarchySlot: true, isSuperAdmin: true, divisionId: true },
+  });
+  const allowed =
+    meRow &&
+    (meRow.isSuperAdmin ||
+      meRow.hierarchySlot === 'osd' ||
+      (meRow.hierarchySlot === 'director' &&
+        tf.markedTo.some((m) => m.divisionId === meRow.divisionId)));
+  if (!allowed) return fail('You do not have permission to change this priority.', epoch);
+
+  try {
+    await prisma.$transaction([
+      prisma.timelineFile.update({
+        where: { id: tf.id },
+        data: { priority: parsed.data.priority },
+      }),
+      prisma.timelineFileActivity.create({
+        data: {
+          timelineFileId: tf.id,
+          actorId: me.id,
+          eventType: 'priority_changed',
+          payload: { from: tf.priority, to: parsed.data.priority },
+        },
+      }),
+    ]);
+  } catch (err) {
+    console.error('updateTimelineFilePriorityAction failed:', err);
+    return fail('Could not update priority.', epoch);
   }
 
   revalidateTf(tf.id);

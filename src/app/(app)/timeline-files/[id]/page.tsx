@@ -10,6 +10,7 @@ import {
 import { canEditTfAttachments } from '@/app/actions/attachments';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { ACTOR_SUMMARY_SELECT, USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { initialsOf } from '@/lib/format';
 import { canCreateDivisionTask, getRbacActor } from '@/lib/rbac';
 import { isS3Configured } from '@/lib/s3';
@@ -26,6 +27,7 @@ import { SecretaryQuoteSection } from './_components/SecretaryQuoteSection';
 import { TfActivitySection } from './_components/TfActivitySection';
 import { TfDeadlineEditor } from './_components/TfDeadlineEditor';
 import { TfMoreMenu } from './_components/TfMoreMenu';
+import { TfPriorityPicker } from './_components/TfPriorityPicker';
 import { TfRefNumberEditor } from './_components/TfRefNumberEditor';
 import { TfStatusPicker } from './_components/TfStatusPicker';
 import { TfTitleEditor } from './_components/TfTitleEditor';
@@ -70,7 +72,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
       AND: [visibility],
     },
     include: {
-      createdBy: { include: { division: true } },
+      createdBy: { select: USER_SUMMARY_SELECT },
       markedTo: {
         include: {
           division: { select: { id: true, name: true, avatarColour: true } },
@@ -79,13 +81,13 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
       taskLinks: {
         include: {
           task: {
-            include: { owner: { include: { division: true } } },
+            include: { owner: { select: USER_SUMMARY_SELECT } },
           },
         },
         orderBy: { linkedAt: 'asc' },
       },
       activity: {
-        include: { actor: { select: { name: true } } },
+        include: { actor: { select: ACTOR_SUMMARY_SELECT } },
         orderBy: { createdAt: 'desc' },
       },
     },
@@ -238,6 +240,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
             fileNumber={tf.refNo.split('/')[1] ?? String(tf.refSeq)}
             canEdit={me.isSuperAdmin}
           />
+          <TfPriorityPicker tfId={tf.id} current={tf.priority} canEdit={canEditStatus} />
           <TfStatusPicker tfId={tf.id} current={tf.status} canEdit={canEditStatus} />
           {tf.deadlineDate && !isClosed && days !== null ? (
             <Pill variant="deadline" daysLeft={days} overdue={isOverdue} />

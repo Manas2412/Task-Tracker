@@ -15,6 +15,7 @@ import {
   getRbacActor,
   getSubordinateIds,
 } from '@/lib/rbac';
+import { ACTOR_SUMMARY_SELECT, USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { buildVisibilityClauses } from '@/lib/visibility';
 import { CollaboratorsSection, type Candidate, type CollaboratorRow, type SubtaskScope } from './_components/CollaboratorsSection';
 import { JsLanePicker } from './_components/JsLanePicker';
@@ -45,10 +46,10 @@ export default async function TaskDetailPage({ params }: PageProps) {
   const task = await prisma.task.findUnique({
     where: { id: params.id },
     include: {
-      owner: { include: { division: true } },
+      owner: { select: USER_SUMMARY_SELECT },
       division: true,
       collaborators: {
-        include: { user: { include: { division: true } } },
+        include: { user: { select: USER_SUMMARY_SELECT } },
       },
       subtasks: {
         include: { owner: { select: { id: true, name: true, division: { select: { avatarColour: true } } } } },
@@ -57,16 +58,16 @@ export default async function TaskDetailPage({ params }: PageProps) {
       comments: {
         where: { parentCommentId: null },
         include: {
-          user: { include: { division: true } },
+          user: { select: USER_SUMMARY_SELECT },
           replies: {
-            include: { user: { include: { division: true } } },
+            include: { user: { select: USER_SUMMARY_SELECT } },
             orderBy: { createdAt: 'asc' },
           },
         },
         orderBy: { createdAt: 'asc' },
       },
       activity: {
-        include: { actor: true },
+        include: { actor: { select: ACTOR_SUMMARY_SELECT } },
         orderBy: { createdAt: 'desc' },
       },
       parentTask: { select: { id: true, name: true } },

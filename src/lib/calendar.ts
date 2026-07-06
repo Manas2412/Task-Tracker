@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
 import { buildVisibilityClauses } from '@/lib/visibility';
 
@@ -61,7 +62,7 @@ export async function fetchCalendarEvents(opts: {
         AND: [{ OR: taskVisibility }],
       },
       include: {
-        owner: { include: { division: true } },
+        owner: { select: USER_SUMMARY_SELECT },
         division: true,
       },
     }),

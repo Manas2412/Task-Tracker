@@ -88,6 +88,13 @@ const TF_STATUS_LABEL: Record<string, string> = {
   closed: 'Closed',
 };
 
+const TF_PRIORITY_LABEL: Record<string, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  urgent: 'Urgent',
+};
+
 function describeTfEvent(type: string, payload: Record<string, unknown> | null): string {
   if (!payload) payload = {};
   switch (type) {
@@ -95,6 +102,8 @@ function describeTfEvent(type: string, payload: Record<string, unknown> | null):
       return 'created this file';
     case 'status_changed':
       return `changed status to ${TF_STATUS_LABEL[String(payload.to)] ?? String(payload.to)}`;
+    case 'priority_changed':
+      return `changed priority to ${TF_PRIORITY_LABEL[String(payload.to)] ?? String(payload.to)}`;
     case 'fields_updated':
       return 'updated the file details';
     case 'secretary_comment_added':
@@ -131,6 +140,7 @@ function describeTfEvent(type: string, payload: Record<string, unknown> | null):
 function accentEvent(type: string): boolean {
   return (
     type === 'status_changed' ||
+    type === 'priority_changed' ||
     type === 'secretary_comment_added' ||
     type === 'created_from_correspondence'
   );
