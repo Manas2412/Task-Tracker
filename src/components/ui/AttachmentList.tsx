@@ -9,6 +9,7 @@ import {
   addDriveLinkAttachmentAction,
   deleteAttachmentAction,
   registerAttachmentAction,
+  renameAttachmentAction,
 } from '@/app/actions/attachments';
 import { fileBadgeFor, formatBytes, MAX_UPLOAD_BYTES } from '@/lib/s3';
 import { cn } from '@/lib/utils';
@@ -235,6 +236,71 @@ function AttachmentRowCard({
   const viewUrl = `/api/attachments/${row.id}/view`;
   const downloadUrl = `/api/attachments/${row.id}/download`;
 
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const ext = isDriveLink ? '' : (row.fileName.includes('.') ? '.' + row.fileName.split('.').pop() : '');
+  const baseName = ext ? row.fileName.slice(0, -ext.length) : row.fileName;
+
+  const startEditing = () => {
+    if (!row.canDelete) return;
+    setEditValue(baseName);
+    setEditing(true);
+    setTimeout(() => renameInputRef.current?.select(), 0);
+  };
+
+  const commitRename = async () => {
+    const trimmed = editValue.trim();
+    if (!trimmed || trimmed === baseName) {
+      setEditing(false);
+      return;
+    }
+    const newName = trimmed + ext;
+    setRenaming(true);
+    const fd = new FormData();
+    fd.set('id', row.id);
+    fd.set('fileName', newName);
+    const result = await renameAttachmentAction(undefined, fd);
+    setRenaming(false);
+    if (result.ok) {
+      setEditing(false);
+    } else {
+      alert(result.error ?? 'Could not rename.');
+    }
+  };
+
+  const onRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitRename();
+    } else if (e.key === 'Escape') {
+      setEditing(false);
+    }
+  };
+
+  const shareOnWhatsApp = async () => {
+    setSharing(true);
+    try {
+      const res = await fetch(`/api/attachments/${row.id}/share-url`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Could not generate share link.');
+      }
+      const { url, fileName } = (await res.json()) as { url: string; fileName: string };
+      const sizeStr = row.sizeBytes != null ? ` (${formatBytes(row.sizeBytes)})` : '';
+      const text = `*MYAS Task Tracker*\nFile: ${fileName}${sizeStr}\nDownload: ${url}`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    } catch (err) {
+      console.error('WhatsApp share failed:', err);
+      alert(err instanceof Error ? err.message : 'Share failed.');
+    } finally {
+      setSharing(false);
+    }
+  };
+
   return (
     <div className="bg-bg border border-line rounded-xl hover:border-ink-4 transition-colors">
       <div className="flex items-center gap-3 p-3">
@@ -253,40 +319,58 @@ function AttachmentRowCard({
           )}
         </span>
 
-        {/* File info — click to open */}
-        {isDriveLink ? (
-          <a
-            href={row.fileUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="flex-1 min-w-0 text-left hover:underline"
-          >
-            <p className="text-[13px] font-medium text-ink truncate">{row.fileName}</p>
-            <p className="text-[11px] text-ink-3 truncate" title={format(row.uploadedAt, 'd LLL yyyy, h:mm a')}>
-              {row.uploaderName} ·{' '}
-              {formatDistanceToNow(row.uploadedAt, { addSuffix: true })}
-              {' · Drive link'}
-            </p>
-          </a>
-        ) : (
-          <a
-            href={viewUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="flex-1 min-w-0 text-left hover:underline"
-          >
-            <p className="text-[13px] font-medium text-ink truncate">{row.fileName}</p>
-            <p className="text-[11px] text-ink-3 truncate" title={format(row.uploadedAt, 'd LLL yyyy, h:mm a')}>
-              {row.uploaderName} ·{' '}
-              {formatDistanceToNow(row.uploadedAt, { addSuffix: true })}
-              {row.sizeBytes != null ? ` · ${formatBytes(row.sizeBytes)}` : null}
-            </p>
-          </a>
-        )}
+        {/* File info */}
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <div className="flex items-center gap-1">
+              <input
+                ref={renameInputRef}
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={onRenameKeyDown}
+                onBlur={commitRename}
+                disabled={renaming}
+                maxLength={196}
+                className="flex-1 min-w-0 px-2 py-0.5 rounded border border-ink-4 bg-panel text-[13px] font-medium text-ink outline-none focus:border-ink"
+                autoFocus
+              />
+              {ext ? (
+                <span className="text-[13px] text-ink-3 font-medium shrink-0">{ext}</span>
+              ) : null}
+            </div>
+          ) : (
+            <span className="flex items-center gap-1">
+              <a
+                href={isDriveLink ? row.fileUrl : viewUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[13px] font-medium text-ink truncate hover:underline"
+              >
+                {row.fileName}
+              </a>
+              {row.canDelete ? (
+                <button
+                  type="button"
+                  onClick={startEditing}
+                  className="shrink-0 text-ink-3 hover:text-ink transition-colors"
+                  title="Rename"
+                >
+                  <i className="ti ti-pencil text-[12px]" aria-hidden="true" />
+                </button>
+              ) : null}
+            </span>
+          )}
+          <p className="text-[11px] text-ink-3 truncate" title={format(row.uploadedAt, 'd LLL yyyy, h:mm a')}>
+            {row.uploaderName} ·{' '}
+            {formatDistanceToNow(row.uploadedAt, { addSuffix: true })}
+            {isDriveLink ? ' · Drive link' : row.sizeBytes != null ? ` · ${formatBytes(row.sizeBytes)}` : null}
+          </p>
+        </div>
       </div>
 
-      {/* Action buttons — always visible, with text labels */}
-      <div className="flex items-center gap-2 px-3 pb-3 pt-0">
+      {/* Action buttons */}
+      <div className="flex items-center gap-2 px-3 pb-3 pt-0 flex-wrap">
         {isDriveLink ? (
           <a
             href={row.fileUrl}
@@ -317,6 +401,15 @@ function AttachmentRowCard({
             </a>
           </>
         )}
+        <button
+          type="button"
+          onClick={shareOnWhatsApp}
+          disabled={sharing}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#25D366]/40 text-[11px] font-medium text-[#25D366] hover:bg-[#25D366]/10 transition-colors disabled:opacity-50"
+        >
+          <i className="ti ti-brand-whatsapp text-[13px]" aria-hidden="true" />
+          {sharing ? 'Sharing...' : 'WhatsApp'}
+        </button>
         {row.canDelete ? (
           <button
             type="button"

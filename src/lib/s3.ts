@@ -24,6 +24,7 @@ let cachedClient: S3Client | null = null;
 
 const UPLOAD_TTL_SECONDS = 15 * 60; // browser PUT must complete within 15 min
 const DEFAULT_DOWNLOAD_TTL = 3600; // 1 hour
+const SHARE_TTL_SECONDS = 24 * 60 * 60; // 24 hours for WhatsApp-shared links
 
 export function isS3Configured(): boolean {
   return Boolean(
@@ -145,6 +146,20 @@ export async function presignView(opts: {
     ResponseContentType: opts.contentType || undefined,
   });
   return getSignedUrl(s3Client(), cmd, { expiresIn: downloadTtl() });
+}
+
+export async function presignShare(opts: {
+  key: string;
+  filename?: string;
+}): Promise<string> {
+  const cmd = new GetObjectCommand({
+    Bucket: s3Bucket(),
+    Key: opts.key,
+    ResponseContentDisposition: opts.filename
+      ? `attachment; filename="${sanitizeFilename(opts.filename)}"`
+      : undefined,
+  });
+  return getSignedUrl(s3Client(), cmd, { expiresIn: SHARE_TTL_SECONDS });
 }
 
 export async function deleteObject(key: string): Promise<void> {

@@ -314,6 +314,87 @@ async function writeAttachment(args: {
 }
 
 // ============================================================
+// renameAttachmentAction
+// ============================================================
+
+const renameSchema = z.object({
+  id: z.string().uuid(),
+  fileName: z.string().trim().min(1).max(200),
+});
+
+export async function renameAttachmentAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const parsed = renameSchema.safeParse({
+    id: formData.get('id'),
+    fileName: formData.get('fileName'),
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const att = await prisma.attachment.findUnique({
+    where: { id: parsed.data.id },
+    select: {
+      id: true,
+      ownerType: true,
+      ownerId: true,
+      uploadedById: true,
+      fileName: true,
+    },
+  });
+  if (!att) return fail('Attachment not found.', epoch);
+
+  let editor = att.uploadedById === me.id;
+  if (!editor) {
+    if (att.ownerType === 'task') {
+      editor = await canEditTaskAttachments(me.id, att.ownerId);
+    } else {
+      editor = await canEditTfAttachments(me.id, att.ownerId);
+    }
+  }
+  if (!editor) return fail('You do not have permission.', epoch);
+
+  const oldName = att.fileName;
+  try {
+    await prisma.attachment.update({
+      where: { id: att.id },
+      data: { fileName: parsed.data.fileName },
+    });
+
+    if (att.ownerType === 'task') {
+      await prisma.taskActivity.create({
+        data: {
+          taskId: att.ownerId,
+          actorId: me.id,
+          eventType: 'attachment_renamed',
+          payload: { oldName, newName: parsed.data.fileName },
+        },
+      });
+      revalidatePath(`/tasks/${att.ownerId}`);
+    } else {
+      await prisma.timelineFileActivity.create({
+        data: {
+          timelineFileId: att.ownerId,
+          actorId: me.id,
+          eventType: 'attachment_renamed',
+          payload: { oldName, newName: parsed.data.fileName },
+        },
+      });
+      revalidatePath(`/timeline-files/${att.ownerId}`);
+    }
+
+    return ok(epoch);
+  } catch (err) {
+    console.error('renameAttachmentAction failed:', err);
+    return fail('Could not rename.', epoch);
+  }
+}
+
+// ============================================================
 // deleteAttachmentAction
 // ============================================================
 
