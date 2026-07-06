@@ -165,9 +165,9 @@ Reassignment:
 - Sideways or upward — requires superior's tap-approval; the "Approval needed" amber badge appears on those rows in the assignee picker.
 
 Deletion vs archive:
-- Solo task (no collaborators, no comments) — creator can delete.
-- Once shared — Delete becomes Archive (soft-delete, recoverable).
-- Super Admin can hard-delete from the audit page.
+- Delete (hard) — the owner or creator, the **head of the task's division** (direct head or active delegate), or a **Super Admin** (any task). Removes the task and its subtasks/comments/attachments; cannot be undone. Enforced in `deleteTaskAction` via `canActAsHeadOf`.
+- Archive (soft-delete, recoverable) — anyone with edit rights (owner, creator, director/head of the division, OSD, JS, Super Admin).
+- Timeline File — hard-delete is Super Admin only (any file, regardless of creator); archive is OSD or Super Admin.
 
 Full matrix lives in [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
 

@@ -1221,11 +1221,10 @@ export async function archiveTaskAction(
 }
 
 /**
- * Delete a task. Per PRD §5.1 deletion is allowed only while the task is
- * "solo" — no collaborators added, no comments posted. Once shared, the
- * Delete button on the UI becomes Archive instead.
- *
- * Super Admin hard-delete (from the audit page) bypasses this and lands later.
+ * Hard-delete a task (and its subtasks, attachments, and cascading
+ * children). Allowed for the owner or creator, a Super Admin (any task),
+ * or the head of the task's division — see the permission check below.
+ * Everyone else uses Archive (soft-delete) instead.
  */
 export async function deleteTaskAction(
   prev: ActionState | undefined,
@@ -1245,12 +1244,24 @@ export async function deleteTaskAction(
       name: true,
       createdById: true,
       ownerId: true,
+      divisionId: true,
     },
   });
   if (!task) return fail('Task not found.', epoch);
 
-  if (task.createdById !== me.id && task.ownerId !== me.id) {
-    return fail('Only the owner or creator can delete a task.', epoch);
+  // Delete rights: the owner or creator, a Super Admin (any task), or the
+  // head of the task's division. canActAsHeadOf covers Super Admin plus
+  // the direct heads and active delegates of that division.
+  const actor = await getRbacActor(me.id);
+  const allowed =
+    task.createdById === me.id ||
+    task.ownerId === me.id ||
+    (actor !== null && canActAsHeadOf(actor, task.divisionId));
+  if (!allowed) {
+    return fail(
+      'Only the owner, creator, a division head, or a Super Admin can delete this task.',
+      epoch,
+    );
   }
 
   try {
