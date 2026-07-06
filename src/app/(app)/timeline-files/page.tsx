@@ -157,6 +157,7 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
                   receivedDate={tf.receivedDate}
                   deadlineDate={tf.deadlineDate}
                   status={tf.status}
+                  priority={tf.priority}
                   markedTo={tf.markedTo.map((m) => m.division)}
                   taskLinkCount={tf._count.taskLinks}
                   href={`/timeline-files/${tf.id}`}

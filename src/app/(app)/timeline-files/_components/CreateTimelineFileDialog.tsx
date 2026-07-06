@@ -21,6 +21,15 @@ export type DivisionOption = {
 
 type QueuedDriveLink = { name: string; url: string };
 
+type PriorityValue = 'low' | 'medium' | 'high' | 'urgent';
+
+const PRIORITY_OPTIONS: { value: PriorityValue; label: string; dot: string; activeClass: string }[] = [
+  { value: 'low', label: 'Low', dot: 'bg-low', activeClass: 'bg-low-soft text-low border-low/30' },
+  { value: 'medium', label: 'Medium', dot: 'bg-medium', activeClass: 'bg-medium-soft text-medium border-medium/30' },
+  { value: 'high', label: 'High', dot: 'bg-high', activeClass: 'bg-high-soft text-high border-high/30' },
+  { value: 'urgent', label: 'Urgent', dot: 'bg-urgent', activeClass: 'bg-urgent-soft text-urgent border-urgent/30' },
+];
+
 type CreateTimelineFileDialogProps = {
   divisions: DivisionOption[];
   defaultReceivedDate: string;
@@ -41,6 +50,7 @@ export function CreateTimelineFileDialog({
     INITIAL_TF_STATE,
   );
   const [markedTo, setMarkedTo] = useState<string[]>([]);
+  const [priority, setPriority] = useState<PriorityValue>('medium');
 
   // Attachment queues (collected before TF creation)
   const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
@@ -135,6 +145,7 @@ export function CreateTimelineFileDialog({
   function resetAndClose() {
     formRef.current?.reset();
     setMarkedTo([]);
+    setPriority('medium');
     setQueuedFiles([]);
     setQueuedLinks([]);
     setShowLinkForm(false);
@@ -248,6 +259,32 @@ export function CreateTimelineFileDialog({
                 placeholder="e.g. Prime Minister's Office"
                 className={inputCn(!!state.fieldErrors?.fromWhom)}
               />
+            </Field>
+
+            <Field label="Priority" hint="Same scale as tasks. Can be changed later.">
+              <input type="hidden" name="priority" value={priority} />
+              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Priority">
+                {PRIORITY_OPTIONS.map((o) => {
+                  const active = priority === o.value;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setPriority(o.value)}
+                      disabled={uploading}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-pill text-[11px] font-medium border transition-colors',
+                        active ? o.activeClass : 'bg-panel text-ink-2 border-line hover:border-ink-4',
+                      )}
+                    >
+                      <span className={cn('w-1.5 h-1.5 rounded-full', o.dot)} aria-hidden="true" />
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
             </Field>
 
             <div className="grid grid-cols-2 gap-3">

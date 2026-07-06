@@ -466,6 +466,7 @@ model TimelineFile {
   receivedDate                DateTime            @map("received_date") @db.Date
   deadlineDate                DateTime?           @map("deadline_date") @db.Date
   status                      TimelineFileStatus  @default(pending_action)
+  priority                    TaskPriority        @default(medium)
   secretaryComments           String?             @map("secretary_comments")
   deskComments                String?             @map("desk_comments")
   actionDocumentAttachmentId  String?             @map("action_document_attachment_id") @db.Uuid
