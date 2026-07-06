@@ -49,9 +49,8 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 | **Set JS Priority lane** |  | ✓ |  |  |  |  |  |  | ✓ |
 | **Toggle milestone** | own | ✓ | own | own | own | own | own | own | ✓ |
 | **Toggle visibility** | head³ | ✓ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ |
-| **Delete solo task (no collaborators / no comments)** | own | own | own | own | own | own | own | own | ✓ (any) |
+| **Delete task (hard-delete)** | own | own | own · head³ | own · head³ | own · head³ | own · head³ | own · head³ | own · head³ | ✓ (any) |
 | **Archive shared task** | own | ✓ | own | own | own | own | own | own | ✓ (any) |
-| **Hard-delete** |  |  |  |  |  |  |  |  | ✓ (from audit page) |
 | **Restore archived task** |  | ✓ |  |  |  |  |  |  | ✓ |
 
 ¹ "Needs approval" = the request is created; the proposed new owner's superior must tap-approve before the reassignment takes effect.
@@ -148,11 +147,10 @@ The role switcher in the top bar is the only entry point. OSD and Super Admin ar
 
 | Condition | Available action | Who |
 |---|---|---|
-| Task is solo (no collaborators added, no comments posted) | **Delete** (hard) | Creator only |
-| Task has collaborators or comments | **Archive** (soft-delete, recoverable, hidden from lists) | Owner, or anyone with edit rights |
-| Any task | **Hard-delete** (from the audit page) | Super Admin only |
+| Task — delete (hard) | **Delete** (removes the task, its subtasks, comments, collaborators, and attachments; cannot be undone) | Owner or creator; the **head of the task's division** (direct head or active delegate); **Super Admin** for any task |
+| Task — archive | **Archive** (soft-delete, recoverable, hidden from lists) | Anyone with edit rights (owner, creator, director/head of the division, OSD, JS, Super Admin) |
 | Timeline File — archive | ✓ | OSD, Super Admin |
-| Timeline File — hard-delete | ✓ | Super Admin only |
+| Timeline File — hard-delete | ✓ | Super Admin only (any file, regardless of creator) |
 | User | **Disable** (login blocked, audit history preserved) | Super Admin only |
 | User — hard-delete |  | Not supported — would break the audit trail |
 

@@ -125,14 +125,19 @@ export default async function TaskDetailPage({ params }: PageProps) {
     task.visibility !== 'personal' &&
     me.divisionId === task.divisionId;
 
-  const canDelete =
-    task.createdById === session.user.id || isOwner;
-
   // Division-based RBAC context — heads (direct or delegated) get
   // director-like powers over the divisions they head.
   const actor = await getRbacActor(session.user.id);
   const isHeadOfTaskDivision =
     actor !== null && actor.headedDivisionIds.includes(task.divisionId);
+
+  // Delete rights mirror deleteTaskAction: owner, creator, Super Admin
+  // (any task), or the head of the task's division.
+  const canDelete =
+    task.createdById === session.user.id ||
+    isOwner ||
+    session.user.isSuperAdmin ||
+    isHeadOfTaskDivision;
 
   // Field editing: owner, creator, Director+ in same division, division
   // head of the task's division, OSD, JS, Super Admin.
@@ -398,7 +403,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
             canDelete={canDelete}
             reasonNoDelete={
               !canDelete
-                ? 'Only the owner or creator can delete a task.'
+                ? 'Only the owner, creator, a division head, or a Super Admin can delete this task.'
                 : undefined
             }
           />
