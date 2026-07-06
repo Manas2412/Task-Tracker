@@ -98,7 +98,7 @@ export function CalendarProvider({
             ) : null}
             <ActionButton
               icon="ti-checkbox"
-              tone="text-urgent"
+              tone="text-primary"
               label="Create task"
               hint="With this due date"
               onClick={() => startTask(menuDate)}
@@ -106,7 +106,7 @@ export function CalendarProvider({
             {canCreateTf ? (
               <ActionButton
                 icon="ti-file-stack"
-                tone="text-accent"
+                tone="text-urgent"
                 label="Create timeline file"
                 hint="Opens the files workspace"
                 onClick={startTf}

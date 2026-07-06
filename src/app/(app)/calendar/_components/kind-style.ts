@@ -3,10 +3,10 @@ import type { CalendarKind } from '@/lib/calendar';
 /**
  * One place for the colour + icon + label of each calendar item kind, so
  * the month, week, list, legend, filter bar, and detail sheet stay in
- * lock-step. Colours are token-based (no hex): engagements read blue
- * (info), task deadlines red (urgent), Timeline files amber (accent) —
- * matching the three-way legend. Amber/indigo stay reserved elsewhere;
- * these are the calendar's own kind signals.
+ * lock-step. Colours are token-based (no hex): engagements read teal
+ * (info), task deadlines dark blue (primary), Timeline file deadlines red
+ * (urgent) — three clearly distinct signals. These are the calendar's own
+ * kind colours; the two-accent rule's reserved meanings hold elsewhere.
  */
 export const KIND_META: Record<
   CalendarKind,
@@ -34,18 +34,18 @@ export const KIND_META: Record<
   task: {
     label: 'Task deadline',
     icon: 'ti-checkbox',
-    chip: 'bg-urgent-soft text-urgent hover:bg-urgent-soft/80',
-    dot: 'bg-urgent',
-    rowBorder: 'border-urgent/40',
-    tile: 'bg-urgent-soft text-urgent',
+    chip: 'bg-primary-soft text-primary hover:bg-primary-soft/80',
+    dot: 'bg-primary',
+    rowBorder: 'border-primary-line/40',
+    tile: 'bg-primary-soft text-primary',
   },
   tf: {
     label: 'Timeline file',
     icon: 'ti-file-stack',
-    chip: 'bg-accent-soft text-accent hover:bg-accent-soft/80',
-    dot: 'bg-accent',
-    rowBorder: 'border-accent-line',
-    tile: 'bg-accent-soft text-accent',
+    chip: 'bg-urgent-soft text-urgent hover:bg-urgent-soft/80',
+    dot: 'bg-urgent',
+    rowBorder: 'border-urgent/40',
+    tile: 'bg-urgent-soft text-urgent',
   },
 };
 
