@@ -109,11 +109,12 @@ The role switcher in the top bar is the only entry point. OSD and Super Admin ar
 
 ### 5.2 PMU isolation
 
-- A PMU is a sibling row in `divisions` with `kind = 'pmu'` and `pmu_parent_division_id` pointing to its supporting ministry division.
-- **PMU members see only tasks tagged to their PMU's parent division** AND where they are an owner or collaborator OR where the task carries a PMU tag.
-- They **never see internal ministry tasks** that are not explicitly shared with them.
-- The reverse is permitted: ministry officers in a division see their PMU's tasks freely (collaboration).
-- A PMU member added as a collaborator on a non-PMU-tagged task can see only that one task — not the rest of the division.
+- A PMU is a sibling row in `divisions` with `kind = 'pmu'` and `pmu_parent_division_id` pointing to its supporting ministry division. PMU membership is `users.pmu_id`; everyone sharing a `pmu_id` is one PMU team.
+- **A PMU team member sees their PMU team's tasks and nothing else of the division**: division-visibility tasks owned by anyone in their PMU (themselves + teammates), plus any task they own or are a collaborator on. They **never see the division board** — the internal ministry tasks are invisible to them.
+- Enforced in the scoper (`buildVisibilityClausesFrom`, src/lib/visibility-rules.ts): the PMU branch emits an owner-scoped clause `{ visibility: 'division', ownerId: { in: <pmu member ids> } }` instead of the division-wide clause. Teammate ids come from `getPmuTeammateIds` (src/lib/visibility.ts). Personal tasks of teammates stay private (the clause is gated on `visibility: 'division'`).
+- The reverse is permitted: ministry officers in a division see their PMU's tasks freely (the PMU members' tasks live in the division, so a division user's board already includes them).
+- A PMU member holding an active delegation additionally sees the delegated division for the window, on top of their PMU team's tasks.
+- On the `/tasks` board a PMU member's second segment is labelled "Other tasks of my PMU team" rather than "…of my division".
 
 ### 5.3 Cross-division tasks
 
