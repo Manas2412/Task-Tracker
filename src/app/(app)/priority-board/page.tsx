@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { initialsOf } from '@/lib/format';
+import { buildVisibilityClauses } from '@/lib/visibility';
 
 import { Board, type BoardTask } from './_components/Board';
 
@@ -18,15 +19,19 @@ export default async function PriorityBoardPage() {
   // Caller's role — only OSD / Super Admin can curate (drag-drop)
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { hierarchySlot: true, isSuperAdmin: true },
+    select: { id: true, hierarchySlot: true, isSuperAdmin: true, divisionId: true, isPmu: true },
   });
-  const canCurate = !!me && (me.isSuperAdmin || me.hierarchySlot === 'osd');
+  if (!me) redirect('/login');
+  const canCurate = me.isSuperAdmin || me.hierarchySlot === 'osd';
+
+  const visibilityClauses = await buildVisibilityClauses(me);
 
   const tasks = await prisma.task.findMany({
     where: {
       archivedAt: null,
       parentTaskId: null,
       jsPriorityLane: { not: null },
+      OR: visibilityClauses,
     },
     include: {
       owner: { select: USER_SUMMARY_SELECT },
