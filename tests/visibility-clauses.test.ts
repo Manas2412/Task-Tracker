@@ -101,13 +101,26 @@ describe('buildVisibilityClausesFrom — roles', () => {
     expect(clauses).toHaveLength(3);
   });
 
-  it('PMU members stay isolated: own + collaborated only', () => {
+  it('a PMU member with no teammates loaded sees own + collaborated only', () => {
     const clauses = buildVisibilityClausesFrom(caller({ isPmu: true }), []);
     expect(clauses).toHaveLength(2);
   });
 
-  it('a PMU delegate still gains the delegated division', () => {
-    const clauses = buildVisibilityClausesFrom(caller({ isPmu: true }), [NSDF]);
+  it("PMU members see their PMU team's tasks, never the whole division", () => {
+    const team = ['me', 'mate-1', 'mate-2'];
+    const clauses = buildVisibilityClausesFrom(caller({ isPmu: true }), [], team);
+    // owner + collaborator + the owner-scoped PMU clause — no division clause.
+    expect(clauses).toHaveLength(3);
+    expect(clauses[2]).toEqual({ visibility: 'division', ownerId: { in: team } });
+    // Crucially, no bare divisionId clause that would leak the division board.
+    expect(clauses.some((c) => 'divisionId' in c)).toBe(false);
+  });
+
+  it('a PMU delegate still gains the delegated division on top of their team', () => {
+    const clauses = buildVisibilityClausesFrom(caller({ isPmu: true }), [NSDF], ['me']);
+    // The delegated-division clause is still present…
     expect(divisionClause(clauses)?.divisionId?.in).toEqual([NSDF]);
+    // …alongside the PMU-team owner clause.
+    expect(clauses).toContainEqual({ visibility: 'division', ownerId: { in: ['me'] } });
   });
 });

@@ -17,7 +17,8 @@ export type CallerSummary = {
 
 /**
  * Build the OR-of-visibility-clauses for a caller from an injected list
- * of divisions they head (direct headships + active delegations).
+ * of divisions they head (direct headships + active delegations) and, for
+ * PMU members, the ids of everyone in their PMU (themselves + teammates).
  *
  * Personal-visibility tasks never match any role clause — only the
  * owner/collaborator clauses at the top.
@@ -25,6 +26,7 @@ export type CallerSummary = {
 export function buildVisibilityClausesFrom(
   me: CallerSummary,
   headedDivisionIds: string[],
+  pmuMemberIds: string[] = [],
 ): Prisma.TaskWhereInput[] {
   const clauses: Prisma.TaskWhereInput[] = [
     // Always: tasks I own.
@@ -55,10 +57,14 @@ export function buildVisibilityClausesFrom(
   }
 
   if (me.isPmu) {
-    // PMU isolation (PERMISSIONS.md §5.2): own + collaborated only —
-    // never the division's internal ministry tasks. A delegation still
-    // grants head-level visibility over the delegated division.
-    // TODO: Phase 3 — add PMU-tagged tasks in the same division.
+    // PMU isolation (PERMISSIONS.md §5.2): a PMU team member sees the
+    // tasks of their own PMU — those owned by anyone in the PMU
+    // (themselves + teammates) — but never the division's internal
+    // ministry tasks. A delegation still grants head-level visibility
+    // over the delegated division.
+    if (pmuMemberIds.length > 0) {
+      clauses.push({ visibility: 'division', ownerId: { in: pmuMemberIds } });
+    }
     if (divisionIds.size > 0) {
       clauses.push({ visibility: 'division', divisionId: { in: [...divisionIds] } });
     }

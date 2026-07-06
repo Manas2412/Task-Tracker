@@ -37,12 +37,34 @@ export { buildVisibilityClausesFrom };
 export type { CallerSummary };
 
 /**
+ * Every active user in the caller's PMU — themselves plus their PMU
+ * teammates (same `pmu_id`). Empty when the caller is not a PMU member or
+ * their PMU is unset. Drives the owner-scoped PMU visibility clause so a
+ * PMU team member sees their team's tasks but not the whole division.
+ */
+export async function getPmuTeammateIds(userId: string): Promise<string[]> {
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { pmuId: true },
+  });
+  if (!me?.pmuId) return [];
+  const teammates = await prisma.user.findMany({
+    where: { pmuId: me.pmuId, isActive: true },
+    select: { id: true },
+  });
+  return teammates.map((u) => u.id);
+}
+
+/**
  * Build the OR-of-visibility-clauses for a caller.
  * Returns clauses that are then composed with the filter clause in the page.
  */
 export async function buildVisibilityClauses(me: CallerSummary): Promise<Prisma.TaskWhereInput[]> {
-  const headedDivisionIds = await getHeadedDivisionIds(me.id);
-  return buildVisibilityClausesFrom(me, headedDivisionIds);
+  const [headedDivisionIds, pmuMemberIds] = await Promise.all([
+    getHeadedDivisionIds(me.id),
+    me.isPmu ? getPmuTeammateIds(me.id) : Promise.resolve<string[]>([]),
+  ]);
+  return buildVisibilityClausesFrom(me, headedDivisionIds, pmuMemberIds);
 }
 
 /**
