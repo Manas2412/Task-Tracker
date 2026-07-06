@@ -1,3 +1,4 @@
+import { nowIST, isoDay as isoDayIST } from '@/lib/date';
 import { prisma } from '@/lib/db';
 import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
@@ -142,7 +143,7 @@ export function getMonthGrid(year: number, monthIndex: number): MonthDay[] {
   const gridStart = new Date(firstOfMonth);
   gridStart.setDate(1 - offset);
 
-  const todayIso = isoDay(new Date());
+  const todayIso = isoDayIST(new Date());
 
   const days: MonthDay[] = [];
   for (let i = 0; i < 42; i++) {
@@ -158,10 +159,7 @@ export function getMonthGrid(year: number, monthIndex: number): MonthDay[] {
 }
 
 export function isoDay(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return isoDayIST(d);
 }
 
 export function monthBounds(year: number, monthIndex: number): { from: Date; to: Date } {
@@ -180,8 +178,8 @@ export function parseMonthParam(raw: string | undefined): { year: number; monthI
     const [y, m] = raw.split('-').map(Number);
     if (m >= 1 && m <= 12) return { year: y, monthIndex: m - 1 };
   }
-  const now = new Date();
-  return { year: now.getFullYear(), monthIndex: now.getMonth() };
+  const now = nowIST();
+  return { year: now.getUTCFullYear(), monthIndex: now.getUTCMonth() };
 }
 
 export function shiftMonth(year: number, monthIndex: number, delta: number): {
@@ -217,7 +215,7 @@ export function buildWeekGrid(year: number, month: number, day: number): WeekDay
   const monday = new Date(target);
   monday.setDate(target.getDate() - mondayOffset);
 
-  const todayIso = isoDay(new Date());
+  const todayIso = isoDayIST(new Date());
 
   const days: WeekDay[] = [];
   for (let i = 0; i < 7; i++) {
@@ -266,6 +264,6 @@ export function parseDayParam(raw: string | undefined): {
       return { year: y, month: m - 1, day: d };
     }
   }
-  const now = new Date();
-  return { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
+  const now = nowIST();
+  return { year: now.getUTCFullYear(), month: now.getUTCMonth(), day: now.getUTCDate() };
 }

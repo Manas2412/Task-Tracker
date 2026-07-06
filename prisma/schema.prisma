@@ -478,7 +478,7 @@ model TimelineFile {
 
   createdBy                   User                @relation("TimelineFileCreatedBy", fields: [createdById], references: [id])
   archivedBy                  User?               @relation("TimelineFileArchivedBy", fields: [archivedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  actionDocument              Attachment?         @relation("TimelineFileActionDocument", fields: [actionDocumentAttachmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actionDocument              Attachment?         @relation("TimelineFileActionDocument", fields: [actionDocumentAttachmentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   markedTo                    TimelineFileMarkedTo[]
   taskLinks                   TimelineFileTaskLink[]

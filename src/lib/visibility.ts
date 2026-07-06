@@ -1,5 +1,6 @@
 import type { Prisma, Task } from '@prisma/client';
 
+import { startOfDayIST, endOfDayIST } from '@/lib/date';
 import { prisma } from '@/lib/db';
 import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { getHeadedDivisionIds } from '@/lib/rbac';
@@ -75,14 +76,10 @@ function buildFilterClause(filter: TaskFilter, callerId: string): Prisma.TaskWhe
   const now = new Date();
   switch (filter) {
     case 'today': {
-      const start = new Date(now);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(now);
-      end.setHours(23, 59, 59, 999);
-      return { dueDate: { gte: start, lte: end } };
+      return { dueDate: { gte: startOfDayIST(), lte: endOfDayIST() } };
     }
     case 'overdue':
-      return { dueDate: { lt: now }, status: { not: 'completed' } };
+      return { dueDate: { lt: startOfDayIST() }, status: { not: 'completed' } };
     case 'urgent':
       return { priority: 'urgent' };
     case 'mine':
@@ -204,19 +201,13 @@ export async function fetchTaskCounts(callerId: string): Promise<{
     AND: [{ OR: visibilityClauses }],
   };
 
-  const now = new Date();
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
-  const endOfToday = new Date(now);
-  endOfToday.setHours(23, 59, 59, 999);
-
   const [open, dueToday, overdue] = await Promise.all([
     prisma.task.count({ where: { ...base, status: { not: 'completed' } } }),
     prisma.task.count({
-      where: { ...base, dueDate: { gte: startOfToday, lte: endOfToday }, status: { not: 'completed' } },
+      where: { ...base, dueDate: { gte: startOfDayIST(), lte: endOfDayIST() }, status: { not: 'completed' } },
     }),
     prisma.task.count({
-      where: { ...base, dueDate: { lt: now }, status: { not: 'completed' } },
+      where: { ...base, dueDate: { lt: startOfDayIST() }, status: { not: 'completed' } },
     }),
   ]);
 
