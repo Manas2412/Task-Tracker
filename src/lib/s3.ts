@@ -24,7 +24,7 @@ let cachedClient: S3Client | null = null;
 
 const UPLOAD_TTL_SECONDS = 15 * 60; // browser PUT must complete within 15 min
 const DEFAULT_DOWNLOAD_TTL = 3600; // 1 hour
-const SHARE_TTL_SECONDS = 24 * 60 * 60; // 24 hours for WhatsApp-shared links
+const SHARE_TTL_SECONDS = 24 * 60 * 60; // 24h for WhatsApp-shared links
 
 export function isS3Configured(): boolean {
   return Boolean(
