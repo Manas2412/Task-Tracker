@@ -1,6 +1,6 @@
 # Permissions Matrix
 
-> Hierarchy-driven by default. Special rules layered on top for PMU isolation, personal visibility, cross-division tasks, and OSD's unrestricted access. Enforcement lives in the application's data-access layer (server-side helpers wrapped around Prisma) — every read filters by the caller's hierarchy chain / division / PMU flag before returning rows. This document is the source of truth for what those helpers must implement.
+> Division-wide by default: every non-PMU ministry officer sees all division-visibility tasks in their own division from first login, regardless of hierarchy slot. Special rules layer on top for PMU isolation, personal visibility, cross-division tasks, headed-division access (delegations), and OSD's unrestricted access. Enforcement lives in the data-access layer (`buildVisibilityClausesFrom` in src/lib/visibility-rules.ts) — every read filters by the caller's division / PMU flag / headed divisions before returning rows. This document is the source of truth for what those helpers must implement.
 
 ---
 
@@ -29,8 +29,8 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 | | JS | OSD | Director | Dy. Sec | Under Sec | Section Officer | ASO | PMU member | Super Admin |
 |---|---|---|---|---|---|---|---|---|---|
 | **See own tasks** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **See tasks of subordinates (own chain)** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | n/a | n/a | ✓ |
-| **See own division — all tasks** |  | ✓ | ✓ |  |  |  |  | PMU-tagged only | ✓ |
+| **See own division — all division-visibility tasks** |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | PMU team only⁴ | ✓ |
+| **See headed divisions (head or delegate)** |  | ✓ | if head³ | if head³ | if head³ | if head³ |  |  | ✓ |
 | **See other divisions** |  | ✓ |  |  |  |  |  |  | ✓ |
 | **See JS Priority Board** | ✓ | ✓ | partial² | partial² | partial² | partial² | partial² |  | ✓ |
 | **See Personal-visibility tasks of others** |  |  |  |  |  |  |  |  | ✓ (audit only) |
@@ -57,6 +57,8 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 ² "partial" = only sees tasks owned by self or own subordinates that happen to be on the board, plus the visible-to-them JS Priority badge on every task they can already see. The full board is OSD + JS + Super Admin.
 
 ³ "head" = only when the user is that division's head (`divisions.head_user_id`) or holds an active `division_access_delegations` row for it — the hierarchy slot itself grants nothing. Giving tasks on a division's board is a head power; everyone else creates personal tasks (see §5.11).
+
+⁴ PMU members see only their PMU team's division-visibility tasks (`ownerId IN <pmu team>`), never the full division board. See §5.2.
 
 ---
 

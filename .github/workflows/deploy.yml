@@ -1,11 +1,31 @@
-name: Deploy to EC2
+name: CI + Deploy
 
 on:
   push:
     branches: [main]
 
 jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: npx prisma generate
+      - run: pnpm tsc --noEmit
+      - run: pnpm next lint
+
   deploy:
+    needs: quality-gate
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
@@ -20,15 +40,6 @@ jobs:
             git pull origin main
             pnpm install --frozen-lockfile
             npx prisma generate
-            # One-time baseline: if _prisma_migrations table doesn't exist,
-            # mark all pre-existing migrations as already applied so
-            # migrate deploy only runs new ones.
-            npx prisma migrate resolve --applied 20260602051033_init 2>/dev/null || true
-            npx prisma migrate resolve --applied 20260630120000_add_phone_and_work_activities 2>/dev/null || true
-            npx prisma migrate resolve --applied 20260701120000_add_task_transferred_notification_type 2>/dev/null || true
-            npx prisma migrate resolve --applied 20260702120000_add_task_pulled_notification_type 2>/dev/null || true
-            npx prisma migrate resolve --rolled-back 20260702140000_add_task_ref_number 2>/dev/null || true
-            npx prisma migrate resolve --applied 20260702140000_add_task_ref_number 2>/dev/null || true
             npx prisma migrate deploy
             pnpm build
             pm2 restart myas

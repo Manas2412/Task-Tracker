@@ -1,8 +1,8 @@
 /**
- * MYAS Task Tracker — Prisma seed
+ * MYAS Task Tracker — Prisma seed (development only)
  *
  * Creates the full organisational structure from the Work Activities Excel:
- *   6 divisions, ~65 users with real Ministry data.
+ *   6 divisions, ~65 users.
  *
  * Bootstrap OSD preserves its existing password if already in the DB;
  * falls back to .env BOOTSTRAP_PASSWORD on a fresh database.
@@ -10,11 +10,30 @@
  *
  * Idempotent: clears all rows and re-inserts so re-running gives a fresh
  * known state. Safe to run every time the schema changes.
+ *
+ * WARNING: This script deletes ALL data. It refuses to run when
+ * NODE_ENV=production or DATABASE_URL points at the production host.
  */
 
 import { PrismaClient } from '@prisma/client';
 
 import { hashPassword } from '../src/lib/auth/password';
+
+if (process.env.NODE_ENV === 'production') {
+  console.error('Refusing to seed: NODE_ENV is "production".');
+  process.exit(1);
+}
+if (
+  process.env.DATABASE_URL &&
+  !process.env.DATABASE_URL.includes('localhost') &&
+  !process.env.DATABASE_URL.includes('127.0.0.1') &&
+  !process.env.DATABASE_URL.includes('neon.tech')
+) {
+  console.error(
+    'Refusing to seed: DATABASE_URL does not point at localhost or Neon dev DB.',
+  );
+  process.exit(1);
+}
 
 const prisma = new PrismaClient();
 
@@ -95,8 +114,7 @@ const USERS: UserSeed[] = [
     designation: 'Under Secretary',
     hierarchySlot: 'under_secretary',
     division: DIV.KI,
-    phone: '9560716689',
-    email: 'chanchal.op@gov.in',
+
     workActivities: 'Under Secretary — Khelo India & NSDF',
     supervisorRef: BOOTSTRAP_USERNAME,
   },
@@ -106,8 +124,7 @@ const USERS: UserSeed[] = [
     designation: 'Section Officer',
     hierarchySlot: 'section_officer',
     division: DIV.KI,
-    phone: '9560652536',
-    email: 'rajat.chauhan@gov.in',
+
     workActivities: 'Section Officer — Khelo India',
     supervisorRef: 'chanchal',
   },
@@ -118,8 +135,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'apo',
     division: DIV.KI,
-    phone: '7562878005',
-    email: 'kumarsantoshi.ks@gmail.com',
+
     workActivities: 'PFMS Transaction, Sanction Orders, Files for release of funds, Status of funds position, Audit matters, other assigned tasks etc.',
     supervisorRef: 'rajat',
   },
@@ -130,7 +146,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'apo',
     division: DIV.KI,
-    phone: '9868274311',
+
     workActivities: 'Matters related to GC, NLEC, PAC, DPAC under Khelo India Scheme. Court cases, LIMBS and legal matters. North-Eastern and Southern States (14 nos.)',
     supervisorRef: 'rajat',
   },
@@ -141,8 +157,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'apo',
     division: DIV.KI,
-    phone: '9625563306',
-    email: 'ashish.gupta1994@govcontractor.in',
+
     workActivities: 'General Administration works, Parliamentary matters, Coordination Matters, GeM Portal, SOM Data, VIP, RTI, PG, Sanction, Release, VVP, EBSB and other miscellaneous matters',
     supervisorRef: 'rajat',
   },
@@ -153,7 +168,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'apo',
     division: DIV.KI,
-    phone: '9560180632',
+
     workActivities: 'Matters related to sports infra projects of 14 states. Chief Secretaries Conference follow-up. RTI/misc. matters.',
     supervisorRef: 'rajat',
   },
@@ -164,7 +179,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'apo',
     division: DIV.KI,
-    phone: '8750995010',
+
     workActivities: 'RTI. Matters related to SAI under Khelo India. All Union Territories under Khelo India. Ek Bharat Shrestha Bharat (EBSB). Prime Minister\'s Development Package (PMDP).',
     supervisorRef: 'rajat',
   },
@@ -175,7 +190,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'yp',
     division: DIV.KI,
-    phone: '9867271975',
+
     supervisorRef: 'rajat',
   },
   {
@@ -185,8 +200,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'apo',
     division: DIV.KI,
-    phone: '9012617248',
-    email: 'aditya.pundhir@govcontractor.in',
+
     workActivities: 'EFC, Cabinet Note related matters of KIS/KIM, Parliamentary matters, Coordination Matters, Asset Monetization, Budget Announcements, e-Samiksha, Chintan Shivir matters',
     supervisorRef: 'rajat',
   },
@@ -197,8 +211,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'apo',
     division: DIV.KI,
-    phone: '9717976942',
-    email: 'snath.moitra@govcontractor.in',
+
     workActivities: 'Technical examination of proposals and monitoring of projects, PPP, Asset Monetization, VVP, Vikas Setu Portal',
     supervisorRef: 'rajat',
   },
@@ -208,7 +221,7 @@ const USERS: UserSeed[] = [
     designation: 'DEO',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '7291848583',
+
     workActivities: 'Preparation of Note for Pad for Parliament Session, Parliament Questions, Statewise pagers, Poorvottar Vikas Setu and Sampark Setu Portals, Noting and Drafting, E-filing, MTNL Bills, miscellaneous works.',
     supervisorRef: 'rajat',
   },
@@ -218,7 +231,7 @@ const USERS: UserSeed[] = [
     designation: 'DEO',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '9653525229',
+
     workActivities: 'Attached with VVS Kharayat. Typing letters, notes, maintaining folders, scanning documents. Maintaining DPAC Data.',
     supervisorRef: 'rajat',
   },
@@ -228,7 +241,7 @@ const USERS: UserSeed[] = [
     designation: 'DEO',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '7703801235',
+
     workActivities: 'Attached with S N Moitra. Typing letters. Maintaining LIMBS Portal. Miscellaneous work. Parliament duty during night.',
     supervisorRef: 'rajat',
   },
@@ -238,7 +251,7 @@ const USERS: UserSeed[] = [
     designation: 'DEO',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '8178870275',
+
     workActivities: 'Maintaining SOM. Maintaining Public Grievance Portal, Appeals. Maintaining General Receipt. Miscellaneous works.',
     supervisorRef: 'rajat',
   },
@@ -248,7 +261,7 @@ const USERS: UserSeed[] = [
     designation: 'DEO',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '9540850721',
+
     workActivities: 'Attached with US Sir and handling his official email. Handling Section Khelo India email. Processing TA/DA bills, MTNL bills. Handling RTI portal. Miscellaneous office tasks.',
     supervisorRef: 'rajat',
   },
@@ -258,7 +271,7 @@ const USERS: UserSeed[] = [
     designation: 'DEO',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '7065346456',
+
     workActivities: 'Attached with Chandra Dutt Sharma (APO). Typing letters, notes, scanning documents. Handles RTI Appeal Portal. Parliament duty during night.',
     supervisorRef: 'rajat',
   },
@@ -268,7 +281,7 @@ const USERS: UserSeed[] = [
     designation: 'DEO',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '8882080850',
+
     workActivities: 'Attached with Paramjeet Singh Thakur (APO). Typing letters, notes, scanning documents. Maintaining Proposal (Infra) list, TTDI Data. Handling Video Conference/Meeting work. Maintain Compactor room records.',
     supervisorRef: 'rajat',
   },
@@ -278,7 +291,7 @@ const USERS: UserSeed[] = [
     designation: 'DEO',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '9210578058',
+
     workActivities: 'Parliament duty during night. Letter dispatch work. Store maintenance (stationary, printers etc). Office equipment supervision. Miscellaneous work.',
     supervisorRef: 'rajat',
   },
@@ -288,8 +301,7 @@ const USERS: UserSeed[] = [
     designation: 'Tech Lead',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '8800719944',
-    email: 'jyotiraman.mdsd@gmail.com',
+
     workActivities: 'MDSD Dashboard Management & Monitoring. State/UT DPR Facilitation & Coordination. PMGS Project Technical Coordination. OOMF & DGQI Data Management. Technical Support for Meetings & Presentations. YAS-NIC Technical Liaison.',
     supervisorRef: 'rajat',
   },
@@ -299,8 +311,7 @@ const USERS: UserSeed[] = [
     designation: 'Project Coordinator, PMGS',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '8080039279',
-    email: 'manishk1989@gmail.com',
+
     workActivities: 'Liaison and coordination with States/UTs, DPIIT, and BISAG-N on sports infrastructure data and PM Gati Shakti. Management and monitoring of PM Gati Shakti Portal. PMU Consultancy coordination. Preparation of reports, notes, presentations.',
     supervisorRef: 'rajat',
   },
@@ -314,8 +325,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_team_leader',
     division: DIV.KI,
-    phone: '9871056661',
-    email: 'aneek.biswas@in.ey.com',
+
     workActivities: 'KIM — Infrastructure and Overall Management of EY Team and KIM Components',
     supervisorRef: 'chanchal',
   },
@@ -327,8 +337,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_senior_consultant',
     division: DIV.KI,
-    phone: '8527412805',
-    email: 'abhishek.rawat2@in.ey.com',
+
     workActivities: 'KIM — Sports Technology and overall management of KIM components',
     supervisorRef: 'aneek',
   },
@@ -340,8 +349,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_senior_consultant',
     division: DIV.KI,
-    phone: '8826987372',
-    email: 'chandan.pathak@in.ey.com',
+
     workActivities: 'KIM — Infrastructure and procurement support',
     supervisorRef: 'aneek',
   },
@@ -353,8 +361,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_senior_consultant',
     division: DIV.KI,
-    phone: '8477014444',
-    email: 'abhishek.sanklan@in.ey.com',
+
     workActivities: 'KIM — Infrastructure and procurement support',
     supervisorRef: 'aneek',
   },
@@ -366,8 +373,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_senior_consultant',
     division: DIV.KI,
-    phone: '9833033104',
-    email: 'rohan.banja@in.ey.com',
+
     workActivities: 'KIM — KITF Component',
     supervisorRef: 'aneek',
   },
@@ -379,8 +385,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_senior_consultant',
     division: DIV.KI,
-    phone: '8087615920',
-    email: 'neha.baviskar@in.ey.com',
+
     workActivities: 'KIM — Coach and Support Staff Development component',
     supervisorRef: 'aneek',
   },
@@ -392,8 +397,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_senior_consultant',
     division: DIV.KI,
-    phone: '7004631870',
-    email: 'ashutosh.jalan@in.ey.com',
+
     workActivities: 'KIM — Infrastructure Component',
     supervisorRef: 'aneek',
   },
@@ -405,8 +409,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_senior_consultant',
     division: DIV.KI,
-    phone: '9910031107',
-    email: 'prashant.chaudhary2@in.ey.com',
+
     workActivities: 'KIM — FIT India Component',
     supervisorRef: 'aneek',
   },
@@ -418,8 +421,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_consultant',
     division: DIV.KI,
-    phone: '9600661073',
-    email: 'rohit.nagarajan@in.ey.com',
+
     workActivities: 'KIM — TID Component',
     supervisorRef: 'aneek',
   },
@@ -431,8 +433,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_consultant',
     division: DIV.KI,
-    phone: '9958235291',
-    email: 'rachna@in.ey.com',
+
     workActivities: 'KIM — Sports Competitions and Leagues',
     supervisorRef: 'aneek',
   },
@@ -453,7 +454,7 @@ const USERS: UserSeed[] = [
     designation: 'House Keeping',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '8799783406',
+
     workActivities: 'House Keeping',
     supervisorRef: 'chanchal',
   },
@@ -463,7 +464,7 @@ const USERS: UserSeed[] = [
     designation: 'MTS',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '9582575701',
+
     workActivities: 'Multi Tasking Work',
     supervisorRef: 'chanchal',
   },
@@ -473,7 +474,7 @@ const USERS: UserSeed[] = [
     designation: 'MTS',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '9910269529',
+
     workActivities: 'Multi Tasking Work',
     supervisorRef: 'chanchal',
   },
@@ -483,7 +484,7 @@ const USERS: UserSeed[] = [
     designation: 'MTS',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '7858945367',
+
     workActivities: 'Multi Tasking Work',
     supervisorRef: 'chanchal',
   },
@@ -493,7 +494,7 @@ const USERS: UserSeed[] = [
     designation: 'MTS',
     hierarchySlot: 'aso',
     division: DIV.KI,
-    phone: '9873669822',
+
     workActivities: 'Multi Tasking Work',
     supervisorRef: 'chanchal',
   },
@@ -506,7 +507,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'po',
     division: DIV.NSDF,
-    phone: '9868760842',
+
     workActivities: 'Preliminary examination of proposals for financial assistance. Prepare agenda notes and minutes for Executive Committee and Council meetings. Monitor assisted cases. Audit and Income Tax related issues. Prepare Annual Report. Parliament Questions and Standing Committee inputs.',
     supervisorRef: 'chanchal',
   },
@@ -517,7 +518,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'apo',
     division: DIV.NSDF,
-    phone: '8920100911',
+
     workActivities: 'Preliminary examination of proposals. Agenda notes and minutes for meetings. Parliament Questions and Standing Committee inputs. RTI & VIP Reference. Audit and Income Tax related issues. Reply to Audit Paras.',
     supervisorRef: 'balan',
   },
@@ -527,7 +528,7 @@ const USERS: UserSeed[] = [
     designation: 'Accounts Assistant',
     hierarchySlot: 'aso',
     division: DIV.NSDF,
-    phone: '7042136563',
+
     workActivities: 'Financial record-keeping, maintenance, and initial scrutiny of bills. Preparing financial statements, budget utilization tracks, and audit responses. Compliance with financial guidelines.',
     supervisorRef: 'balan',
   },
@@ -537,7 +538,7 @@ const USERS: UserSeed[] = [
     designation: 'Data Entry Operator',
     hierarchySlot: 'aso',
     division: DIV.NSDF,
-    phone: '9911349328',
+
     workActivities: 'Data entry operations, file tracking, and digital archiving. Preparation and laying of Annual Report. Processing sports grant applications and correspondence. Knowledge of past files, records and cases. Diarising of Receipts.',
     supervisorRef: 'balan',
   },
@@ -547,7 +548,7 @@ const USERS: UserSeed[] = [
     designation: 'MTS',
     hierarchySlot: 'aso',
     division: DIV.NSDF,
-    phone: '9817613995',
+
     workActivities: 'Facilitating the work of the staff, record keeping, dispatch of files.',
     supervisorRef: 'balan',
   },
@@ -559,8 +560,7 @@ const USERS: UserSeed[] = [
     designation: 'Director',
     hierarchySlot: 'director',
     division: DIV.SGM,
-    phone: '9946946774',
-    email: 'km.harilal@nic.in',
+
     supervisorRef: BOOTSTRAP_USERNAME,
   },
   {
@@ -569,8 +569,7 @@ const USERS: UserSeed[] = [
     designation: 'Under Secretary',
     hierarchySlot: 'under_secretary',
     division: DIV.SGM,
-    phone: '9560297732',
-    email: 'yogesh.kumar55@nic.in',
+
     supervisorRef: 'harilal',
   },
   {
@@ -579,8 +578,7 @@ const USERS: UserSeed[] = [
     designation: 'Assistant Director',
     hierarchySlot: 'section_officer',
     division: DIV.SGM,
-    phone: '7347340344',
-    email: 'antra.madaan@gov.in',
+
     supervisorRef: 'yogesh',
   },
 
@@ -593,8 +591,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_team_leader',
     division: DIV.SGM,
-    phone: '9717700606',
-    email: 'jatinchopra1@kpmg.com',
+
     workActivities: 'Ecosystem Development, Investment and Trade Outreach',
     supervisorRef: 'harilal',
   },
@@ -606,8 +603,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_senior_consultant',
     division: DIV.SGM,
-    phone: '9999897240',
-    email: 'sanjanarishi@kpmg.com',
+
     workActivities: 'Investor and Sports Ecosystem Outreach',
     supervisorRef: 'jatin.c',
   },
@@ -619,8 +615,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_senior_consultant',
     division: DIV.SGM,
-    phone: '9953467518',
-    email: 'kritikabhasin@kpmg.com',
+
     workActivities: 'Policy and Scheme Design',
     supervisorRef: 'jatin.c',
   },
@@ -632,8 +627,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_senior_consultant',
     division: DIV.SGM,
-    phone: '7872838926',
-    email: 'prashantjeph@kpmg.com',
+
     workActivities: 'Technology Interventions',
     supervisorRef: BOOTSTRAP_USERNAME,
   },
@@ -645,8 +639,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_consultant',
     division: DIV.SGM,
-    phone: '9210834408',
-    email: 'pratiksinha1@kpmg.com',
+
     workActivities: 'Autonomous Bodies, NISSR, Make In India',
     supervisorRef: 'jatin.c',
   },
@@ -658,8 +651,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_consultant',
     division: DIV.SGM,
-    phone: '7003766393',
-    email: 'gargisur@kpmg.com',
+
     workActivities: 'Ecosystem Support',
     supervisorRef: 'jatin.c',
   },
@@ -671,8 +663,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_consultant',
     division: DIV.SGM,
-    phone: '9810335630',
-    email: 'tanyachadha@kpmg.com',
+
     workActivities: 'Policy and Scheme Design',
     supervisorRef: 'jatin.c',
   },
@@ -684,8 +675,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_consultant',
     division: DIV.SGM,
-    phone: '8477845705',
-    email: 'dishiaggarwa@kpmg.com',
+
     workActivities: 'Trade Data Analytics and Monitoring and Evaluation of Government programs',
     supervisorRef: 'jatin.c',
   },
@@ -697,8 +687,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_consultant',
     division: DIV.SGM,
-    phone: '9109546445',
-    email: 'muskansahu@kpmg.com',
+
     workActivities: 'Autonomous Bodies, NISSR, Make In India',
     supervisorRef: 'jatin.c',
   },
@@ -710,8 +699,7 @@ const USERS: UserSeed[] = [
     isPmu: true,
     pmuRole: 'pmu_consultant',
     division: DIV.SGM,
-    phone: '9212535773',
-    email: 'tanmaybatra@kpmg.com',
+
     workActivities: 'Investment Outreach',
     supervisorRef: 'jatin.c',
   },
@@ -723,8 +711,7 @@ const USERS: UserSeed[] = [
     designation: 'Chief Media Coordinator',
     hierarchySlot: 'aso',
     division: DIV.MEDIA,
-    phone: '8585932175',
-    email: 'cmc-dos@gov.in',
+
     workActivities: 'Media & Public Relations. Social Media Management. Event Coverage. Branding & Promotion. Digital initiatives implementation and monitoring. Data security and IT policy compliance. DBT implementation. NIC Nodal Officer. Website/Dashboard management and Web Information Manager.',
     supervisorRef: BOOTSTRAP_USERNAME,
   },
@@ -736,8 +723,7 @@ const USERS: UserSeed[] = [
     designation: 'Deputy Secretary',
     hierarchySlot: 'deputy_secretary',
     division: DIV.ABD,
-    phone: '7219191237',
-    email: 'mohdzuber@ord.gov.in',
+
     supervisorRef: BOOTSTRAP_USERNAME,
   },
   {
@@ -746,8 +732,7 @@ const USERS: UserSeed[] = [
     designation: 'Section Officer',
     hierarchySlot: 'section_officer',
     division: DIV.ABD,
-    phone: '9813562200',
-    email: 'bk.sahrawat@gov.in',
+
     supervisorRef: 'zuber',
   },
   {
@@ -756,8 +741,7 @@ const USERS: UserSeed[] = [
     designation: 'Assistant Section Officer',
     hierarchySlot: 'aso',
     division: DIV.ABD,
-    phone: '9015761660',
-    email: 'rajput.vaishali@gov.in',
+
     workActivities: 'Matters related to NADA/WADA, PG/RTI/Court Cases. Matters related to Sports Goods Manufacturing.',
     supervisorRef: 'basant',
   },
@@ -768,8 +752,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'yp',
     division: DIV.ABD,
-    phone: '7081053988',
-    email: 'suraj.jaiswara@govcontractor.in',
+
     workActivities: 'Administrative, Financial, and Legal matters related to SAI',
     supervisorRef: 'basant',
   },
@@ -780,8 +763,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'yp',
     division: DIV.ABD,
-    phone: '8126033759',
-    email: 'amol.raj@govcontractor.in',
+
     workActivities: 'Matters related to NCSSR/NISSR',
     supervisorRef: 'basant',
   },
@@ -792,7 +774,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'yp',
     division: DIV.ABD,
-    phone: '8595532918',
+
     workActivities: 'Matter related to NDTL and AICS',
     supervisorRef: 'basant',
   },
@@ -803,8 +785,7 @@ const USERS: UserSeed[] = [
     hierarchySlot: 'aso',
     contractRole: 'yp',
     division: DIV.ABD,
-    phone: '9872668467',
-    email: 'lakshayrakhra29@gmail.com',
+
     workActivities: 'Newly joined',
     supervisorRef: 'basant',
   },
@@ -814,8 +795,7 @@ const USERS: UserSeed[] = [
     designation: 'Data Entry Operator',
     hierarchySlot: 'aso',
     division: DIV.ABD,
-    phone: '9667022593',
-    email: 'abhayprajapati9667@gmail.com',
+
     workActivities: 'Records & Data Management',
     supervisorRef: 'yogesh',
   },
@@ -825,7 +805,7 @@ const USERS: UserSeed[] = [
     designation: 'MTS',
     hierarchySlot: 'aso',
     division: DIV.ABD,
-    phone: '9671505082',
+
     workActivities: 'Document handling, Physical records management, Equipment use',
     supervisorRef: 'basant',
   },
