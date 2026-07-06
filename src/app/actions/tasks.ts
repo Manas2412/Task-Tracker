@@ -16,6 +16,7 @@ import {
   getRbacTarget,
 } from '@/lib/rbac';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
+import { buildVisibilityClauses } from '@/lib/visibility';
 
 async function nextTaskRefNumber(
   divisionId: string,
@@ -97,6 +98,19 @@ async function canEditTask(
   // divisions they head — heads are not always director-slot users.
   const actor = await getRbacActor(callerId);
   return actor !== null && canActAsHeadOf(actor, task.divisionId);
+}
+
+async function canViewTask(callerId: string, taskId: string): Promise<boolean> {
+  const me = await prisma.user.findUnique({
+    where: { id: callerId },
+    select: { id: true, hierarchySlot: true, isSuperAdmin: true, divisionId: true, isPmu: true },
+  });
+  if (!me) return false;
+  const visibilityClauses = await buildVisibilityClauses(me);
+  const count = await prisma.task.count({
+    where: { id: taskId, OR: visibilityClauses },
+  });
+  return count > 0;
 }
 
 // ============================================================
@@ -694,9 +708,13 @@ export async function addSubtaskAction(
 
   const parent = await prisma.task.findUnique({
     where: { id: parsed.data.parentTaskId },
-    select: { id: true, divisionId: true, visibility: true, ownerId: true, dueDate: true },
+    select: { id: true, divisionId: true, visibility: true, ownerId: true, createdById: true, dueDate: true },
   });
   if (!parent) return fail('Parent task not found.', epoch);
+
+  if (!(await canEditTask(me.id, parent))) {
+    return fail('You do not have permission to modify this task.', epoch);
+  }
 
   if (parsed.data.dueDate && parent.dueDate) {
     const subtaskDue = new Date(parsed.data.dueDate);
@@ -778,6 +796,16 @@ export async function toggleSubtaskAction(
     select: { id: true, status: true, parentTaskId: true, name: true },
   });
   if (!subtask) return fail('Subtask not found.', epoch);
+
+  if (subtask.parentTaskId) {
+    const parent = await prisma.task.findUnique({
+      where: { id: subtask.parentTaskId },
+      select: { id: true, ownerId: true, createdById: true, divisionId: true },
+    });
+    if (!parent || !(await canEditTask(me.id, parent))) {
+      return fail('You do not have permission to modify this task.', epoch);
+    }
+  }
 
   const nextStatus = subtask.status === 'completed' ? 'not_started' : 'completed';
   const eventType = nextStatus === 'completed' ? 'subtask_completed' : 'subtask_reopened';
@@ -987,6 +1015,10 @@ export async function postCommentAction(
   });
   if (!task) return fail('Task not found.', epoch);
 
+  if (!(await canViewTask(me.id, task.id))) {
+    return fail('Task not found.', epoch);
+  }
+
   const mentions = await resolveMentions(parsed.data.body);
 
   try {
@@ -1146,10 +1178,14 @@ export async function archiveTaskAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, archivedAt: true },
+    select: { id: true, name: true, archivedAt: true, ownerId: true, createdById: true, divisionId: true },
   });
   if (!task) return fail('Task not found.', epoch);
   if (task.archivedAt) return ok(epoch);
+
+  if (!(await canEditTask(me.id, task))) {
+    return fail('You do not have permission to archive this task.', epoch);
+  }
 
   try {
     await prisma.$transaction([
@@ -1634,75 +1670,80 @@ export async function reassignTaskAction(
     );
   }
 
-  if (isFree) {
-    await prisma.$transaction([
-      prisma.task.update({
-        where: { id: task.id },
-        data: { ownerId: parsed.data.newOwnerId },
-      }),
-      prisma.taskActivity.create({
+  try {
+    if (isFree) {
+      await prisma.$transaction([
+        prisma.task.update({
+          where: { id: task.id },
+          data: { ownerId: parsed.data.newOwnerId },
+        }),
+        prisma.taskActivity.create({
+          data: {
+            taskId: task.id,
+            actorId: me.id,
+            eventType: 'owner_changed',
+            payload: { from: task.ownerId, to: parsed.data.newOwnerId, toName: newOwner.name },
+          },
+        }),
+      ]);
+      if (parsed.data.newOwnerId !== me.id) {
+        await prisma.notification.create({
+          data: {
+            userId: parsed.data.newOwnerId,
+            type: 'task_assigned',
+            payload: {
+              taskId: task.id,
+              taskName: task.name,
+              actorId: me.id,
+              assignedById: me.id,
+              assignedByName: me.name ?? null,
+              dueDate: task.dueDate?.toISOString() ?? null,
+            },
+          },
+        });
+      }
+    } else {
+      const approverId = meRow.supervisorId;
+      if (!approverId) return fail('No supervisor found to approve this reassignment.', epoch);
+
+      const existing = await prisma.reassignmentRequest.findFirst({
+        where: { taskId: task.id, status: 'pending' },
+      });
+      if (existing) return fail('A reassignment is already pending approval.', epoch);
+
+      await prisma.reassignmentRequest.create({
         data: {
           taskId: task.id,
-          actorId: me.id,
-          eventType: 'owner_changed',
-          payload: { from: task.ownerId, to: parsed.data.newOwnerId, toName: newOwner.name },
+          requestedById: me.id,
+          proposedOwnerId: parsed.data.newOwnerId,
+          approverId,
         },
-      }),
-    ]);
-    if (parsed.data.newOwnerId !== me.id) {
+      });
       await prisma.notification.create({
         data: {
-          userId: parsed.data.newOwnerId,
-          type: 'task_assigned',
+          userId: approverId,
+          type: 'reassignment_approval_requested',
           payload: {
             taskId: task.id,
             taskName: task.name,
             actorId: me.id,
-            assignedById: me.id,
-            assignedByName: me.name ?? null,
-            dueDate: task.dueDate?.toISOString() ?? null,
+            actorName: me.name ?? null,
+            proposedOwnerId: parsed.data.newOwnerId,
           },
         },
       });
-    }
-  } else {
-    const approverId = meRow.supervisorId;
-    if (!approverId) return fail('No supervisor found to approve this reassignment.', epoch);
-
-    const existing = await prisma.reassignmentRequest.findFirst({
-      where: { taskId: task.id, status: 'pending' },
-    });
-    if (existing) return fail('A reassignment is already pending approval.', epoch);
-
-    await prisma.reassignmentRequest.create({
-      data: {
-        taskId: task.id,
-        requestedById: me.id,
-        proposedOwnerId: parsed.data.newOwnerId,
-        approverId,
-      },
-    });
-    await prisma.notification.create({
-      data: {
-        userId: approverId,
-        type: 'reassignment_approval_requested',
-        payload: {
+      await prisma.taskActivity.create({
+        data: {
           taskId: task.id,
-          taskName: task.name,
           actorId: me.id,
-          actorName: me.name ?? null,
-          proposedOwnerId: parsed.data.newOwnerId,
+          eventType: 'reassignment_requested',
+          payload: { proposedOwnerId: parsed.data.newOwnerId, proposedOwnerName: newOwner.name },
         },
-      },
-    });
-    await prisma.taskActivity.create({
-      data: {
-        taskId: task.id,
-        actorId: me.id,
-        eventType: 'reassignment_requested',
-        payload: { proposedOwnerId: parsed.data.newOwnerId, proposedOwnerName: newOwner.name },
-      },
-    });
+      });
+    }
+  } catch (err) {
+    console.error('reassignTaskAction failed:', err);
+    return fail('Could not reassign task.', epoch);
   }
 
   revalidateTask(task.id);
