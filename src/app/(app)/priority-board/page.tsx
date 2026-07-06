@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { initialsOf } from '@/lib/format';
 
 import { Board, type BoardTask } from './_components/Board';
@@ -28,7 +29,7 @@ export default async function PriorityBoardPage() {
       jsPriorityLane: { not: null },
     },
     include: {
-      owner: { include: { division: true } },
+      owner: { select: USER_SUMMARY_SELECT },
       division: true,
     },
     orderBy: [{ priority: 'desc' }, { dueDate: { sort: 'asc', nulls: 'last' } }],

@@ -10,6 +10,7 @@ import {
 import { canEditTfAttachments } from '@/app/actions/attachments';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { ACTOR_SUMMARY_SELECT, USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { initialsOf } from '@/lib/format';
 import { isS3Configured } from '@/lib/s3';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
@@ -69,7 +70,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
       AND: [visibility],
     },
     include: {
-      createdBy: { include: { division: true } },
+      createdBy: { select: USER_SUMMARY_SELECT },
       markedTo: {
         include: {
           division: { select: { id: true, name: true, avatarColour: true } },
@@ -78,13 +79,13 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
       taskLinks: {
         include: {
           task: {
-            include: { owner: { include: { division: true } } },
+            include: { owner: { select: USER_SUMMARY_SELECT } },
           },
         },
         orderBy: { linkedAt: 'asc' },
       },
       activity: {
-        include: { actor: { select: { name: true } } },
+        include: { actor: { select: ACTOR_SUMMARY_SELECT } },
         orderBy: { createdAt: 'desc' },
       },
     },

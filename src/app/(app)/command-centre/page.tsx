@@ -5,6 +5,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { Avatar, Pill } from '@/components/ui';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { initialsOf, formatDue } from '@/lib/format';
 import { TASK_STATUS_LABEL } from '@/lib/labels';
 import { describeNotification } from '@/lib/notifications';
@@ -73,7 +74,7 @@ export default async function CommandCentrePage() {
     prisma.task.findMany({
       where: { ...baseFilter, jsPriorityLane: 'today' },
       include: {
-        owner: { include: { division: true } },
+        owner: { select: USER_SUMMARY_SELECT },
         division: true,
       },
       orderBy: [{ priority: 'desc' }, { dueDate: { sort: 'asc', nulls: 'last' } }],
@@ -82,7 +83,7 @@ export default async function CommandCentrePage() {
     prisma.taskComment.findMany({
       where: { mentions: { has: session.user.id } },
       include: {
-        user: { include: { division: true } },
+        user: { select: USER_SUMMARY_SELECT },
         task: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
