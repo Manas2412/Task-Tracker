@@ -5,6 +5,7 @@ import { PullToRefresh } from '@/components/ui';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { formatDue, initialsOf } from '@/lib/format';
+import { getHeadedDivisionIds } from '@/lib/rbac';
 import { fetchTaskCounts, fetchVisibleTasks, type TaskFilter, type TaskSort } from '@/lib/visibility';
 
 import { DivisionControls } from './_components/DivisionControls';
@@ -47,9 +48,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
   });
   if (!me) redirect('/login');
 
-  const isAdminLike = me.isSuperAdmin || me.hierarchySlot === 'osd';
-
-  const [taskResult, counts, divisions] = await Promise.all([
+  const [taskResult, counts, divisions, headedDivisionIds] = await Promise.all([
     fetchVisibleTasks({ callerId: me.id, filter, divisionId: divisionFilter || undefined, sort }),
     fetchTaskCounts(me.id),
     prisma.division.findMany({
@@ -58,7 +57,12 @@ export default async function TasksPage({ searchParams }: PageProps) {
       select: { id: true, name: true },
       orderBy: [{ kind: 'asc' }, { displayOrder: 'asc' }, { name: 'asc' }],
     }),
+    getHeadedDivisionIds(me.id),
   ]);
+
+  // Archive is a head power: Super Admin, or the head/active delegate of the
+  // task's division. (A user can still archive their own personal task.)
+  const headedDivisions = new Set(headedDivisionIds);
 
   const { tasks, total, capped } = taskResult;
 
@@ -121,7 +125,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
                     </div>
                     <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
                       {group.tasks.map((t) => (
-                        <TaskRow key={t.id} task={t} meId={me.id} isAdminLike={isAdminLike} />
+                        <TaskRow key={t.id} task={t} meId={me.id} isSuperAdmin={me.isSuperAdmin} headedDivisions={headedDivisions} />
                       ))}
                     </ul>
                   </section>
@@ -158,7 +162,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
                   ) : (
                     <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
                       {segment.tasks.map((t) => (
-                        <TaskRow key={t.id} task={t} meId={me.id} isAdminLike={isAdminLike} />
+                        <TaskRow key={t.id} task={t} meId={me.id} isSuperAdmin={me.isSuperAdmin} headedDivisions={headedDivisions} />
                       ))}
                     </ul>
                   )}
@@ -178,16 +182,21 @@ type VisibleTask = Awaited<ReturnType<typeof fetchVisibleTasks>>['tasks'][number
 function TaskRow({
   task: t,
   meId,
-  isAdminLike,
+  isSuperAdmin,
+  headedDivisions,
 }: {
   task: VisibleTask;
   meId: string;
-  isAdminLike: boolean;
+  isSuperAdmin: boolean;
+  headedDivisions: Set<string>;
 }) {
   const subtaskTotal = t.subtasks.length;
   const subtaskDone = t.subtasks.filter((s) => s.status === 'completed').length;
   const due = formatDue(t.dueDate);
-  const canArchive = t.ownerId === meId || t.createdById === meId || isAdminLike;
+  const canArchive =
+    isSuperAdmin ||
+    headedDivisions.has(t.divisionId) ||
+    (t.visibility === 'personal' && t.ownerId === meId);
 
   return (
     <li>

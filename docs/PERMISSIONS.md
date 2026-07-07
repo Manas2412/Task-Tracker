@@ -50,7 +50,7 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 | **Toggle milestone** | own | ✓ | own | own | own | own | own | own | ✓ |
 | **Toggle visibility** | head³ | ✓ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ |
 | **Delete task (hard-delete)** — own personal always; division task see §5.13 | head³ | head³ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ (any) |
-| **Archive shared task** | own | ✓ | own | own | own | own | own | own | ✓ (any) |
+| **Archive task** (assigned to an individual) — own personal always; division task see §5.7 | head³ | head³ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ (any) |
 | **Restore archived task** |  | ✓ |  |  |  |  |  |  | ✓ |
 
 ¹ "Needs approval" = the request is created; the proposed new owner's superior must tap-approve before the reassignment takes effect.
@@ -152,7 +152,7 @@ The role switcher in the top bar is the only entry point. OSD and Super Admin ar
 | Condition | Available action | Who |
 |---|---|---|
 | Task — delete (hard) | **Delete** (removes the task, its subtasks, comments, collaborators, and attachments; cannot be undone) | Owner or creator; the **head of the task's division** (direct head or active delegate); **Super Admin** for any task |
-| Task — archive | **Archive** (soft-delete, recoverable, hidden from lists) | Anyone with edit rights (owner, creator, director/head of the division, OSD, JS, Super Admin) |
+| Task — archive | **Archive** (soft-delete, recoverable, hidden from lists) | The **head of the task's division**, a **delegate** holding that division's power, or a **Super Admin** — plus a user for their **own personal task**. A task assigned to an individual can *not* be archived by its owner/creator or by a plain OSD. Enforced by `canActAsHeadOf` in `archiveTaskAction`, and mirrored by `canArchive` on the task page and the swipe-to-archive list control. |
 | Timeline File — archive | ✓ | OSD, Super Admin |
 | Timeline File — hard-delete | ✓ | Super Admin only (any file, regardless of creator) |
 | User | **Disable** (login blocked, audit history preserved) | Super Admin only |

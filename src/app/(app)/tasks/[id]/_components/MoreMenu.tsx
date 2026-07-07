@@ -8,18 +8,19 @@ import { cn } from '@/lib/utils';
 
 type MoreMenuProps = {
   taskId: string;
+  canArchive: boolean;
   canDelete: boolean;
   reasonNoDelete?: string;
 };
 
 /**
  * Detail-screen more-menu dropdown.
- *   - Archive (always available)
- *   - Delete (only if the task is solo — no comments, no collaborators)
+ *   - Archive (division head / Super Admin / delegate, or own personal task)
+ *   - Delete (division head / Super Admin, or own personal task)
  *
  * Archive moves to /tasks; delete hard-removes and bounces too.
  */
-export function MoreMenu({ taskId, canDelete, reasonNoDelete }: MoreMenuProps) {
+export function MoreMenu({ taskId, canArchive, canDelete, reasonNoDelete }: MoreMenuProps) {
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -106,14 +107,16 @@ export function MoreMenu({ taskId, canDelete, reasonNoDelete }: MoreMenuProps) {
           </div>
         ) : (
           <>
-            <MenuButton
-              icon="ti-archive"
-              label="Archive task"
-              onClick={() => {
-                setOpen(false);
-                callAction(archiveTaskAction);
-              }}
-            />
+            {canArchive ? (
+              <MenuButton
+                icon="ti-archive"
+                label="Archive task"
+                onClick={() => {
+                  setOpen(false);
+                  callAction(archiveTaskAction);
+                }}
+              />
+            ) : null}
             {canDelete ? (
               <MenuButton
                 icon="ti-trash"
@@ -121,12 +124,15 @@ export function MoreMenu({ taskId, canDelete, reasonNoDelete }: MoreMenuProps) {
                 danger
                 onClick={() => setConfirmDelete(true)}
               />
-            ) : (
+            ) : null}
+            {!canDelete ? (
               <div className="px-3 py-2 text-[11px] text-ink-3 leading-relaxed">
                 <i className="ti ti-info-circle mr-1.5" aria-hidden="true" />
-                {reasonNoDelete ?? 'Delete is unavailable once the task has been shared. Archive instead.'}
+                {!canArchive
+                  ? 'Only a division head, a Super Admin, or a delegated user can archive or delete this task.'
+                  : (reasonNoDelete ?? 'Delete is unavailable once the task has been shared. Archive instead.')}
               </div>
-            )}
+            ) : null}
           </>
         )}
       </div>
