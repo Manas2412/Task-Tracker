@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -191,7 +192,7 @@ export async function purgeMockDataAction(
 
     return { ok: true, deletedCounts, epoch };
   } catch (err) {
-    console.error('purgeMockDataAction failed:', err);
+    logError('purgeMockDataAction failed', err);
     return { ok: false, error: 'Purge failed. Try again or check the server log.', epoch };
   }
 }

@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -119,7 +120,7 @@ export async function changePasswordAction(
       },
     });
   } catch (err) {
-    console.error('changePasswordAction failed:', err);
+    logError('changePasswordAction failed', err);
     return { ok: false, error: 'Could not save the new password. Try again.', epoch };
   }
 
@@ -252,7 +253,7 @@ export async function updateMyProfileAction(
       },
     });
   } catch (err) {
-    console.error('updateMyProfileAction failed:', err);
+    logError('updateMyProfileAction failed', err);
     return { ok: false, error: 'Could not save changes.', epoch };
   }
 

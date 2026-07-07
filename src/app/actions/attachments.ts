@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -308,7 +309,7 @@ async function writeAttachment(args: {
 
     return ok(args.epoch, { attachmentId: created.id });
   } catch (err) {
-    console.error('writeAttachment failed:', err);
+    logError('writeAttachment failed', err);
     return fail('Could not save the attachment.', args.epoch);
   }
 }
@@ -389,7 +390,7 @@ export async function renameAttachmentAction(
 
     return ok(epoch);
   } catch (err) {
-    console.error('renameAttachmentAction failed:', err);
+    logError('renameAttachmentAction failed', err);
     return fail('Could not rename.', epoch);
   }
 }
@@ -472,7 +473,7 @@ export async function deleteAttachmentAction(
       try {
         await deleteS3Object(att.fileUrl);
       } catch (err) {
-        console.error('S3 object delete failed (orphan left):', err);
+        logError('S3 object delete failed (orphan left)', err);
       }
     }
 
@@ -483,7 +484,7 @@ export async function deleteAttachmentAction(
     }
     return ok(epoch);
   } catch (err) {
-    console.error('deleteAttachmentAction failed:', err);
+    logError('deleteAttachmentAction failed', err);
     return fail('Could not delete.', epoch);
   }
 }

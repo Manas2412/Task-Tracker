@@ -57,7 +57,7 @@
 
 **Remediation:** Read bootstrap passwords from `SEED_ADMIN_PASSWORD` env var; fail if unset. Remove plaintext passwords from source.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — all seed passwords read from env vars (`BOOTSTRAP_*` + `SEED_DEFAULT_PASSWORD`); seed refuses to run if any are blank
 
 ---
 
@@ -564,7 +564,7 @@
 
 **Remediation:** Reduce TTL to 1-4 hours. Document the trade-off in the share dialog.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — share URL TTL reduced from 24 hours to 4 hours
 
 ---
 
@@ -581,7 +581,7 @@
 
 **Remediation:** Log only `error.message` and a sanitized stack. Use structured logging.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — all `console.error(label, err)` calls replaced with `logError(label, err)` which extracts only `error.message`
 
 ---
 
@@ -666,7 +666,7 @@
 
 **Remediation:** This is needed for bulk import. Consider per-action limits if Next.js supports it, or add explicit body length checks in sensitive actions.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — reduced from 5MB to 2MB (sufficient for bulk CSV import); Next.js does not support per-action limits
 
 ---
 

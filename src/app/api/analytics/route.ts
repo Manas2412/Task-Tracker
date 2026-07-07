@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { BetaAnalyticsDataClient } from '@google-analytics/data';
+import { logError } from '@/lib/utils/log';
 
 import { auth } from '@/lib/auth';
 
@@ -45,7 +46,7 @@ export async function GET() {
 
     return NextResponse.json({ activeUsers, totalUsers, configured: true });
   } catch (err) {
-    console.error('GA4 API error:', err);
+    logError('GA4 API error', err);
     return NextResponse.json(
       { activeUsers: 0, totalUsers: 0, configured: false, error: 'API call failed' },
       { status: 500 },

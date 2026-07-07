@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -402,7 +403,7 @@ export async function commitImportAction(
 
       createdCount++;
     } catch (err) {
-      console.error('Bulk import row failed:', err);
+      logError('Bulk import row failed', err);
       skippedCount++;
     }
   }

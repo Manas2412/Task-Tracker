@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -98,7 +99,7 @@ export async function createTagAction(
     revalidatePath('/admin/tags');
     return ok(epoch, { id: tag.id });
   } catch (err) {
-    console.error('createTagAction failed:', err);
+    logError('createTagAction failed', err);
     return fail('Could not create the tag.', epoch);
   }
 }
@@ -155,7 +156,7 @@ export async function renameTagAction(
     revalidatePath('/admin/tags');
     return ok(epoch);
   } catch (err) {
-    console.error('renameTagAction failed:', err);
+    logError('renameTagAction failed', err);
     return fail('Could not rename.', epoch);
   }
 }
@@ -200,7 +201,7 @@ export async function deleteTagAction(
     revalidatePath('/admin/tags');
     return ok(epoch);
   } catch (err) {
-    console.error('deleteTagAction failed:', err);
+    logError('deleteTagAction failed', err);
     return fail('Could not delete.', epoch);
   }
 }
@@ -277,7 +278,7 @@ export async function addTagToTaskAction(
     ) {
       return ok(epoch); // already added
     }
-    console.error('addTagToTaskAction failed:', err);
+    logError('addTagToTaskAction failed', err);
     return fail('Could not add the tag.', epoch);
   }
 
@@ -329,7 +330,7 @@ export async function removeTagFromTaskAction(
       });
     }
   } catch (err) {
-    console.error('removeTagFromTaskAction failed:', err);
+    logError('removeTagFromTaskAction failed', err);
     return fail('Could not remove the tag.', epoch);
   }
 

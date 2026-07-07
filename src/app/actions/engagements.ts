@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -259,7 +260,7 @@ export async function createEngagementAction(
     revalidatePath('/calendar');
     return ok(epoch, { engagementId: engagement.id });
   } catch (err) {
-    console.error('createEngagementAction failed:', err);
+    logError('createEngagementAction failed', err);
     return fail('Could not save the engagement. Try again.', epoch);
   }
 }
@@ -341,7 +342,7 @@ export async function updateEngagementAction(
     revalidatePath('/calendar');
     return ok(epoch, { engagementId: existing.id });
   } catch (err) {
-    console.error('updateEngagementAction failed:', err);
+    logError('updateEngagementAction failed', err);
     return fail('Could not save changes. Try again.', epoch);
   }
 }
@@ -392,7 +393,7 @@ export async function deleteEngagementAction(
     revalidatePath('/calendar');
     return ok(epoch);
   } catch (err) {
-    console.error('deleteEngagementAction failed:', err);
+    logError('deleteEngagementAction failed', err);
     return fail('Could not delete the engagement.', epoch);
   }
 }

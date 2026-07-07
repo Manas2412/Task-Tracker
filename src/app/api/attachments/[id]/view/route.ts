@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
+import { logError } from '@/lib/utils/log';
 import { prisma } from '@/lib/db';
 import { isS3Configured, presignView } from '@/lib/s3';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
@@ -95,7 +96,7 @@ export async function GET(
 
     return NextResponse.redirect(url);
   } catch (err) {
-    console.error('presignView failed:', err);
+    logError('presignView failed', err);
     return NextResponse.json({ error: 'Could not generate URL' }, { status: 500 });
   }
 }

@@ -37,17 +37,27 @@ if (
 
 const prisma = new PrismaClient();
 
-const BOOTSTRAP_USERNAME = process.env.BOOTSTRAP_USERNAME ?? 'osd.myas';
-const BOOTSTRAP_PASSWORD = process.env.BOOTSTRAP_PASSWORD ?? 'ChangeMeImmediately!';
-const BOOTSTRAP_NAME = process.env.BOOTSTRAP_NAME ?? 'OSD';
+const BOOTSTRAP_USERNAME = process.env.BOOTSTRAP_USERNAME;
+const BOOTSTRAP_PASSWORD = process.env.BOOTSTRAP_PASSWORD;
+const BOOTSTRAP_NAME = process.env.BOOTSTRAP_NAME;
+if (!BOOTSTRAP_USERNAME || !BOOTSTRAP_PASSWORD || !BOOTSTRAP_NAME) {
+  console.error('BOOTSTRAP_USERNAME, BOOTSTRAP_PASSWORD, and BOOTSTRAP_NAME env vars are required.');
+  process.exit(1);
+}
+
+const SEED_DEFAULT_PASSWORD = process.env.SEED_DEFAULT_PASSWORD;
+if (!SEED_DEFAULT_PASSWORD) {
+  console.error('SEED_DEFAULT_PASSWORD env var is required. Set it before running the seed.');
+  process.exit(1);
+}
 
 const PASSWORD_BY_DIVISION: Record<string, string> = {
-  'Office of JS': 'officeojs_26',
-  'Khelo India': 'kheloindia_26',
-  'NSDF': 'nsdf_26',
-  'SGM': 'sgm_26',
-  'Media & IT': 'mediait_26',
-  'Autonomous Bodies': 'autonomousbodies_26',
+  'Office of JS': SEED_DEFAULT_PASSWORD,
+  'Khelo India': SEED_DEFAULT_PASSWORD,
+  'NSDF': SEED_DEFAULT_PASSWORD,
+  'SGM': SEED_DEFAULT_PASSWORD,
+  'Media & IT': SEED_DEFAULT_PASSWORD,
+  'Autonomous Bodies': SEED_DEFAULT_PASSWORD,
 };
 
 async function wipe() {

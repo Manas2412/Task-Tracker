@@ -4,7 +4,7 @@ const nextConfig = {
   distDir: process.env.NEXT_BUILD_DIR || '.next',
   experimental: {
     serverActions: {
-      bodySizeLimit: '5mb',
+      bodySizeLimit: '2mb',
     },
   },
   async headers() {

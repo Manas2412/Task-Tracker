@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
+import { logError } from '@/lib/utils/log';
 import { prisma } from '@/lib/db';
 import { isS3Configured, presignDownload } from '@/lib/s3';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
@@ -108,7 +109,7 @@ export async function GET(
     });
     return NextResponse.redirect(url);
   } catch (err) {
-    console.error('presignDownload failed:', err);
+    logError('presignDownload failed', err);
     return NextResponse.json({ error: 'Could not generate URL' }, { status: 500 });
   }
 }

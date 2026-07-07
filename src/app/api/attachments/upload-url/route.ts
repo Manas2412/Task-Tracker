@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { logError } from '@/lib/utils/log';
 
 import {
   canEditTaskAttachments,
@@ -101,7 +102,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ key, url, expiresInSeconds });
   } catch (err) {
-    console.error('presignUpload failed:', err);
+    logError('presignUpload failed', err);
     return NextResponse.json(
       { error: 'Could not generate upload URL' },
       { status: 500 },

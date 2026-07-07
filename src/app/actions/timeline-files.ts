@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -227,7 +228,7 @@ export async function createTimelineFileAction(
         },
       };
     }
-    console.error('createTimelineFileAction failed:', err);
+    logError('createTimelineFileAction failed', err);
     return fail('Could not create the timeline file. Try again.', epoch);
   }
 }
@@ -292,7 +293,7 @@ export async function updateTimelineFileStatusAction(
       }),
     ]);
   } catch (err) {
-    console.error('updateTimelineFileStatusAction failed:', err);
+    logError('updateTimelineFileStatusAction failed', err);
     return fail('Could not update status.', epoch);
   }
 
@@ -358,7 +359,7 @@ export async function updateTimelineFilePriorityAction(
       }),
     ]);
   } catch (err) {
-    console.error('updateTimelineFilePriorityAction failed:', err);
+    logError('updateTimelineFilePriorityAction failed', err);
     return fail('Could not update priority.', epoch);
   }
 
@@ -490,7 +491,7 @@ export async function updateTimelineFileFieldsAction(
       });
     }
   } catch (err) {
-    console.error('updateTimelineFileFieldsAction failed:', err);
+    logError('updateTimelineFileFieldsAction failed', err);
     return fail('Could not save changes.', epoch);
   }
 
@@ -594,7 +595,7 @@ export async function updateTimelineFileRefNumberAction(
         },
       };
     }
-    console.error('updateTimelineFileRefNumberAction failed:', err);
+    logError('updateTimelineFileRefNumberAction failed', err);
     return fail('Could not update the reference number.', epoch);
   }
 
@@ -672,7 +673,7 @@ export async function addMarkedToAction(
     ) {
       return ok(epoch); // already marked
     }
-    console.error('addMarkedToAction failed:', err);
+    logError('addMarkedToAction failed', err);
     return fail('Could not mark to division.', epoch);
   }
 
@@ -723,7 +724,7 @@ export async function removeMarkedToAction(
       },
     });
   } catch (err) {
-    console.error('removeMarkedToAction failed:', err);
+    logError('removeMarkedToAction failed', err);
     return fail('Could not remove division.', epoch);
   }
 
@@ -781,7 +782,7 @@ export async function archiveTimelineFileAction(
       }),
     ]);
   } catch (err) {
-    console.error('archiveTimelineFileAction failed:', err);
+    logError('archiveTimelineFileAction failed', err);
     return fail('Could not archive.', epoch);
   }
 
@@ -849,7 +850,7 @@ export async function deleteTimelineFileAction(
       });
     });
   } catch (err) {
-    console.error('deleteTimelineFileAction failed:', err);
+    logError('deleteTimelineFileAction failed', err);
     return fail('Could not delete.', epoch);
   }
 

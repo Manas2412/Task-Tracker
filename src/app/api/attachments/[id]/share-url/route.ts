@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
+import { logError } from '@/lib/utils/log';
 import { prisma } from '@/lib/db';
 import { isS3Configured, presignShare } from '@/lib/s3';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
@@ -103,7 +104,7 @@ export async function GET(
     });
     return NextResponse.json({ url, fileName: att.fileName });
   } catch (err) {
-    console.error('presignShare failed:', err);
+    logError('presignShare failed', err);
     return NextResponse.json({ error: 'Could not generate URL' }, { status: 500 });
   }
 }

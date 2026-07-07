@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -193,7 +194,7 @@ async function recordTaskReadReceipt(notificationId: string, readerId: string): 
     }
   } catch (err) {
     // A failed receipt must never block navigation to the task.
-    console.error('recordTaskReadReceipt failed:', err);
+    logError('recordTaskReadReceipt failed', err);
   }
 }
 
@@ -253,6 +254,6 @@ async function recordTaskReadReceiptsBulk(
     for (const path of paths) revalidatePath(path);
   } catch (err) {
     // A failed receipt must never block marking notifications read.
-    console.error('recordTaskReadReceiptsBulk failed:', err);
+    logError('recordTaskReadReceiptsBulk failed', err);
   }
 }

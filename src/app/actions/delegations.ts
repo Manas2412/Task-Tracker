@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { format } from 'date-fns';
@@ -240,7 +241,7 @@ export async function createDelegationAction(
       }),
     ]);
   } catch (err) {
-    console.error('createDelegationAction failed:', err);
+    logError('createDelegationAction failed', err);
     return fail('Could not create the delegation.', epoch);
   }
 
@@ -340,7 +341,7 @@ export async function revokeDelegationAction(
         : []),
     ]);
   } catch (err) {
-    console.error('revokeDelegationAction failed:', err);
+    logError('revokeDelegationAction failed', err);
     return fail('Could not revoke the delegation.', epoch);
   }
 

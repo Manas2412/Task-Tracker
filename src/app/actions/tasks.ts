@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -362,7 +363,7 @@ export async function createTaskAction(
     revalidatePath('/tasks');
     return { ok: true, taskId: task.id, epoch };
   } catch (err) {
-    console.error('createTaskAction failed:', err);
+    logError('createTaskAction failed', err);
     return fail('Could not save the task. Try again.', epoch);
   }
 }
@@ -490,7 +491,7 @@ export async function updateTaskStatusAction(
       await spawnRecurringTask(task.id, me.id);
     }
   } catch (err) {
-    console.error('updateTaskStatusAction failed:', err);
+    logError('updateTaskStatusAction failed', err);
     return fail('Could not change status.', epoch);
   }
 
@@ -549,7 +550,7 @@ export async function updateTaskPriorityAction(
       }),
     ]);
   } catch (err) {
-    console.error('updateTaskPriorityAction failed:', err);
+    logError('updateTaskPriorityAction failed', err);
     return fail('Could not change priority.', epoch);
   }
 
@@ -732,7 +733,7 @@ export async function updateTaskFieldsAction(
       ),
     ]);
   } catch (err) {
-    console.error('updateTaskFieldsAction failed:', err);
+    logError('updateTaskFieldsAction failed', err);
     return fail('Could not save changes.', epoch);
   }
 
@@ -866,7 +867,7 @@ export async function addSubtaskAction(
       });
     }
   } catch (err) {
-    console.error('addSubtaskAction failed:', err);
+    logError('addSubtaskAction failed', err);
     return fail('Could not add subtask.', epoch);
   }
 
@@ -923,7 +924,7 @@ export async function toggleSubtaskAction(
         : []),
     ]);
   } catch (err) {
-    console.error('toggleSubtaskAction failed:', err);
+    logError('toggleSubtaskAction failed', err);
     return fail('Could not toggle subtask.', epoch);
   }
 
@@ -1042,7 +1043,7 @@ export async function updateSubtaskAction(
       });
     }
   } catch (err) {
-    console.error('updateSubtaskAction failed:', err);
+    logError('updateSubtaskAction failed', err);
     return fail('Could not update subtask.', epoch);
   }
 
@@ -1145,7 +1146,7 @@ export async function postCommentAction(
       await prisma.notification.createMany({ data: mentionNotifs });
     }
   } catch (err) {
-    console.error('postCommentAction failed:', err);
+    logError('postCommentAction failed', err);
     return fail('Could not post comment.', epoch);
   }
 
@@ -1207,7 +1208,7 @@ export async function editCommentAction(
       },
     });
   } catch (err) {
-    console.error('editCommentAction failed:', err);
+    logError('editCommentAction failed', err);
     return fail('Could not edit comment.', epoch);
   }
 
@@ -1247,7 +1248,7 @@ export async function deleteCommentAction(
   try {
     await prisma.taskComment.delete({ where: { id: comment.id } });
   } catch (err) {
-    console.error('deleteCommentAction failed:', err);
+    logError('deleteCommentAction failed', err);
     return fail('Could not delete comment.', epoch);
   }
 
@@ -1304,7 +1305,7 @@ export async function archiveTaskAction(
       }),
     ]);
   } catch (err) {
-    console.error('archiveTaskAction failed:', err);
+    logError('archiveTaskAction failed', err);
     return fail('Could not archive.', epoch);
   }
 
@@ -1388,7 +1389,7 @@ export async function deleteTaskAction(
       });
     });
   } catch (err) {
-    console.error('deleteTaskAction failed:', err);
+    logError('deleteTaskAction failed', err);
     return fail('Could not delete.', epoch);
   }
 
@@ -1507,7 +1508,7 @@ export async function setJsPriorityLaneAction(
       }
     });
   } catch (err) {
-    console.error('setJsPriorityLaneAction failed:', err);
+    logError('setJsPriorityLaneAction failed', err);
     return fail('Could not update JS Priority.', epoch);
   }
 
@@ -1557,7 +1558,7 @@ export async function reorderBoardAction(
       ),
     );
   } catch (err) {
-    console.error('reorderBoardAction failed:', err);
+    logError('reorderBoardAction failed', err);
     return fail('Could not save order.', epoch);
   }
 
@@ -1675,7 +1676,7 @@ export async function addCollaboratorAction(
     ) {
       return fail('Already a collaborator on this task.', epoch);
     }
-    console.error('addCollaboratorAction failed:', err);
+    logError('addCollaboratorAction failed', err);
     return fail('Could not add collaborator.', epoch);
   }
 
@@ -1739,7 +1740,7 @@ export async function removeCollaboratorAction(
       },
     });
   } catch (err) {
-    console.error('removeCollaboratorAction failed:', err);
+    logError('removeCollaboratorAction failed', err);
     return fail('Could not remove collaborator.', epoch);
   }
 
@@ -1912,7 +1913,7 @@ export async function reassignTaskAction(
       });
     }
   } catch (err) {
-    console.error('reassignTaskAction failed:', err);
+    logError('reassignTaskAction failed', err);
     return fail('Could not reassign task.', epoch);
   }
 
@@ -2155,7 +2156,7 @@ export async function transferTaskAction(
       }),
     ]);
   } catch (err) {
-    console.error('transferTaskAction failed:', err);
+    logError('transferTaskAction failed', err);
     return fail('Could not transfer the task.', epoch);
   }
 

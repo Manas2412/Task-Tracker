@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -291,7 +292,7 @@ export async function createUserAction(
     revalidateAll();
     return ok(epoch, { userId: created.id });
   } catch (err) {
-    console.error('createUserAction failed:', err);
+    logError('createUserAction failed', err);
     return fail('Could not create the user. Try again.', epoch);
   }
 }
@@ -460,7 +461,7 @@ export async function updateUserAction(
     revalidateAll();
     return ok(epoch, { userId: updated.id });
   } catch (err) {
-    console.error('updateUserAction failed:', err);
+    logError('updateUserAction failed', err);
     return fail('Could not update the user.', epoch);
   }
 }
@@ -544,7 +545,7 @@ export async function resetUserPasswordAction(
     revalidatePath('/admin/users');
     return ok(epoch);
   } catch (err) {
-    console.error('resetUserPasswordAction failed:', err);
+    logError('resetUserPasswordAction failed', err);
     return fail('Could not reset the password.', epoch);
   }
 }
@@ -611,7 +612,7 @@ export async function setUserActiveAction(
     revalidateAll();
     return ok(epoch);
   } catch (err) {
-    console.error('setUserActiveAction failed:', err);
+    logError('setUserActiveAction failed', err);
     return fail('Could not change status.', epoch);
   }
 }
@@ -674,7 +675,7 @@ export async function setUserSuperAdminAction(
     revalidateAll();
     return ok(epoch);
   } catch (err) {
-    console.error('setUserSuperAdminAction failed:', err);
+    logError('setUserSuperAdminAction failed', err);
     return fail('Could not change role.', epoch);
   }
 }
@@ -775,7 +776,7 @@ export async function setUserPmuAction(
     revalidateAll();
     return ok(epoch);
   } catch (err) {
-    console.error('setUserPmuAction failed:', err);
+    logError('setUserPmuAction failed', err);
     return fail('Could not update PMU membership.', epoch);
   }
 }
@@ -846,7 +847,7 @@ export async function changeDivisionAction(
     revalidateAll();
     return ok(epoch);
   } catch (err) {
-    console.error('changeDivisionAction failed:', err);
+    logError('changeDivisionAction failed', err);
     return fail('Could not change division.', epoch);
   }
 }

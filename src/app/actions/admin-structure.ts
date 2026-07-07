@@ -1,4 +1,5 @@
 'use server';
+import { logError } from '@/lib/utils/log';
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -211,7 +212,7 @@ export async function createDivisionAction(
     revalidateAll();
     return ok(epoch, { id: created.id });
   } catch (err) {
-    console.error('createDivisionAction failed:', err);
+    logError('createDivisionAction failed', err);
     return fail('Could not create. Try again.', epoch);
   }
 }
@@ -260,7 +261,7 @@ export async function renameDivisionAction(
       name: parsed.data.name,
     });
   } catch (err) {
-    console.error('renameDivisionAction failed:', err);
+    logError('renameDivisionAction failed', err);
     return fail('Could not rename.', epoch);
   }
 
@@ -334,7 +335,7 @@ export async function deleteDivisionAction(
       }
     }
   } catch (err) {
-    console.error('deleteDivisionAction failed:', err);
+    logError('deleteDivisionAction failed', err);
     return fail('Could not delete.', epoch);
   }
 
@@ -415,7 +416,7 @@ export async function setUserSupervisorAction(
       { supervisorId: parsed.data.supervisorId },
     );
   } catch (err) {
-    console.error('setUserSupervisorAction failed:', err);
+    logError('setUserSupervisorAction failed', err);
     return fail('Could not reassign.', epoch);
   }
 
@@ -593,7 +594,7 @@ export async function moveTeamToUnitAction(
       });
     });
   } catch (err) {
-    console.error('moveTeamToUnitAction failed:', err);
+    logError('moveTeamToUnitAction failed', err);
     return fail('Could not move the team.', epoch);
   }
 
@@ -667,7 +668,7 @@ export async function setDivisionHeadAction(
       { headUserId: parsed.data.headUserId, headName },
     );
   } catch (err) {
-    console.error('setDivisionHeadAction failed:', err);
+    logError('setDivisionHeadAction failed', err);
     return fail('Could not change the division head.', epoch);
   }
 
