@@ -205,6 +205,7 @@ function TaskRow({
         taskId={t.id}
         refNumber={t.refNumber}
         name={t.name}
+        description={t.description}
         division={{ name: t.division.name }}
         status={t.status as PillStatusTone}
         priority={t.priority as PillPriorityTone}

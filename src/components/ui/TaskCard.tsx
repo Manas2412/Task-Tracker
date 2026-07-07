@@ -33,6 +33,8 @@ export type TaskCardProps = {
   taskId: string;
   refNumber?: string | null;
   name: string;
+  /** Full description — not shown on the card, used by the hover preview. */
+  description?: string | null;
   division: { name: string };
   status: PillStatusTone;
   priority: PillPriorityTone;

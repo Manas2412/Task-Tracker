@@ -132,3 +132,10 @@ body.sortable-dragging .drop-node:hover {
 
 /* The drag fallback clone must never intercept the drop hit-test. */
 .sortable-fallback { pointer-events: none !important; }
+
+/* Task hover-preview card — subtle fade-in on appear. */
+@keyframes hoverPop {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.hover-pop { animation: hoverPop 0.13s ease-out; transform-origin: top left; }

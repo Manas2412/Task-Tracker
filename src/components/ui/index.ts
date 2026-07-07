@@ -8,6 +8,8 @@ export type {
 
 export { Avatar } from './Avatar';
 
+export { HoverPreview } from './HoverPreview';
+
 export { TaskCard } from './TaskCard';
 export type { TaskCardProps } from './TaskCard';
 
