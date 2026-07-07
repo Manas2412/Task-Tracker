@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { prisma } from '@/lib/db';
 import { authConfig } from '@/lib/auth/config';
-import { verifyPassword } from '@/lib/auth/password';
+import { hashPassword, needsRehash, verifyPassword } from '@/lib/auth/password';
 import { rateLimit } from '@/lib/rate-limit';
 
 const credentialsSchema = z.object({
@@ -61,8 +61,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const ok = await verifyPassword(password, user.passwordHash);
         if (!ok) return null;
 
-        // Touch last_login + write a login audit entry. Fire-and-forget —
-        // failures here must not block sign-in.
+        // Re-hash legacy bcrypt passwords to argon2id on successful login.
+        if (await needsRehash(user.passwordHash)) {
+          hashPassword(password).then((newHash) =>
+            prisma.user
+              .update({ where: { id: user.id }, data: { passwordHash: newHash } })
+              .catch(() => {/* swallow */}),
+          );
+        }
+
         prisma.user
           .update({
             where: { id: user.id },

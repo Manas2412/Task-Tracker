@@ -1,24 +1,37 @@
+import * as argon2 from 'argon2';
 import bcrypt from 'bcryptjs';
 
-/**
- * Password hashing.
- *
- * Uses bcryptjs (pure JavaScript) — works on every runtime including
- * Vercel serverless. 12 salt rounds is the OWASP baseline for bcrypt.
- *
- * Hash a password before INSERT/UPDATE on `users.password_hash`.
- * Verify on every sign-in.
- */
-
-const SALT_ROUNDS = 12;
-
 export async function hashPassword(plain: string): Promise<string> {
-  return bcrypt.hash(plain, SALT_ROUNDS);
+  return argon2.hash(plain, {
+    type: argon2.argon2id,
+    memoryCost: 65536,
+    timeCost: 3,
+    parallelism: 4,
+  });
 }
 
-export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
+function isBcryptHash(hash: string): boolean {
+  return hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$');
+}
+
+export async function verifyPassword(
+  plain: string,
+  hash: string,
+): Promise<boolean> {
   try {
-    return await bcrypt.compare(plain, hash);
+    if (isBcryptHash(hash)) {
+      return await bcrypt.compare(plain, hash);
+    }
+    return await argon2.verify(hash, plain);
+  } catch {
+    return false;
+  }
+}
+
+export async function needsRehash(hash: string): Promise<boolean> {
+  if (isBcryptHash(hash)) return true;
+  try {
+    return argon2.needsRehash(hash, { timeCost: 3, memoryCost: 65536 });
   } catch {
     return false;
   }

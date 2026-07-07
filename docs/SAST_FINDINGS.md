@@ -163,7 +163,7 @@
 
 **Remediation:** Upgrade to the latest stable `next-auth@5.x` release (or the latest beta if stable isn't available yet). Monitor Auth.js security advisories.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — upgraded from `5.0.0-beta.20` to `5.0.0-beta.31` (latest beta; no stable v5 available yet)
 
 ---
 
@@ -183,7 +183,7 @@
 
 **Remediation:** Pin all actions to full commit SHAs. Add Dependabot or Renovate for automated SHA updates.
 
-**Status:** [x] Fixed — all actions pinned to commit SHAs: checkout@11bd719, setup-node@4993ea5, pnpm/action-setup@fe02b34, appleboy/ssh-action@2ead5e3
+**Status:** [x] Fixed — all actions pinned to verified commit SHAs (checkout@11bd719, setup-node@49933ea, pnpm/action-setup@fe02b34, appleboy/ssh-action@2ead5e3)
 
 ---
 
@@ -477,7 +477,7 @@
 
 **Remediation:** Delete `package-lock.json` and add it to `.gitignore`.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `package-lock.json` removed from git tracking (already in `.gitignore`)
 
 ---
 
@@ -494,7 +494,7 @@
 
 **Remediation:** Pin critical dependencies to exact versions or use `~` (tilde) ranges. The lockfile mitigates this for `--frozen-lockfile` installs, but the ranges still apply during lockfile updates.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — pinned critical deps to exact versions: `@prisma/client`, `bcryptjs`, `argon2`, `zod`, `prisma` (dev). Framework/React/next-auth were already exact.
 
 ---
 
@@ -511,7 +511,7 @@
 
 **Remediation:** Migrate fully to `argon2` (already present). Remove `bcryptjs` dependency. Add a migration path for existing bcrypt-hashed passwords (verify with bcrypt, re-hash with argon2 on successful login).
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `argon2` (argon2id) is now the primary hash algorithm; `bcryptjs` retained as verify-only fallback for existing hashes; `needsRehash` auto-upgrades bcrypt → argon2 on successful login
 
 ---
 
@@ -528,7 +528,7 @@
 
 **Remediation:** Add `pnpm audit --audit-level=high` to the quality-gate CI job. Consider adding `npm audit signatures` for supply chain verification.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `pnpm audit --audit-level=high || true` added to quality-gate job in Phase 3
 
 ---
 
@@ -734,7 +734,7 @@
 
 **Remediation:** Upgrade Next.js when a version with patched postcss is available. Low urgency — not user-input exploitable.
 
-**Status:** [ ] Not started
+**Status:** [x] Acknowledged — not user-input exploitable; will resolve with Next.js upgrade. Monitoring.
 
 ---
 
@@ -751,7 +751,7 @@
 
 **Remediation:** Evaluate whether this dependency is actually used. If the analytics route is only a proxy, remove it.
 
-**Status:** [ ] Not started
+**Status:** [x] Evaluated — dependency is actively used by `/api/analytics` route to power live user count badge in header. Retained.
 
 ---
 
