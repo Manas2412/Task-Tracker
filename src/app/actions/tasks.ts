@@ -238,6 +238,12 @@ const createTaskSchema = z.object({
     .optional()
     .transform((s) => s === 'on'),
   divisionId: z.string().uuid().optional(),
+  // Optional initial owner, named by a head at creation (see below). Empty
+  // string → undefined so "unassigned" stays the default.
+  ownerId: z
+    .union([z.literal(''), z.string().uuid()])
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
   linkedTimelineFileId: z
     .union([z.literal(''), z.string().uuid()])
     .optional()
@@ -270,6 +276,7 @@ export async function createTaskAction(
     visibility: formData.get('visibility') ?? 'division',
     milestone: formData.get('milestone'),
     divisionId: formData.get('divisionId') || undefined,
+    ownerId: formData.get('ownerId') || undefined,
     linkedTimelineFileId: formData.get('linkedTimelineFileId') || undefined,
     driveUrl: formData.get('driveUrl') || undefined,
   });
@@ -306,25 +313,49 @@ export async function createTaskAction(
     return fail('You can only create tasks in your own division.', epoch);
   }
 
-  // New tasks start unassigned: the owner is left as the creator, which the
-  // pull flow (pullTaskAction) treats as "no owner yet". A division task is
-  // already visible to the whole division through the division-scoped
-  // visibility clause, so any member can see it and pull it to take
-  // ownership — no owner is named up front. Personal tasks are simply owned
-  // by their creator.
+  // By default a new division task starts unassigned: the owner is left as
+  // the creator, which the pull flow (pullTaskAction) treats as "no owner
+  // yet". The task is division-visible, so any member can see it and pull it
+  // to take ownership. Personal tasks are simply owned by their creator.
   //
-  // PMUs are the exception: PMU-team visibility is owner-scoped (a member
-  // sees tasks owned by a teammate, not a division board — see
-  // buildVisibilityClausesFrom), so a PMU task must be owned by a PMU member
-  // to stay visible to the team. It keeps the Structure & Hierarchy default:
-  // the PMU's team leader (falling back to the creator when unset).
+  // A head may instead name an initial owner up front (the optional owner
+  // picker). It must be an active member of the target division — the same
+  // pool ownership already resolves to — and only a division-task creator
+  // (hasDivisionPower, required above) can set it.
+  //
+  // PMUs are the exception to the unassigned default: PMU-team visibility is
+  // owner-scoped (a member sees tasks owned by a teammate, not a division
+  // board — see buildVisibilityClausesFrom), so a PMU task must be owned by a
+  // PMU member to stay visible to the team. Absent an explicit pick it keeps
+  // the Structure & Hierarchy default: the PMU's team leader (falling back to
+  // the creator when unset).
   let ownerId = meRow.id;
   if (parsed.data.visibility === 'division') {
     const targetDivision = await prisma.division.findUnique({
       where: { id: targetDivisionId },
       select: { kind: true },
     });
-    if (targetDivision?.kind === 'pmu') {
+
+    if (parsed.data.ownerId) {
+      const chosen = await prisma.user.findUnique({
+        where: { id: parsed.data.ownerId },
+        select: { id: true, isActive: true, divisionId: true, pmuId: true },
+      });
+      const isMember =
+        !!chosen &&
+        chosen.isActive &&
+        (targetDivision?.kind === 'pmu'
+          ? chosen.pmuId === targetDivisionId
+          : chosen.divisionId === targetDivisionId);
+      if (!isMember) {
+        return {
+          ok: false,
+          fieldErrors: { ownerId: 'Choose an owner from this division.' },
+          epoch,
+        };
+      }
+      ownerId = chosen.id;
+    } else if (targetDivision?.kind === 'pmu') {
       ownerId = await resolveDivisionOwner(targetDivisionId, meRow.id);
     }
   }
