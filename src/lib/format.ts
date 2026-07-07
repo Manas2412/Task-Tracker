@@ -1,4 +1,4 @@
-import { differenceInCalendarDays, format, isToday, isTomorrow, isYesterday } from 'date-fns';
+import { formatDateIST, formatTimeIST, istDayDiff, istTimeInput } from '@/lib/date';
 
 /**
  * Initials extractor.
@@ -28,38 +28,34 @@ export type DueDisplay = { label: string; tone: DueTone };
 export function formatDue(due: Date | null | undefined, now: Date = new Date()): DueDisplay {
   if (!due) return { label: 'No due date', tone: 'none' };
 
-  const diff = differenceInCalendarDays(due, now);
-  const hasTime = due.getHours() !== 0 || due.getMinutes() !== 0;
-  const timeSuffix = hasTime ? `, ${format(due, 'h:mm a').toLowerCase()}` : '';
+  // Everything is computed in IST explicitly, so a card rendered on the
+  // server (UTC) and the detail rendered in the browser show the same day
+  // and the same clock time — e.g. a 4 pm IST deadline reads "4:00 pm",
+  // never the underlying 10:30 UTC.
+  const diff = istDayDiff(due, now);
+  const hasTime = istTimeInput(due) !== '00:00';
+  const timeSuffix = hasTime ? `, ${formatTimeIST(due)}` : '';
 
   if (diff < 0) {
     const abs = Math.abs(diff);
-    return {
-      label: `Overdue ${abs} ${abs === 1 ? 'd' : 'd'}`,
-      tone: 'overdue',
-    };
+    return { label: `Overdue ${abs} d`, tone: 'overdue' };
   }
-  if (isToday(due)) {
-    return {
-      label: `Today${timeSuffix}`,
-      tone: 'today',
-    };
-  }
-  if (isTomorrow(due)) return { label: `Tomorrow${timeSuffix}`, tone: 'soon' };
-  if (isYesterday(due)) return { label: 'Yesterday', tone: 'overdue' };
+  if (diff === 0) return { label: `Today${timeSuffix}`, tone: 'today' };
+  if (diff === 1) return { label: `Tomorrow${timeSuffix}`, tone: 'soon' };
 
   // Within the next 7 days → "Mon, 9 Jun"; further out → "9 Jun".
-  if (diff > 0 && diff <= 7) {
-    return { label: `${format(due, 'EEE, d LLL')}${timeSuffix}`, tone: 'soon' };
+  if (diff <= 7) {
+    return { label: `${formatDateIST(due, true)}${timeSuffix}`, tone: 'soon' };
   }
-  return { label: `${format(due, 'd LLL')}${timeSuffix}`, tone: 'future' };
+  return { label: `${formatDateIST(due)}${timeSuffix}`, tone: 'future' };
 }
 
 /**
  * Deadline countdown for Timeline File pills.
  */
 export function daysUntil(date: Date, now: Date = new Date()): number {
-  return differenceInCalendarDays(date, now);
+  // IST calendar days, so a deadline near midnight counts the Indian day.
+  return istDayDiff(date, now);
 }
 
 /**

@@ -62,3 +62,44 @@ export function formatTimeIST(d: Date): string {
   if (h === 0) h = 12;
   return `${h}:${String(m).padStart(2, '0')} ${meridiem}`;
 }
+
+/**
+ * Whole-day difference between two instants by IST calendar day:
+ * `istDayDiff(due, now)` is +1 when `due` is tomorrow (IST), -2 when it was
+ * two days ago, etc. Timezone-explicit, so it agrees on server and client.
+ */
+export function istDayDiff(a: Date, b: Date): number {
+  const da = Date.parse(`${isoDay(a)}T00:00:00Z`);
+  const db = Date.parse(`${isoDay(b)}T00:00:00Z`);
+  return Math.round((da - db) / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * Format a stored UTC instant as its IST calendar date — "9 Jun", or
+ * "Mon, 9 Jun" with the weekday. Uses the Asia/Kolkata time zone explicitly
+ * (not the ambient one), so server and client render the same day.
+ */
+export function formatDateIST(d: Date, withWeekday = false): string {
+  const date = d.toLocaleDateString('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+  });
+  if (!withWeekday) return date;
+  const weekday = d.toLocaleDateString('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+  });
+  return `${weekday}, ${date}`;
+}
+
+/** Full IST date + clock time, e.g. "9 Jun 2026, 4:00 pm". */
+export function formatDateTimeIST(d: Date): string {
+  const date = d.toLocaleDateString('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  return `${date}, ${formatTimeIST(d)}`;
+}
