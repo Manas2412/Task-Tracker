@@ -154,6 +154,9 @@ export async function searchTasksFor(
       { refNumber: { contains: q, mode: 'insensitive' } },
       { description: { contains: q, mode: 'insensitive' } },
       { owner: { name: { contains: q, mode: 'insensitive' } } },
+      // A task matches when any of its tags' names contain the query, so
+      // searching a tag surfaces every task under it.
+      { tags: { some: { tag: { name: { contains: q, mode: 'insensitive' } } } } },
     ],
   };
   const andClauses: Prisma.TaskWhereInput[] = [{ OR: visibility }, filter];
