@@ -23,6 +23,13 @@ type TransferTaskButtonProps = {
   candidates: TransferCandidate[];
 };
 
+/** One-tap reasons for the hand-off note; users can still type their own. */
+const COMMENT_PRESETS = [
+  'On leave',
+  'This work belongs to another official',
+  'Delegating it',
+] as const;
+
 export function TransferTaskButton({ taskId, candidates }: TransferTaskButtonProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -58,10 +65,21 @@ export function TransferTaskButton({ taskId, candidates }: TransferTaskButtonPro
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line text-[12px] font-medium text-ink-2 hover:bg-line-2 transition-colors"
+        className="group w-full flex items-center gap-3 rounded-xl border border-line bg-panel px-4 py-3.5 text-left transition-colors hover:border-ink-4 hover:bg-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
       >
-        <i className="ti ti-transfer text-[14px]" aria-hidden="true" />
-        Transfer task
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink text-white">
+          <i className="ti ti-transfer text-[18px]" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[14px] font-medium text-ink">Transfer this task</span>
+          <span className="mt-0.5 block text-[12px] text-ink-3">
+            Hand it to another official — a short note is required
+          </span>
+        </span>
+        <i
+          className="ti ti-chevron-right shrink-0 text-[18px] text-ink-3 transition-transform group-hover:translate-x-0.5"
+          aria-hidden="true"
+        />
       </button>
 
       <Sheet open={open} onClose={close} title="Transfer task">
@@ -138,11 +156,42 @@ export function TransferTaskButton({ taskId, candidates }: TransferTaskButtonPro
               )}
             </ul>
 
-            <label className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1.5">
               <span className="text-[11px] font-medium text-ink-2">
                 Comment <span className="text-urgent">(required)</span>
               </span>
+
+              {/* One-tap reasons — pick one or type your own below. */}
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick reasons">
+                {COMMENT_PRESETS.map((preset) => {
+                  const isActive = comment.trim() === preset;
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => setComment(preset)}
+                      className={cn(
+                        'inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11.5px] font-medium transition-colors',
+                        isActive
+                          ? 'border-ink bg-ink text-white'
+                          : 'border-line bg-panel text-ink-2 hover:border-ink-4 hover:text-ink',
+                      )}
+                    >
+                      {isActive ? (
+                        <i className="ti ti-check text-[12px]" aria-hidden="true" />
+                      ) : null}
+                      {preset}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <label className="sr-only" htmlFor="transfer-comment">
+                Comment
+              </label>
               <textarea
+                id="transfer-comment"
                 name="comment"
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
@@ -157,7 +206,7 @@ export function TransferTaskButton({ taskId, candidates }: TransferTaskButtonPro
               {state.fieldErrors?.comment ? (
                 <span className="text-[11px] text-urgent">{state.fieldErrors.comment}</span>
               ) : null}
-            </label>
+            </div>
 
             <TransferSubmit
               disabled={!selectedId || comment.trim().length === 0}

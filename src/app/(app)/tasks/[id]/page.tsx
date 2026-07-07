@@ -293,9 +293,11 @@ export default async function TaskDetailPage({ params }: PageProps) {
       )
     : [];
 
+  // Changing the owner from the Owner row is reserved for Super Admin, OSD,
+  // and the head of the task's division. A normal user (even the owner or
+  // creator) hands the task off via the Transfer button instead, which
+  // requires a comment — so the Owner row stays read-only for them.
   const canReassign =
-    task.ownerId === session.user.id ||
-    task.createdById === session.user.id ||
     session.user.isSuperAdmin ||
     session.user.hierarchySlot === 'osd' ||
     isHeadOfTaskDivision;
@@ -493,7 +495,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
       />
 
       {isOwner && !task.parentTaskId && transferCandidates.length > 0 ? (
-        <div className="px-4 md:px-6 py-3 border-b border-line-2">
+        <div className="px-4 md:px-6 py-4 border-b border-line-2">
           <TransferTaskButton taskId={task.id} candidates={transferCandidates} />
         </div>
       ) : null}

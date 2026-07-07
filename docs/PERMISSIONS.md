@@ -40,10 +40,9 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 | **Edit any task they can see** |  | ✓ |  |  |  |  |  |  | ✓ |
 | **Comment / @mention on tasks they can see** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Change status on task they own / collaborate on** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Reassign downward in own chain** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | n/a | n/a | ✓ |
-| **Reassign sideways / upward** | needs approval¹ | needs approval¹ | needs approval¹ | needs approval¹ | needs approval¹ | needs approval¹ | needs approval¹ | needs approval¹ | ✓ (no approval) |
+| **Reassign owner from the Owner row** | head³ | ✓ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ |
 | **Approve reassignment requests** | for own subordinates | for own subordinates | for own subordinates | for own subordinates | for own subordinates | for own subordinates |  |  | ✓ (any) |
-| **Transfer task to same-division user** | own | own | own | own | own | own | own | own | own |
+| **Transfer task to same-division user (with comment)** | own | own | own | own | own | own | own | own | own |
 | **Add collaborators** | ✓ (own/visible) | ✓ | ✓ (own/visible) | ✓ (own/visible) | ✓ (own/visible) | ✓ (own/visible) | ✓ (own) | ✓ (PMU-tagged) | ✓ |
 | **Add cross-division collaborators (division leads)** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  | ✓ |
 | **Set JS Priority lane** |  | ✓ |  |  |  |  |  |  | ✓ |
@@ -140,10 +139,11 @@ The role switcher in the top bar is the only entry point. OSD and Super Admin ar
 
 ### 5.6 Reassignment
 
+- **Who can reassign from the Owner row** — only **Super Admin, OSD, or the head of the task's division** (direct head or active delegate). The Owner row is read-only for everyone else, including the task's own owner and creator: a normal user changes ownership through **Transfer task** (below), not the Owner row. Enforced in `reassignTaskAction` (`mayInitiate`) and mirrored by `canReassign` on the task page.
 - **Downward within own chain** — applies immediately. Log to `task_activity` and `audit_log`. No notification to the previous owner beyond the activity log entry.
 - **Sideways or upward** — creates a `reassignment_requests` row with `approver_id` = the proposed new owner's superior. The superior receives a notification of type `reassignment_approval_requested`. On approval, the reassignment applies and a `reassignment_approved` notification fires to the requester; on rejection, `reassignment_rejected` fires.
-- **Same-division transfer (by current owner)** — the task owner can transfer ownership to any active user in the same division without approval. `ownerId` updates immediately; `createdById` stays unchanged. If the task had `personal` visibility, it flips to `division`. Activity log records `task_transferred` with `{from, to}`. The new owner receives `task_assigned`; the original creator (if different from both parties) receives `task_transferred`.
-- The reassignment picker UI marks rows that would require approval with an amber "Approval needed" badge. The transfer button is separate — visible only to the current task owner.
+- **Same-division transfer (by current owner)** — the task owner can transfer ownership to any active user in the same division without approval, and **must supply a comment** explaining the hand-off (the sheet offers one-tap reasons — "On leave", "This work belongs to another official", "Delegating it" — or free text). `ownerId` updates immediately; `createdById` stays unchanged. If the task had `personal` visibility, it flips to `division`. Activity log records `task_transferred` with `{from, to}`. The new owner receives `task_assigned`; the original creator (if different from both parties) receives `task_transferred`.
+- The reassignment picker UI marks rows that would require approval with an amber "Approval needed" badge. The transfer button is separate — a prominent card visible only to the current task owner.
 
 ### 5.7 Deletion vs archive
 

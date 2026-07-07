@@ -1809,16 +1809,16 @@ export async function reassignTaskAction(
   ]);
   if (!actor || !targetRbac) return fail('User not found.', epoch);
 
-  // Initiation guard: owner, creator, Super Admin, OSD, or the head of the
-  // task's division. Matches the surface the UI shows, enforced here.
+  // Initiation guard: reassigning the owner from the Owner row is a head
+  // power — Super Admin, OSD, or the head of the task's division only.
+  // Everyone else (including the owner) hands the task off via Transfer
+  // task, which requires a comment. Matches the surface the UI shows.
   const mayInitiate =
-    task.ownerId === me.id ||
-    task.createdById === me.id ||
     meRow.isSuperAdmin ||
     meRow.hierarchySlot === 'osd' ||
     canActAsHeadOf(actor, task.divisionId);
   if (!mayInitiate) {
-    return fail('Only the owner, creator, or head of division can reassign this task.', epoch);
+    return fail('Only a division head or Super Admin can reassign the owner here. Use Transfer task instead.', epoch);
   }
 
   const isDownward = await isSubordinateOf(parsed.data.newOwnerId, me.id);
