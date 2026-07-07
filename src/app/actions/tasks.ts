@@ -1586,9 +1586,13 @@ export async function addCollaboratorAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, ownerId: true, archivedAt: true, dueDate: true },
+    select: { id: true, name: true, ownerId: true, createdById: true, divisionId: true, archivedAt: true, dueDate: true },
   });
   if (!task || task.archivedAt) return fail('Task not found.', epoch);
+
+  if (!(await canEditTask(me.id, task))) {
+    return fail('You do not have permission to edit this task.', epoch);
+  }
 
   if (parsed.data.userId === task.ownerId) {
     return fail('The task owner is already on the task.', epoch);
@@ -1684,6 +1688,16 @@ export async function removeCollaboratorAction(
     userId: formData.get('userId'),
   });
   if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const task = await prisma.task.findUnique({
+    where: { id: parsed.data.taskId },
+    select: { id: true, ownerId: true, createdById: true, divisionId: true },
+  });
+  if (!task) return fail('Task not found.', epoch);
+
+  if (!(await canEditTask(me.id, task))) {
+    return fail('You do not have permission to edit this task.', epoch);
+  }
 
   const existing = await prisma.taskCollaborator.findUnique({
     where: {

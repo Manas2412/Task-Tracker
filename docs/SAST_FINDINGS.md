@@ -37,7 +37,7 @@
 
 **Remediation:** Add `canEditTask(me.id, task)` check before allowing collaborator addition.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — added `canEditTask` guard + `createdById`/`divisionId` in select
 
 ---
 
@@ -222,7 +222,7 @@
 
 **Remediation:** Add `canEditTask(me.id, task)` check.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — added task fetch + `canEditTask` guard
 
 ---
 
@@ -307,7 +307,7 @@
 
 **Remediation:** Remove query parameter support. Accept the secret only via `Authorization: Bearer` header.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — query param removed in Phase 0, doc comment updated
 
 ---
 
@@ -324,7 +324,7 @@
 
 **Remediation:** Add explicit `select` to fetch only `id`, `passwordHash`, `name`, `isActive`, and required fields.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — explicit `select` clause added to authorize callback
 
 ---
 
@@ -341,7 +341,7 @@
 
 **Remediation:** Set `session.maxAge` to 8 hours (one workday). In the `jwt` callback, periodically re-fetch the user's current role from the database (e.g., every 5 minutes via a `lastRefreshed` timestamp in the token).
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `maxAge: 28800` + 5-min JWT claim refresh with `claimsRefreshedAt` timestamp; disabled users get token invalidated
 
 ---
 
@@ -375,7 +375,7 @@
 
 **Remediation:** Validate `fileUrl` against an allowlist of domains (e.g., `drive.google.com`, `docs.google.com`, the app's own S3 domain). Reject others or show an interstitial warning.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `isSafeDriveLinkUrl` validates against Google Drive domain allowlist on all three routes (view, download, share-url)
 
 ---
 
@@ -392,7 +392,7 @@
 
 **Remediation:** Validate that `href` starts with `/` (relative path only). Reject absolute URLs.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — validates `href` starts with `/` and is not `//`; falls back to `/notifications`
 
 ---
 
@@ -547,7 +547,7 @@
 
 **Remediation:** Use `crypto.timingSafeEqual(Buffer.from(qSecret), Buffer.from(secret))`.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — uses `timingSafeEqual` with length check
 
 ---
 

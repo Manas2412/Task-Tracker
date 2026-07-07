@@ -12,6 +12,22 @@ import { buildVisibilityClauses } from '@/lib/visibility';
  * Returns a shareable URL for the attachment (24h TTL presigned S3 link
  * for uploads, raw URL for drive links). Used by the WhatsApp share flow.
  */
+const ALLOWED_DRIVE_HOSTS = new Set([
+  'drive.google.com',
+  'docs.google.com',
+  'sheets.google.com',
+  'slides.google.com',
+]);
+
+function isSafeDriveLinkUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && ALLOWED_DRIVE_HOSTS.has(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: { id: string } },
@@ -67,6 +83,9 @@ export async function GET(
   }
 
   if (att.source === 'drive_link') {
+    if (!isSafeDriveLinkUrl(att.fileUrl)) {
+      return NextResponse.json({ error: 'Blocked redirect URL' }, { status: 403 });
+    }
     return NextResponse.json({ url: att.fileUrl, fileName: att.fileName });
   }
 

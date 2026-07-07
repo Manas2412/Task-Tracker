@@ -19,6 +19,7 @@ export const authConfig = {
   },
   session: {
     strategy: 'jwt',
+    maxAge: 28800,
   },
   callbacks: {
     /**
@@ -66,7 +67,6 @@ export const authConfig = {
      */
     async jwt({ token, user }) {
       if (user) {
-        // First call after `authorize` — copy app fields onto the token.
         token.userId = (user as { id: string }).id;
         token.username = (user as { username: string }).username;
         token.hierarchySlot = (user as { hierarchySlot: string }).hierarchySlot;
@@ -74,7 +74,39 @@ export const authConfig = {
         token.divisionId = (user as { divisionId: string }).divisionId;
         token.forcePasswordChange = (user as { forcePasswordChange: boolean })
           .forcePasswordChange;
+        token.claimsRefreshedAt = Date.now();
       }
+
+      const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+      const lastRefreshed = (token.claimsRefreshedAt as number | undefined) ?? 0;
+      if (token.userId && Date.now() - lastRefreshed > REFRESH_INTERVAL_MS) {
+        try {
+          const { prisma } = await import('@/lib/db');
+          const fresh = await prisma.user.findUnique({
+            where: { id: token.userId as string },
+            select: {
+              isActive: true,
+              isSuperAdmin: true,
+              hierarchySlot: true,
+              divisionId: true,
+              username: true,
+              forcePasswordChange: true,
+            },
+          });
+          if (!fresh || !fresh.isActive) {
+            return { ...token, userId: undefined };
+          }
+          token.username = fresh.username;
+          token.hierarchySlot = fresh.hierarchySlot;
+          token.isSuperAdmin = fresh.isSuperAdmin;
+          token.divisionId = fresh.divisionId;
+          token.forcePasswordChange = fresh.forcePasswordChange;
+          token.claimsRefreshedAt = Date.now();
+        } catch {
+          // DB unavailable — keep stale claims until next attempt
+        }
+      }
+
       return token;
     },
 

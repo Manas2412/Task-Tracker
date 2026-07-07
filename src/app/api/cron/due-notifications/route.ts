@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto';
+
 import { NextResponse } from 'next/server';
 
 import type { Prisma } from '@prisma/client';
@@ -10,8 +12,8 @@ import { prisma } from '@/lib/db';
  * Creates "task_due_soon" and "task_overdue" notifications.
  * Designed to be hit by an external cron (e.g. every hour).
  *
- * Protected by CRON_SECRET env var — pass it as
- * `?secret=<value>` or the `Authorization: Bearer <value>` header.
+ * Protected by CRON_SECRET env var — pass it as the
+ * `Authorization: Bearer <value>` header.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -22,8 +24,10 @@ export async function GET(request: Request) {
     );
   }
 
-  const hSecret = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (hSecret !== secret) {
+  const hSecret = request.headers.get('authorization')?.replace('Bearer ', '') ?? '';
+  const a = Buffer.from(hSecret);
+  const b = Buffer.from(secret);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

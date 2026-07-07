@@ -91,7 +91,11 @@ export async function readAndRedirectAction(formData: FormData): Promise<void> {
   if (!session?.user) redirect('/login');
 
   const id = String(formData.get('id') ?? '');
-  const href = String(formData.get('href') ?? '/notifications');
+  let href = String(formData.get('href') ?? '/notifications');
+
+  if (!href.startsWith('/') || href.startsWith('//')) {
+    href = '/notifications';
+  }
 
   if (id && /^[0-9a-f-]{36}$/i.test(id)) {
     const claimed = await prisma.notification.updateMany({
