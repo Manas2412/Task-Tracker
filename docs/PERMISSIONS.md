@@ -104,9 +104,10 @@ The role switcher in the top bar is the only entry point. OSD and Super Admin ar
 
 ### 5.1 Personal visibility
 
-- `visibility = 'personal'` makes the task invisible to **everyone except the creator**, including the creator's superiors.
-- Super Admin can see Personal-visibility tasks only via the audit trail (for compliance), not via the regular task list.
-- Subtasks inherit visibility from the parent task — a subtask cannot be more permissive than its parent.
+- `visibility = 'personal'` makes the task visible to **exactly three sets of people, and no one else**: the **creator** (e.g. a Division Head or Super Admin who set it Personal and assigned it out), the **assigned owner**, and users **explicitly added as collaborators**. It is invisible to everyone else — other division members, and division heads / OSD / Super Admins who are none of the above — including in lists, dashboards, search, the calendar, and every task view.
+- Enforced by the three base clauses in `buildVisibilityClausesFrom` (`ownerId` / `collaborators` / `createdById + visibility:'personal'`); every role clause is gated on `visibility:'division'`, so no role ever matches a Personal task. Dashboards (Command Centre, JS Dashboard) restrict their ministry-wide aggregates to `visibility:'division'` so a Personal task cannot leak into a count or list there either.
+- Super Admin / OSD do **not** see others' Personal tasks in the regular lists — only via the audit trail (for compliance).
+- The task appears in the **Personal Tasks** list of each eligible viewer. Subtasks inherit visibility from the parent task — a subtask cannot be more permissive than its parent.
 
 ### 5.2 PMU isolation
 

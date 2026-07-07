@@ -28,15 +28,24 @@ function divisionClause(clauses: ReturnType<typeof buildVisibilityClausesFrom>) 
 }
 
 describe('buildVisibilityClausesFrom — base clauses', () => {
-  it('always includes own tasks and collaborations first', () => {
+  it('always includes own, collaborated, and personal-created tasks first', () => {
     const clauses = buildVisibilityClausesFrom(caller(), []);
     expect(clauses[0]).toEqual({ ownerId: 'me' });
     expect(clauses[1]).toEqual({ collaborators: { some: { userId: 'me' } } });
+    expect(clauses[2]).toEqual({ createdById: 'me', visibility: 'personal' });
+  });
+
+  it('the creator can see a personal task they created but assigned away', () => {
+    // A Division Head / Super Admin who sets a task Personal and assigns it
+    // to someone else keeps it in their own Personal list.
+    const clauses = buildVisibilityClausesFrom(caller(), []);
+    expect(clauses).toContainEqual({ createdById: 'me', visibility: 'personal' });
   });
 
   it('never emits a clause that matches personal tasks by role', () => {
     // Every role-based clause must be gated on visibility: 'division';
-    // personal tasks are only reachable via owner/collaborator clauses.
+    // personal tasks are only reachable via the three base clauses
+    // (owner / collaborator / creator).
     const variants: CallerSummary[] = [
       caller({ isSuperAdmin: true }),
       caller({ hierarchySlot: 'osd' }),
@@ -47,7 +56,7 @@ describe('buildVisibilityClausesFrom — base clauses', () => {
     ];
     for (const v of variants) {
       const clauses = buildVisibilityClausesFrom(v, [NSDF]);
-      for (const c of clauses.slice(2)) {
+      for (const c of clauses.slice(3)) {
         expect(c.visibility).toBe('division');
       }
     }
@@ -58,8 +67,8 @@ describe('buildVisibilityClausesFrom — roles', () => {
   it('super admin and OSD see everything non-personal, division-unfiltered', () => {
     for (const me of [caller({ isSuperAdmin: true }), caller({ hierarchySlot: 'osd' })]) {
       const clauses = buildVisibilityClausesFrom(me, []);
-      expect(clauses).toHaveLength(3);
-      expect(clauses[2]).toEqual({ visibility: 'division' });
+      expect(clauses).toHaveLength(4);
+      expect(clauses[3]).toEqual({ visibility: 'division' });
     }
   });
 
@@ -94,24 +103,24 @@ describe('buildVisibilityClausesFrom — roles', () => {
 
   it('JS keeps the priority-board surface', () => {
     const clauses = buildVisibilityClausesFrom(caller({ hierarchySlot: 'js' }), []);
-    expect(clauses[2]).toEqual({
+    expect(clauses[3]).toEqual({
       visibility: 'division',
       jsPriorityLane: { not: null },
     });
-    expect(clauses).toHaveLength(3);
+    expect(clauses).toHaveLength(4);
   });
 
-  it('a PMU member with no teammates loaded sees own + collaborated only', () => {
+  it('a PMU member with no teammates loaded sees own + collaborated + created only', () => {
     const clauses = buildVisibilityClausesFrom(caller({ isPmu: true }), []);
-    expect(clauses).toHaveLength(2);
+    expect(clauses).toHaveLength(3);
   });
 
   it("PMU members see their PMU team's tasks, never the whole division", () => {
     const team = ['me', 'mate-1', 'mate-2'];
     const clauses = buildVisibilityClausesFrom(caller({ isPmu: true }), [], team);
-    // owner + collaborator + the owner-scoped PMU clause — no division clause.
-    expect(clauses).toHaveLength(3);
-    expect(clauses[2]).toEqual({ visibility: 'division', ownerId: { in: team } });
+    // 3 base clauses + the owner-scoped PMU clause — no division clause.
+    expect(clauses).toHaveLength(4);
+    expect(clauses[3]).toEqual({ visibility: 'division', ownerId: { in: team } });
     // Crucially, no bare divisionId clause that would leak the division board.
     expect(clauses.some((c) => 'divisionId' in c)).toBe(false);
   });
