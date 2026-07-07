@@ -205,3 +205,13 @@ Owning a task lets you **work** it, not **redefine** it. This matters after a tr
 - **The owner (and creator) can still**: change **status** and **priority**, edit the **description**, comment, and manage **subtasks** — including **reassigning a subtask** to someone else.
 - **Subtask reassignment is logged with full detail**: `updateSubtaskAction` records a `subtask_updated` activity event carrying the subtask, the previous and new assignee (`fromName` / `toName`), and the actor; the activity log renders it as "‹actor› reassigned subtask ‹name› to ‹assignee› on ‹date, time›".
 - Enforced on both sides: the task page hides the restricted controls (`canEditDetails`, `canDelete`), and the server actions (`updateTaskFieldsAction`, `deleteTaskAction`) re-check, so a stale client or direct call cannot bypass them.
+
+### 5.14 Division / PMU assignment resolves ownership from Structure & Hierarchy
+
+Placing a task in a Division or PMU **auto-assigns its owner** from Structure & Hierarchy (the single source of truth) — creators do not pick an owner.
+
+- **Division selected → owner = the division's Head** (`divisions.head_user_id`).
+- **PMU selected → owner = that PMU's Team Leader** (the active user with `pmuRole = 'pmu_team_leader'` and `pmuId =` the PMU). Because the scoper shows every PMU member the tasks owned by a PMU teammate (§5.2), assigning ownership to the Team Leader makes the task **visible to the whole PMU team** automatically.
+- **No head / no team leader → falls back to the creator** as owner (never blocks).
+- Resolved by `resolveDivisionOwner` (src/lib/rbac). Applied at **creation** (`createTaskAction`, for `division`-visibility tasks) and on **re-assignment** (`updateTaskFieldsAction`, when the Division/PMU changes — which reassigns ownership, logs an `owner_changed` activity event, and notifies the new owner). Personal tasks stay owned by their creator.
+- The Division/PMU selector is populated from Structure & Hierarchy (divisions + their PMUs): the create form's picker (heads see divisions they head + those PMUs; OSD/Super Admin see all), the task-detail **Change division** control, and the `/tasks` division filter. Everything downstream — visibility, dashboards, filters, notifications — follows because it keys off the resulting `divisionId` / `ownerId`.

@@ -16,6 +16,7 @@ import {
   canTransferTaskTo,
   getRbacActor,
   getRbacTarget,
+  resolveDivisionOwner,
 } from '@/lib/rbac';
 import { buildVisibilityClauses } from '@/lib/visibility';
 
@@ -305,6 +306,16 @@ export async function createTaskAction(
     return fail('You can only create tasks in your own division.', epoch);
   }
 
+  // Ownership follows Structure & Hierarchy: a division-level task is owned
+  // by the target division's head — or, for a PMU, its team leader — which
+  // also makes a PMU task visible to the whole PMU team (owner-scoped
+  // clause). Personal tasks and any division without a head fall back to
+  // the creator.
+  const ownerId =
+    parsed.data.visibility === 'division'
+      ? await resolveDivisionOwner(targetDivisionId, meRow.id)
+      : meRow.id;
+
   try {
     const task = await prisma.$transaction(async (tx) => {
       const refNumber = await nextTaskRefNumber(targetDivisionId, tx);
@@ -313,7 +324,7 @@ export async function createTaskAction(
           refNumber,
           name: parsed.data.name,
           description: parsed.data.description ?? null,
-          ownerId: meRow.id,
+          ownerId,
           divisionId: targetDivisionId,
           status: 'not_started',
           priority: parsed.data.priority,
@@ -382,6 +393,24 @@ export async function createTaskAction(
 
       return created;
     });
+
+    // When ownership was auto-assigned to a head / team leader other than
+    // the creator, let them know they now own the task.
+    if (ownerId !== meRow.id) {
+      await prisma.notification.create({
+        data: {
+          userId: ownerId,
+          type: 'task_assigned',
+          payload: {
+            taskId: task.id,
+            taskName: task.name,
+            assignedById: meRow.id,
+            assignedByName: me.name ?? null,
+            dueDate: task.dueDate?.toISOString() ?? null,
+          },
+        },
+      });
+    }
 
     if (parsed.data.linkedTimelineFileId) {
       revalidatePath(`/timeline-files/${parsed.data.linkedTimelineFileId}`);
@@ -687,6 +716,9 @@ export async function updateTaskFieldsAction(
 
   const data: Record<string, unknown> = {};
   const events: { eventType: string; payload: Record<string, unknown> }[] = [];
+  // Set when a division/PMU change auto-reassigns ownership, so the new
+  // owner can be notified after the write commits.
+  let reassignedOwnerId: string | null = null;
 
   if (parsed.data.name !== undefined && parsed.data.name !== task.name) {
     data.name = parsed.data.name;
@@ -761,6 +793,23 @@ export async function updateTaskFieldsAction(
       eventType: 'division_changed',
       payload: { from: oldDiv?.name ?? task.divisionId, to: newDiv?.name ?? parsed.data.divisionId },
     });
+
+    // Ownership follows the new division/PMU per Structure & Hierarchy: the
+    // new division's head, or the PMU's team leader (falling back to the
+    // creator when unset). Reassign, log it, and notify the new owner.
+    const nextOwnerId = await resolveDivisionOwner(parsed.data.divisionId, task.createdById);
+    if (nextOwnerId !== task.ownerId) {
+      const nextOwner = await prisma.user.findUnique({
+        where: { id: nextOwnerId },
+        select: { name: true },
+      });
+      data.ownerId = nextOwnerId;
+      events.push({
+        eventType: 'owner_changed',
+        payload: { from: task.ownerId, to: nextOwnerId, toName: nextOwner?.name ?? null },
+      });
+      reassignedOwnerId = nextOwnerId;
+    }
   }
 
   if (Object.keys(data).length === 0) return ok(epoch);
@@ -777,6 +826,24 @@ export async function updateTaskFieldsAction(
   } catch (err) {
     logError('updateTaskFieldsAction failed', err);
     return fail('Could not save changes.', epoch);
+  }
+
+  // Notify the head / team leader who now owns the task after a division
+  // or PMU change (self-excluded).
+  if (reassignedOwnerId && reassignedOwnerId !== me.id) {
+    await prisma.notification.create({
+      data: {
+        userId: reassignedOwnerId,
+        type: 'task_assigned',
+        payload: {
+          taskId: task.id,
+          taskName: task.name,
+          assignedById: me.id,
+          assignedByName: me.name ?? null,
+          dueDate: task.dueDate?.toISOString() ?? null,
+        },
+      },
+    });
   }
 
   revalidateTask(task.id);

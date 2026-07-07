@@ -49,6 +49,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     me.hierarchySlot === 'osd' ||
     headedDivisionIds.includes(me.divisionId);
 
+  // Divisions + PMUs the caller may target when creating a division task
+  // (Structure & Hierarchy). Ownership auto-resolves to that division's head
+  // — or a PMU's team leader — on the server. Super Admin / OSD see all;
+  // a head sees the divisions they head plus those divisions' PMUs.
+  const createTargets = canCreateDivisionTasks
+    ? await prisma.division.findMany({
+        where:
+          me.isSuperAdmin || me.hierarchySlot === 'osd'
+            ? { kind: { in: ['division', 'pmu'] } }
+            : {
+                OR: [
+                  { id: { in: headedDivisionIds } },
+                  { kind: 'pmu', pmuParentDivisionId: { in: headedDivisionIds } },
+                ],
+              },
+        orderBy: [{ kind: 'asc' }, { displayOrder: 'asc' }, { name: 'asc' }],
+        select: { id: true, name: true, kind: true },
+      })
+    : [];
+
   const taskContext = await buildNotificationTaskContext(recentRaw);
 
   const recent: BellNotification[] = recentRaw.map((n) => ({
@@ -86,6 +106,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         defaultDivisionId={me.divisionId}
         s3Configured={isS3Configured()}
         canCreateDivisionTasks={canCreateDivisionTasks}
+        createTargets={createTargets}
       >
         {children}
         <QuickCreateFab />
