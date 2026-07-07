@@ -19,12 +19,13 @@ const markReadSchema = z.object({ id: z.string().uuid() });
 
 /**
  * Read receipt: the first time ANY task-linked notification is marked
- * read — by opening it, swiping it read, or "Mark all read" — a
- * `task_read` event is written to that task's activity trail so the
+ * read — by opening it, swiping it read, "Mark all read", or "Clear all"
+ * — a `task_read` event is written to that task's activity trail so the
  * owner and anyone else watching can see who read up on the task and
  * when. Every mark-read path below claims the row with an atomic
  * `readAt: null` update before recording, so an already-read notification
- * never logs a second receipt.
+ * never logs a second receipt. Clearing works from a pre-delete snapshot
+ * of the still-unread rows for the same reason.
  */
 
 export async function markNotificationReadAction(
@@ -77,6 +78,37 @@ export async function markAllNotificationsReadAction(): Promise<void> {
   if (marked.count > 0 && unread.length > 0) {
     await recordTaskReadReceiptsBulk(unread, session.user.id);
   }
+
+  revalidatePath('/notifications');
+  revalidatePath('/tasks');
+}
+
+/**
+ * Clear the caller's inbox: every notification is removed. Clearing counts
+ * as reading, so any still-unread task-linked notification first leaves a
+ * `task_read` receipt on its task's activity trail — the same trail "Mark
+ * all read" writes — before the rows are deleted. The permanent record
+ * lives in that trail, not in the notifications themselves. Scoped to the
+ * caller's own rows; a user can never clear anyone else's.
+ */
+export async function clearAllNotificationsAction(): Promise<void> {
+  const session = await auth();
+  if (!session?.user) return;
+
+  // Capture unread notifications first so the read receipts survive the
+  // delete — recordTaskReadReceiptsBulk reads from this snapshot, not the
+  // rows, so the trail is written even though the notifications are gone.
+  const unread = await prisma.notification.findMany({
+    where: { userId: session.user.id, readAt: null },
+    select: { id: true, payload: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (unread.length > 0) {
+    await recordTaskReadReceiptsBulk(unread, session.user.id);
+  }
+
+  await prisma.notification.deleteMany({ where: { userId: session.user.id } });
 
   revalidatePath('/notifications');
   revalidatePath('/tasks');
