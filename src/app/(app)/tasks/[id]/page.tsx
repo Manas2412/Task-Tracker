@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 
-import { AttachmentList, type AttachmentRow, Pill, TimelineFileCard } from '@/components/ui';
+import { AttachmentList, type AttachmentRow, BackButton, Pill, TimelineFileCard } from '@/components/ui';
 import { canEditTaskAttachments } from '@/app/actions/attachments';
 import { isS3Configured } from '@/lib/s3';
 import { auth } from '@/lib/auth';
@@ -94,13 +94,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
       <div className="max-w-3xl xl:max-w-4xl mx-auto pb-16">
         <header className="sticky top-14 md:top-16 z-10 bg-bg/90 backdrop-blur-sm border-b border-line-2">
           <div className="flex items-center gap-3 px-4 md:px-6 h-12">
-            <Link
-              href="/tasks"
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-2 hover:text-ink"
-            >
-              <i className="ti ti-arrow-left text-[16px]" aria-hidden="true" />
-              <span className="hidden md:inline">Back to tasks</span>
-            </Link>
+            <BackButton fallbackHref="/tasks" label="Back to tasks" hideLabelOnMobile />
           </div>
         </header>
         <div className="px-4 md:px-6 py-16 flex flex-col items-center text-center gap-3">
@@ -419,16 +413,11 @@ export default async function TaskDetailPage({ params }: PageProps) {
       {/* Header bar */}
       <header className="sticky top-14 md:top-16 z-10 bg-bg/90 backdrop-blur-sm border-b border-line-2">
         <div className="flex items-center justify-between gap-3 px-4 md:px-6 h-12">
-          <Link
-            href={task.parentTaskId ? `/tasks/${task.parentTaskId}` : '/tasks'}
-            aria-label={task.parentTaskId ? 'Back to parent task' : 'Back to tasks'}
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-2 hover:text-ink"
-          >
-            <i className="ti ti-arrow-left text-[16px]" aria-hidden="true" />
-            <span className="hidden md:inline">
-              {task.parentTaskId ? 'Parent task' : 'Back to tasks'}
-            </span>
-          </Link>
+          <BackButton
+            fallbackHref={task.parentTaskId ? `/tasks/${task.parentTaskId}` : '/tasks'}
+            label={task.parentTaskId ? 'Parent task' : 'Back to tasks'}
+            hideLabelOnMobile
+          />
           <MoreMenu
             taskId={task.id}
             canArchive={canArchive}
