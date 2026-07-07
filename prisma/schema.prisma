@@ -217,6 +217,7 @@ model User {
   archivedTimelineFiles TimelineFile[] @relation("TimelineFileArchivedBy")
   linkedTaskLinks       TimelineFileTaskLink[]
   timelineFileActivity  TimelineFileActivity[]
+  timelineFileComments  TimelineFileComment[]
 
   createdTags           Tag[]
   notifications         Notification[]
@@ -490,6 +491,7 @@ model TimelineFile {
   markedTo                    TimelineFileMarkedTo[]
   taskLinks                   TimelineFileTaskLink[]
   activity                    TimelineFileActivity[]
+  comments                    TimelineFileComment[]
   tasksLinkedTo               Task[]
 
   @@unique([refYear, refSeq])
@@ -497,6 +499,26 @@ model TimelineFile {
   @@index([status])
   @@index([receivedDate(sort: Desc)])
   @@map("timeline_files")
+}
+
+model TimelineFileComment {
+  id               String                @id @default(uuid()) @db.Uuid
+  timelineFileId   String                @map("timeline_file_id") @db.Uuid
+  userId           String                @map("user_id") @db.Uuid
+  body             String
+  mentions         String[]              @default([]) @db.Uuid
+  parentCommentId  String?               @map("parent_comment_id") @db.Uuid
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  editedAt         DateTime?             @map("edited_at") @db.Timestamptz(6)
+
+  timelineFile  TimelineFile          @relation(fields: [timelineFileId], references: [id], onDelete: Cascade)
+  user          User                  @relation(fields: [userId], references: [id])
+  parentComment TimelineFileComment?  @relation("TfCommentThread", fields: [parentCommentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies       TimelineFileComment[] @relation("TfCommentThread")
+
+  @@index([timelineFileId, createdAt(sort: Desc)])
+  @@index([parentCommentId])
+  @@map("timeline_file_comments")
 }
 
 model TimelineFileMarkedTo {
