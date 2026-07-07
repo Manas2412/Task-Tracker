@@ -73,6 +73,22 @@ function revalidateTf(tfId?: string) {
   if (tfId) revalidatePath(`/timeline-files/${tfId}`);
 }
 
+/**
+ * Who may change a Timeline File's status or priority: Super Admin, OSD, or
+ * a Director of any division the file is *marked to*. Mirrors `canEditStatus`
+ * on the detail page and the TfStatusPicker subtitle ("OSD and the marked-to
+ * division's Director can change this") — the server previously checked the
+ * creator's division, so marked-to directors saw the control but were denied.
+ */
+function canEditTfWorkflow(
+  meRow: { hierarchySlot: string; isSuperAdmin: boolean; divisionId: string } | null,
+  markedToDivisionIds: string[],
+): boolean {
+  if (!meRow) return false;
+  if (meRow.isSuperAdmin || meRow.hierarchySlot === 'osd') return true;
+  return meRow.hierarchySlot === 'director' && markedToDivisionIds.includes(meRow.divisionId);
+}
+
 const TF_STATUSES = [
   'pending_action',
   'in_progress',
@@ -262,7 +278,7 @@ export async function updateTimelineFileStatusAction(
   const tf = await prisma.timelineFile.findUnique({
     where: { id: parsed.data.id },
     include: {
-      createdBy: { select: { divisionId: true } },
+      markedTo: { select: { divisionId: true } },
     },
   });
   if (!tf) return fail('Timeline file not found.', epoch);
@@ -272,13 +288,9 @@ export async function updateTimelineFileStatusAction(
     where: { id: me.id },
     select: { hierarchySlot: true, isSuperAdmin: true, divisionId: true },
   });
-  const allowed =
-    meRow &&
-    (meRow.isSuperAdmin ||
-      meRow.hierarchySlot === 'osd' ||
-      (meRow.hierarchySlot === 'director' &&
-        meRow.divisionId === tf.createdBy.divisionId));
-  if (!allowed) return fail('You do not have permission to change this status.', epoch);
+  if (!canEditTfWorkflow(meRow, tf.markedTo.map((m) => m.divisionId))) {
+    return fail('You do not have permission to change this status.', epoch);
+  }
 
   try {
     await prisma.$transaction([
@@ -329,7 +341,7 @@ export async function updateTimelineFilePriorityAction(
 
   const tf = await prisma.timelineFile.findUnique({
     where: { id: parsed.data.id },
-    include: { createdBy: { select: { divisionId: true } } },
+    include: { markedTo: { select: { divisionId: true } } },
   });
   if (!tf) return fail('Timeline file not found.', epoch);
   if (tf.priority === parsed.data.priority) return ok(epoch);
@@ -338,13 +350,9 @@ export async function updateTimelineFilePriorityAction(
     where: { id: me.id },
     select: { hierarchySlot: true, isSuperAdmin: true, divisionId: true },
   });
-  const allowed =
-    meRow &&
-    (meRow.isSuperAdmin ||
-      meRow.hierarchySlot === 'osd' ||
-      (meRow.hierarchySlot === 'director' &&
-        meRow.divisionId === tf.createdBy.divisionId));
-  if (!allowed) return fail('You do not have permission to change this priority.', epoch);
+  if (!canEditTfWorkflow(meRow, tf.markedTo.map((m) => m.divisionId))) {
+    return fail('You do not have permission to change this priority.', epoch);
+  }
 
   try {
     await prisma.$transaction([
