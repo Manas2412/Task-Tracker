@@ -102,6 +102,8 @@ export type VisibleTask = Task & {
   subtasks: { status: string }[];
   collaborators: { role: string }[];
   hasAttachment: boolean;
+  /** File names of the task's attachments, oldest first (for the hover preview). */
+  attachmentNames: string[];
 };
 
 const TASK_PAGE_LIMIT = 200;
@@ -165,20 +167,28 @@ export async function fetchVisibleTasks(opts: {
   ]);
 
   const taskIds = tasks.map((t) => t.id);
-  const attachedIds = new Set<string>();
+  const namesByTask = new Map<string, string[]>();
   if (taskIds.length > 0) {
     const rows = await prisma.attachment.findMany({
       where: { ownerType: 'task', ownerId: { in: taskIds } },
-      select: { ownerId: true },
-      distinct: ['ownerId'],
+      select: { ownerId: true, fileName: true },
+      orderBy: { uploadedAt: 'asc' },
     });
-    for (const r of rows) attachedIds.add(r.ownerId);
+    for (const r of rows) {
+      const list = namesByTask.get(r.ownerId) ?? [];
+      list.push(r.fileName);
+      namesByTask.set(r.ownerId, list);
+    }
   }
 
-  const mapped = tasks.map((t) => ({
-    ...t,
-    hasAttachment: attachedIds.has(t.id),
-  })) as VisibleTask[];
+  const mapped = tasks.map((t) => {
+    const attachmentNames = namesByTask.get(t.id) ?? [];
+    return {
+      ...t,
+      hasAttachment: attachmentNames.length > 0,
+      attachmentNames,
+    };
+  }) as VisibleTask[];
 
   return { tasks: mapped, total, capped: total > TASK_PAGE_LIMIT };
 }
