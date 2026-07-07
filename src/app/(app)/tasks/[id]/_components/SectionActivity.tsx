@@ -53,7 +53,7 @@ export function SectionActivity({ activity }: SectionActivityProps) {
                   dateTime={e.createdAt.toISOString()}
                   title={format(e.createdAt, 'd LLL yyyy, h:mm a')}
                 >
-                  {isReadReceipt(e.eventType)
+                  {showsAbsoluteTime(e.eventType)
                     ? `on ${format(e.createdAt, 'd LLL yyyy, h:mm aaa')}`
                     : formatDistanceToNow(e.createdAt, { addSuffix: true })}
                 </time>
@@ -128,6 +128,8 @@ function describeEvent(type: string, payload: Record<string, unknown> | null): s
       return 'archived this task';
     case 'task_transferred':
       return `transferred this task to ${String(payload.toName ?? '')}`;
+    case 'owner_changed':
+      return `reassigned this task to ${String(payload.toName ?? '')}`;
     case 'task_renamed':
       return `renamed this task to "${String(payload.to ?? '')}"`;
     case 'task_read':
@@ -139,9 +141,18 @@ function describeEvent(type: string, payload: Record<string, unknown> | null): s
   }
 }
 
-/** Read receipts show the absolute date and time, not a relative phrase. */
-function isReadReceipt(type: string): boolean {
-  return type === 'task_read' || type === 'subtask_read';
+/**
+ * Events where an exact date and time matters more than a relative phrase:
+ * read receipts, and ownership changes (transfer / reassignment) — so the
+ * log states plainly who handed a task to whom and exactly when.
+ */
+function showsAbsoluteTime(type: string): boolean {
+  return (
+    type === 'task_read' ||
+    type === 'subtask_read' ||
+    type === 'task_transferred' ||
+    type === 'owner_changed'
+  );
 }
 
 function isAccent(type: string): boolean {
