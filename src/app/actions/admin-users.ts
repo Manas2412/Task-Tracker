@@ -851,3 +851,137 @@ export async function changeDivisionAction(
     return fail('Could not change division.', epoch);
   }
 }
+
+// ============================================================
+// deleteUserAction — permanent hard delete
+// ============================================================
+
+const deleteUserSchema = z.object({
+  userId: z.string().uuid(),
+  /** The admin re-types the target's username to confirm the irreversible delete. */
+  confirmUsername: z.string().trim().min(1),
+});
+
+/**
+ * Permanently delete a user. Every table references `users.id` with
+ * NO ACTION / RESTRICT (the app is built around Disable, which keeps
+ * history), so a raw delete would fail the moment the user owns or
+ * authored anything. To make the delete succeed without orphaning data,
+ * one transaction first:
+ *   - reassigns their owned/authored content (tasks, comments, activity,
+ *     attachments, Timeline Files + their comments/activity/links, tags,
+ *     engagements) to the acting Super Admin;
+ *   - nulls the nullable back-references (archived-by, audit actor,
+ *     division head/creator, supervisor/creator links, delegation revoker);
+ *   - deletes the join / request / delegation rows that name the user;
+ * then deletes the row (notifications and engagement participation cascade).
+ *
+ * Irreversible. Super Admin only; blocks self-delete, the last active Super
+ * Admin, and requires the username to be re-typed.
+ */
+export async function deleteUserAction(
+  prev: AdminUserState | undefined,
+  formData: FormData,
+): Promise<AdminUserState> {
+  const epoch = bump(prev);
+  const guard = await requireSuperAdmin();
+  if (!guard.ok) return fail(guard.error, epoch);
+
+  const parsed = deleteUserSchema.safeParse({
+    userId: formData.get('userId'),
+    confirmUsername: formData.get('confirmUsername'),
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const target = parsed.data.userId;
+  const heir = guard.userId; // the acting Super Admin inherits the work
+
+  if (target === heir) {
+    return fail('You cannot delete your own account.', epoch);
+  }
+
+  const before = await prisma.user.findUnique({
+    where: { id: target },
+    select: { id: true, name: true, username: true, isSuperAdmin: true },
+  });
+  if (!before) return fail('User not found.', epoch);
+
+  if (parsed.data.confirmUsername.toLowerCase() !== before.username.toLowerCase()) {
+    return fail('The typed username does not match. Deletion cancelled.', epoch);
+  }
+
+  // Never remove the last active Super Admin.
+  if (before.isSuperAdmin) {
+    const remaining = await prisma.user.count({
+      where: { isActive: true, isSuperAdmin: true, id: { not: target } },
+    });
+    if (remaining < 1) {
+      return fail('At least one active Super Admin must remain.', epoch);
+    }
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // 1. Reassign owned / authored content to the acting Super Admin.
+      await tx.task.updateMany({ where: { ownerId: target }, data: { ownerId: heir } });
+      await tx.task.updateMany({ where: { createdById: target }, data: { createdById: heir } });
+      await tx.taskComment.updateMany({ where: { userId: target }, data: { userId: heir } });
+      await tx.taskActivity.updateMany({ where: { actorId: target }, data: { actorId: heir } });
+      await tx.taskCollaborator.updateMany({ where: { addedById: target }, data: { addedById: heir } });
+      await tx.attachment.updateMany({ where: { uploadedById: target }, data: { uploadedById: heir } });
+      await tx.timelineFile.updateMany({ where: { createdById: target }, data: { createdById: heir } });
+      await tx.timelineFileComment.updateMany({ where: { userId: target }, data: { userId: heir } });
+      await tx.timelineFileActivity.updateMany({ where: { actorId: target }, data: { actorId: heir } });
+      await tx.timelineFileTaskLink.updateMany({ where: { linkedById: target }, data: { linkedById: heir } });
+      await tx.tag.updateMany({ where: { createdById: target }, data: { createdById: heir } });
+      await tx.jsEngagement.updateMany({ where: { createdById: target }, data: { createdById: heir } });
+
+      // 2. Null the nullable back-references — history is kept, un-attributed.
+      await tx.task.updateMany({ where: { archivedById: target }, data: { archivedById: null } });
+      await tx.timelineFile.updateMany({ where: { archivedById: target }, data: { archivedById: null } });
+      await tx.auditLog.updateMany({ where: { actorId: target }, data: { actorId: null } });
+      await tx.division.updateMany({ where: { createdById: target }, data: { createdById: null } });
+      await tx.division.updateMany({ where: { headUserId: target }, data: { headUserId: null } });
+      await tx.user.updateMany({ where: { supervisorId: target }, data: { supervisorId: null } });
+      await tx.user.updateMany({ where: { createdById: target }, data: { createdById: null } });
+      await tx.divisionAccessDelegation.updateMany({
+        where: { revokedById: target },
+        data: { revokedById: null },
+      });
+
+      // 3. Delete membership / request / delegation rows that name the user.
+      await tx.taskCollaborator.deleteMany({ where: { userId: target } });
+      await tx.reassignmentRequest.deleteMany({
+        where: {
+          OR: [{ requestedById: target }, { proposedOwnerId: target }, { approverId: target }],
+        },
+      });
+      await tx.divisionAccessDelegation.deleteMany({
+        where: { OR: [{ delegatedById: target }, { delegatedToId: target }] },
+      });
+
+      // 4. Notifications and engagement participation cascade on the delete.
+      await tx.user.delete({ where: { id: target } });
+
+      // 5. Record the deletion in the same transaction so the audit trail
+      //    can never miss it. The actor (heir) stays alive, and audit_log's
+      //    entity_id has no foreign key, so the row outlives the target.
+      await tx.auditLog.create({
+        data: {
+          actorId: heir,
+          action: 'delete',
+          entityType: 'user',
+          entityId: target,
+          before: { name: before.name, username: before.username, isSuperAdmin: before.isSuperAdmin },
+          after: { deleted: true, workReassignedTo: heir },
+        },
+      });
+    }, { timeout: 30_000 }); // generous window for accounts with heavy history
+  } catch (err) {
+    logError('deleteUserAction failed', err);
+    return fail('Could not delete the user. They may still be referenced somewhere.', epoch);
+  }
+
+  revalidateAll();
+  return ok(epoch);
+}

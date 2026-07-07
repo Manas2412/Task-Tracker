@@ -7,6 +7,7 @@ import { ResetPasswordDialog } from './ResetPasswordDialog';
 import {
   setUserActiveAction,
   changeDivisionAction,
+  deleteUserAction,
 } from '@/app/actions/admin-users';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +21,7 @@ type UserRowMenuProps = {
   user: {
     id: string;
     name: string;
+    username: string;
     isActive: boolean;
     divisionId: string;
     defaults: UserFormDefaults;
@@ -34,6 +36,7 @@ export function UserRowMenu({ user, divisions, supervisors, isSelf }: UserRowMen
   const [editOpen, setEditOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [divisionOpen, setDivisionOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -138,16 +141,28 @@ export function UserRowMenu({ user, divisions, supervisors, isSelf }: UserRowMen
             />
             {isSelf ? (
               <div className="px-3 py-1.5 text-[10px] text-ink-3">
-                You cannot disable your own account.
+                You cannot disable or delete your own account.
               </div>
             ) : (
-              <MenuButton
-                icon={user.isActive ? 'ti-user-off' : 'ti-user-check'}
-                label={user.isActive ? 'Disable user' : 'Enable user'}
-                danger={user.isActive}
-                onClick={toggleActive}
-                disabled={pending}
-              />
+              <>
+                <MenuButton
+                  icon={user.isActive ? 'ti-user-off' : 'ti-user-check'}
+                  label={user.isActive ? 'Disable user' : 'Enable user'}
+                  danger={user.isActive}
+                  onClick={toggleActive}
+                  disabled={pending}
+                />
+                <div className="my-1 border-t border-line-2" />
+                <MenuButton
+                  icon="ti-trash"
+                  label="Delete user"
+                  danger
+                  onClick={() => {
+                    setOpen(false);
+                    setDeleteOpen(true);
+                  }}
+                />
+              </>
             )}
           </div>
         </div>
@@ -176,6 +191,15 @@ export function UserRowMenu({ user, divisions, supervisors, isSelf }: UserRowMen
           userName={user.name}
           currentDivisionId={user.divisionId}
           divisions={topDivisions}
+        />
+      ) : null}
+
+      {deleteOpen ? (
+        <DeleteUserOverlay
+          onClose={() => setDeleteOpen(false)}
+          userId={user.id}
+          username={user.username}
+          userName={user.name}
         />
       ) : null}
     </>
@@ -212,6 +236,129 @@ function MenuButton({
       />
       {label}
     </button>
+  );
+}
+
+// ------------------------------------------------------------
+// Delete-user confirmation overlay — requires re-typing the username
+// ------------------------------------------------------------
+
+function DeleteUserOverlay({
+  onClose,
+  userId,
+  username,
+  userName,
+}: {
+  onClose: () => void;
+  userId: string;
+  username: string;
+  userName: string;
+}) {
+  const [confirm, setConfirm] = useState('');
+  const [deleting, startDeleting] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const matches = confirm.trim().toLowerCase() === username.toLowerCase();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  const handleDelete = () => {
+    if (!matches || deleting) return;
+    setError(null);
+    const fd = new FormData();
+    fd.set('userId', userId);
+    fd.set('confirmUsername', confirm);
+    startDeleting(async () => {
+      const result = await deleteUserAction(undefined, fd);
+      if (result.ok) {
+        onClose();
+      } else {
+        setError(result.error ?? 'Could not delete the user.');
+      }
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
+      <div className="relative bg-panel rounded-2xl border border-line shadow-2xl w-full max-w-[440px] mx-4 p-5">
+        <div className="flex items-start gap-3 mb-3">
+          <span className="mt-0.5 w-9 h-9 shrink-0 grid place-items-center rounded-full bg-urgent-soft text-urgent">
+            <i className="ti ti-trash text-[18px]" aria-hidden="true" />
+          </span>
+          <div>
+            <h3 className="font-serif text-[18px] text-ink">Delete {userName}</h3>
+            <p className="text-[12px] text-ink-3">This permanently removes the account.</p>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-urgent/20 bg-urgent-soft px-3 py-2.5 mb-4">
+          <p className="text-[12px] text-ink-2 leading-relaxed">
+            Their tasks, Timeline Files, comments, and history are reassigned to{' '}
+            <span className="font-medium text-ink">you</span>, and they are removed from every
+            board and division. This <span className="font-medium text-urgent">cannot be undone</span>
+            {' '}— use <span className="font-medium">Disable</span> instead to keep the account and its records.
+          </p>
+        </div>
+
+        <label className="flex flex-col gap-1 mb-3">
+          <span className="text-[11px] font-medium text-ink-2">
+            Type <span className="font-mono text-ink">{username}</span> to confirm
+          </span>
+          <input
+            type="text"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            autoFocus
+            autoComplete="off"
+            spellCheck={false}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleDelete();
+              }
+            }}
+            className="w-full px-3 py-2 rounded-lg border border-line bg-bg text-[13px] font-mono text-ink outline-none focus:border-urgent"
+          />
+        </label>
+
+        {error ? (
+          <p
+            role="alert"
+            className="text-[12px] text-urgent bg-urgent-soft border border-urgent/20 rounded-lg px-3 py-2 mb-3"
+          >
+            {error}
+          </p>
+        ) : null}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-lg border border-line text-[13px] font-medium text-ink-2 hover:bg-line-2"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={!matches || deleting}
+            className="flex-1 py-2.5 rounded-lg bg-urgent text-white text-[13px] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {deleting ? 'Deleting…' : 'Delete permanently'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

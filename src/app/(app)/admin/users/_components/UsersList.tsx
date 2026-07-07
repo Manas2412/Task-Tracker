@@ -172,6 +172,7 @@ function DesktopRow({
           user={{
             id: u.id,
             name: u.name,
+            username: u.username,
             isActive: u.isActive,
             divisionId: u.divisionId,
             defaults: rowToDefaults(u),
@@ -216,6 +217,7 @@ function MobileRow({
             user={{
               id: u.id,
               name: u.name,
+              username: u.username,
               isActive: u.isActive,
               divisionId: u.divisionId,
               defaults: rowToDefaults(u),
