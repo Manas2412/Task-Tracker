@@ -18,7 +18,7 @@ jobs:
         with:
           version: 10
 
-      - uses: actions/setup-node@49933ea5288caeca8642195f882787471af267f5 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@2ead5e36573f08b82fbfce1504f1a4b2d72b4b04 # v1.2.2
+        uses: appleboy/ssh-action@2ead5e36573f08b82fbfce1504f1a4b05a647c6f # v1.2.2
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
