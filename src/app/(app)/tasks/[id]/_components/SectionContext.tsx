@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
+import { QuoteCard } from '@/components/ui';
 import { updateTaskFieldsAction } from '@/app/actions/tasks';
 import {
   INITIAL_FIELDS_STATE,
@@ -77,14 +78,11 @@ export function SectionContext({ taskId, description, canEdit }: SectionContextP
         </form>
       ) : description ? (
         <>
-          <p
-            className={cn(
-              'text-[13px] text-ink-2 leading-relaxed whitespace-pre-wrap',
-              !expanded && description.length > 280 && 'line-clamp-3',
-            )}
-          >
-            {description}
-          </p>
+          <QuoteCard
+            text={description}
+            tone="ink"
+            textClassName={cn(!expanded && description.length > 280 && 'line-clamp-3')}
+          />
           {description.length > 280 ? (
             <button
               type="button"
