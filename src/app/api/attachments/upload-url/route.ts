@@ -6,6 +6,7 @@ import {
   canEditTfAttachments,
 } from '@/app/actions/attachments';
 import { auth } from '@/lib/auth';
+import { rateLimit } from '@/lib/rate-limit';
 import {
   generateObjectKey,
   isS3Configured,
@@ -40,6 +41,11 @@ export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
+  }
+
+  const { ok: rateLimited } = rateLimit(`upload:${session.user.id}`, 20, 60_000);
+  if (!rateLimited) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }
 
   if (!isS3Configured()) {

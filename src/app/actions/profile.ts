@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { auth, signOut } from '@/lib/auth';
 import { hashPassword, verifyPassword } from '@/lib/auth/password';
 import { prisma } from '@/lib/db';
+import { rateLimit } from '@/lib/rate-limit';
 
 /**
  * Profile-related server actions.
@@ -60,6 +61,11 @@ export async function changePasswordAction(
   const session = await auth();
   if (!session?.user) {
     return { ok: false, error: 'You are signed out. Refresh and try again.', epoch };
+  }
+
+  const { ok: allowed } = rateLimit(`password:${session.user.id}`, 5, 60_000);
+  if (!allowed) {
+    return { ok: false, error: 'Too many attempts. Wait a minute and try again.', epoch };
   }
 
   const parsed = changePasswordSchema.safeParse({

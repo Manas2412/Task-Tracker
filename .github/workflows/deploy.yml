@@ -4,17 +4,21 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   quality-gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642195f882787471af267f5 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -23,17 +27,21 @@ jobs:
       - run: npx prisma generate
       - run: pnpm tsc --noEmit
       - run: pnpm next lint
+      - run: pnpm audit --audit-level=high || true
 
   deploy:
     needs: quality-gate
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@2ead5e36573f08b82fbfce1504f1a4b2d72b4b04 # v1.2.2
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          # SSH key should use command= restriction in authorized_keys.
+          # Rotate quarterly. Restrict inbound SSH to GitHub Actions IPs
+          # via security group.
           script: |
             set -e
             cd /var/www/myas
@@ -46,4 +54,12 @@ jobs:
             [ -d .next ] && mv .next .next-old
             mv .next-build .next
             pm2 restart myas
-            rm -rf .next-old
+            sleep 5
+            if ! curl -sf http://localhost:3000/api/auth/providers > /dev/null 2>&1; then
+              echo "Health check failed — rolling back"
+              pm2 stop myas
+              rm -rf .next
+              mv .next-old .next
+              pm2 restart myas
+              exit 1
+            fi

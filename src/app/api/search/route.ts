@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
+import { rateLimit } from '@/lib/rate-limit';
 import { isQuerySearchable, searchPreview } from '@/lib/search';
 
 /**
@@ -20,6 +21,11 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const q = (url.searchParams.get('q') ?? '').trim();
+
+  const { ok: allowed } = rateLimit(`search:${session.user.id}`, 30, 60_000);
+  if (!allowed) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
 
   if (!isQuerySearchable(q)) {
     return NextResponse.json({

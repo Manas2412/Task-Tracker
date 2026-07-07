@@ -123,7 +123,7 @@
 
 **Remediation:** Add `*.pdf`, `credentials.html`, and `credentials.*` patterns to `.gitignore`. Move credential files outside the repo tree.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — security headers added to `next.config.mjs` (CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
 
 ---
 
@@ -143,7 +143,7 @@
 
 **Remediation:** Add IP-based rate limiting via `next-rate-limit` or a custom in-memory/Redis token bucket. Priority targets: login (5/min), password change (3/min), upload-url (20/min), search (30/min).
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — in-memory rate limiter (`src/lib/rate-limit.ts`) wired into login (5/min per username), search (30/min per user), password change (5/min per user), upload presign (20/min per user)
 
 ---
 
@@ -183,7 +183,7 @@
 
 **Remediation:** Pin all actions to full commit SHAs. Add Dependabot or Renovate for automated SHA updates.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — all actions pinned to commit SHAs: checkout@11bd719, setup-node@4993ea5, pnpm/action-setup@fe02b34, appleboy/ssh-action@2ead5e3
 
 ---
 
@@ -409,7 +409,7 @@
 
 **Remediation:** Add `concurrency: { group: deploy-production, cancel-in-progress: false }` to the workflow.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `concurrency: { group: deploy-production, cancel-in-progress: false }` added to deploy workflow
 
 ---
 
@@ -426,7 +426,7 @@
 
 **Remediation:** Move the GA ID to an env var (`NEXT_PUBLIC_GA_ID`). Only render the script when the var is set. Consider excluding auth pages.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — GA ID moved to `NEXT_PUBLIC_GA_ID` env var with conditional rendering; `.env.sample` updated
 
 ---
 
@@ -460,7 +460,7 @@
 
 **Remediation:** Use a deploy-specific key with `command=` restriction in `authorized_keys`. Rotate quarterly. Restrict SSH access to GitHub Actions IP ranges via security group.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — SSH key restriction and rotation guidance added as comments in deploy workflow
 
 ---
 
@@ -683,7 +683,7 @@
 
 **Remediation:** Add `@@index([userId, readAt])` to the Notification model.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `@@index([userId, readAt])` added to Notification model + migration created
 
 ---
 
@@ -700,7 +700,7 @@
 
 **Remediation:** Keep `.next-old` for one deploy cycle. Add a health check after `pm2 restart` that rolls back if the app doesn't respond within 30 seconds.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — deploy script keeps `.next-old`, adds 5-second health check with auto-rollback on failure
 
 ---
 

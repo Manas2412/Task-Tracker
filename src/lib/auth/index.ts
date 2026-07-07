@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { authConfig } from '@/lib/auth/config';
 import { verifyPassword } from '@/lib/auth/password';
+import { rateLimit } from '@/lib/rate-limit';
 
 const credentialsSchema = z.object({
   username: z.string().trim().min(1).max(60),
@@ -34,6 +35,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!parsed.success) return null;
 
         const { username, password } = parsed.data;
+
+        const { ok: allowed } = rateLimit(`login:${username}`, 5, 60_000);
+        if (!allowed) return null;
 
         const user = await prisma.user.findUnique({
           where: { username },
