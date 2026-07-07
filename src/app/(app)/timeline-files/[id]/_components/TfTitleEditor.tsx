@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
 import { updateTimelineFileFieldsAction } from '@/app/actions/timeline-files';
@@ -9,6 +9,8 @@ type TfTitleEditorProps = {
   tfId: string;
   subject: string;
   canEdit: boolean;
+  /** Rendered at the right of the subject in view mode — e.g. the complete tick. */
+  trailing?: ReactNode;
 };
 
 /**
@@ -16,7 +18,7 @@ type TfTitleEditorProps = {
  * Shown to OSD and Super Admin only — the same gate as every other
  * TF field edit (subject/from/dates/secretary + desk comments).
  */
-export function TfTitleEditor({ tfId, subject, canEdit }: TfTitleEditorProps) {
+export function TfTitleEditor({ tfId, subject, canEdit, trailing }: TfTitleEditorProps) {
   const [editing, setEditing] = useState(false);
   const [state, formAction] = useFormState(updateTimelineFileFieldsAction, {
     ok: false,
@@ -84,6 +86,7 @@ export function TfTitleEditor({ tfId, subject, canEdit }: TfTitleEditorProps) {
           <i className="ti ti-pencil text-[16px]" aria-hidden="true" />
         </button>
       ) : null}
+      {trailing ? <div className="mt-0.5 shrink-0">{trailing}</div> : null}
     </div>
   );
 }

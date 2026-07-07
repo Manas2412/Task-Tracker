@@ -135,14 +135,20 @@ function SubtaskRow({
           type="button"
           role="checkbox"
           aria-checked={isDone}
+          aria-label={isDone ? 'Mark subtask not done' : 'Mark subtask done'}
           onClick={toggle}
           disabled={pending}
           className={cn(
-            'w-[18px] h-[18px] grid place-items-center rounded-[5px] border-[1.5px] shrink-0 transition-colors',
-            isDone ? 'bg-success border-success text-white' : 'border-ink-4 hover:border-ink',
+            'w-[22px] h-[22px] grid place-items-center rounded-md border-2 shrink-0 transition-all active:scale-90 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success',
+            // The check is always rendered but transparent when open, so an
+            // incomplete box previews a soft-green tick on hover — a clear,
+            // friendly hint that a tap completes the subtask.
+            isDone
+              ? 'bg-success border-success text-white shadow-sm'
+              : 'border-ink-4 bg-panel text-transparent hover:border-success hover:bg-success-soft hover:text-success',
           )}
         >
-          {isDone ? <i className="ti ti-check text-[12px]" aria-hidden="true" /> : null}
+          <i className="ti ti-check text-[14px]" aria-hidden="true" />
         </button>
 
         <Link

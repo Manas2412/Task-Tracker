@@ -497,7 +497,11 @@ export async function updateTaskStatusAction(
   const parsed = updateStatusSchema.safeParse({
     taskId: formData.get('taskId'),
     status: formData.get('status'),
-    note: formData.get('note'),
+    // `.get()` yields null when the form omits the note (e.g. the one-tap
+    // complete tick, which posts only taskId + status). The optional schema
+    // rejects null but accepts undefined, so coalesce — a missing note must
+    // not fail the whole action.
+    note: formData.get('note') ?? undefined,
   });
   if (!parsed.success) return fail('Invalid input.', epoch);
 
