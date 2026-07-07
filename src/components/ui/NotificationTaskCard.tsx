@@ -1,5 +1,4 @@
-import { format } from 'date-fns';
-
+import { formatDateTimeIST } from '@/lib/date';
 import { formatDue } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -38,7 +37,7 @@ export function NotificationTaskCard({
     due?.tone === 'today' && 'text-accent font-medium',
     (!due || due.tone === 'soon' || due.tone === 'future') && 'text-ink-3',
   );
-  const dueLabel = dueDate ? `Due ${format(dueDate, 'd LLL yyyy, h:mm aaa')}` : 'No due date';
+  const dueLabel = dueDate ? `Due ${formatDateTimeIST(dueDate)}` : 'No due date';
   const showActor = !!(actorLabel && actorName);
 
   if (variant === 'compact') {
