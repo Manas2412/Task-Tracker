@@ -26,6 +26,7 @@ type PageProps = {
     dueTo?: string;
     jsP?: string;
     milestone?: string;
+    tag?: string;
   };
 };
 
@@ -63,6 +64,7 @@ export default async function SearchPage({ searchParams }: PageProps) {
   if (searchParams?.dueTo) taskFilters.dueTo = searchParams.dueTo;
   if (searchParams?.jsP === '1') taskFilters.jsPriority = true;
   if (searchParams?.milestone === '1') taskFilters.milestone = true;
+  if (searchParams?.tag) taskFilters.tagId = searchParams.tag;
 
   const showTaskFilters = type === 'all' || type === 'tasks';
 

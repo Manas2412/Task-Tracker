@@ -90,6 +90,9 @@ export type SearchTaskFilters = {
   dueTo?: string;
   jsPriority?: boolean;
   milestone?: boolean;
+  /** Restrict to tasks carrying this exact tag (uuid). Set when the user
+   *  opens a tag from search results to see everything under it. */
+  tagId?: string;
 };
 
 // ============================================================
@@ -97,6 +100,9 @@ export type SearchTaskFilters = {
 // ============================================================
 
 const MAX_QUERY_LENGTH = 200;
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function normaliseQuery(raw: string | null | undefined): string {
   return escapeIlike((raw ?? '').trim().slice(0, MAX_QUERY_LENGTH));
@@ -169,6 +175,11 @@ export async function searchTasksFor(
       andClauses.push({ priority: filters.priority as TaskPriority });
     }
     if (filters.divisionId) andClauses.push({ divisionId: filters.divisionId });
+    // Opening a tag from search results narrows to exactly its tasks. Guard
+    // the uuid shape so a hand-edited ?tag= can't throw at the Postgres cast.
+    if (filters.tagId && UUID_RE.test(filters.tagId)) {
+      andClauses.push({ tags: { some: { tagId: filters.tagId } } });
+    }
     if (filters.jsPriority) andClauses.push({ jsPriorityLane: { not: null } });
     if (filters.milestone) andClauses.push({ milestone: true });
     if (filters.dueFrom || filters.dueTo) {
@@ -349,9 +360,10 @@ export async function searchTagsFor(
     id: t.id,
     name: t.name,
     taskCount: t._count.tasks,
-    // Filter the tasks list by this tag (Phase-4 follow-up); for now point
-    // at the tag manager so Super Admin can act on it.
-    href: `/admin/tags`,
+    // Open the tag to everything under it — a tasks search narrowed to this
+    // exact tag (the tagId filter in searchTasksFor). Works for every user
+    // and stays visibility-scoped, unlike the Super-Admin-only tag manager.
+    href: `/search?q=${encodeURIComponent(t.name)}&type=tasks&tag=${t.id}`,
   }));
 
   return { rows, total };
