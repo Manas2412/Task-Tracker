@@ -532,7 +532,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
       ) : null}
 
       {canPull ? (
-        <div className="px-4 md:px-6 py-3 border-b border-line-2">
+        <div className="px-4 md:px-6 py-4 border-b border-line-2">
           <PullTaskButton taskId={task.id} />
         </div>
       ) : null}

@@ -15,23 +15,45 @@ export function PullTaskButton({ taskId }: PullTaskButtonProps) {
     <form action={formAction}>
       <input type="hidden" name="taskId" value={taskId} />
       {state.error ? (
-        <p className="text-[11px] text-urgent mb-1">{state.error}</p>
+        <p role="alert" className="mb-2 text-[12px] text-urgent">
+          {state.error}
+        </p>
       ) : null}
-      <SubmitButton />
+      <PullSubmit />
     </form>
   );
 }
 
-function SubmitButton() {
+// A prominent action card — matches the Transfer card's weight so the task's
+// primary action reads clearly. One tap claims the task; the "you become the
+// owner" outcome is stated on the card itself.
+function PullSubmit() {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line text-[12px] font-medium text-ink-2 hover:bg-line-2 transition-colors disabled:opacity-60"
+      aria-label="Pull this task — you will become its owner"
+      className="group w-full flex items-center gap-3 rounded-xl border border-line bg-panel px-4 py-3.5 text-left transition-colors hover:border-ink-4 hover:bg-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-60 disabled:cursor-wait"
     >
-      <i className="ti ti-git-pull-request text-[14px]" aria-hidden="true" />
-      {pending ? 'Pulling…' : 'Pull task'}
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink text-white">
+        <i
+          className="ti ti-user-plus text-[18px] transition-transform group-hover:scale-110"
+          aria-hidden="true"
+        />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[14px] font-medium text-ink">
+          {pending ? 'Pulling task…' : 'Pull this task'}
+        </span>
+        <span className="mt-0.5 block text-[12px] text-ink-3">
+          You&rsquo;ll become the owner of this task
+        </span>
+      </span>
+      <i
+        className="ti ti-arrow-right shrink-0 text-[18px] text-ink-3 transition-transform group-hover:translate-x-0.5"
+        aria-hidden="true"
+      />
     </button>
   );
 }
