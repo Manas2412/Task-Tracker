@@ -225,7 +225,9 @@ function TaskRow({
  *                             task transferred or handed to me)
  *   2. Other tasks of my division — the rest of the division's tasks (or,
  *                             for a PMU member, the rest of their PMU team's)
- *   3. Personal tasks — my personal-visibility tasks, visible to me only
+ *   3. Personal tasks — personal-visibility tasks I own, created, or am a
+ *                             collaborator on (visible to me and added
+ *                             collaborators only)
  * Every visible task falls in exactly one segment (personal vs division,
  * division split by ownership). All three segments are always shown, even
  * when empty, so the structure is consistent on every login.
@@ -268,7 +270,7 @@ function segmentTasksByRelation(
     {
       key: 'personal',
       label: 'Personal tasks',
-      subtitle: 'Visible to me only',
+      subtitle: 'Visible to me and added collaborators only',
       emptyLabel: 'You have not created any personal tasks.',
       icon: 'ti-lock',
       tasks: personal,

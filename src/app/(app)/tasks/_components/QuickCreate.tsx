@@ -394,8 +394,8 @@ function QuickCreateForm({
               <p className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-line bg-bg text-[12px] text-ink-2">
                 <i className="ti ti-lock text-[14px] mt-px shrink-0" aria-hidden="true" />
                 <span>
-                  Personal — visible only to you. Division tasks are given by the
-                  division head.
+                  Personal — visible to you and added collaborators only.
+                  Division tasks are given by the division head.
                 </span>
               </p>
             )}

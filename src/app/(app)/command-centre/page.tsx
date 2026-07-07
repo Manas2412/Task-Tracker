@@ -37,7 +37,10 @@ export default async function CommandCentrePage() {
   const startOfToday = startOfDayIST();
   const endOfToday = endOfDayIST();
 
-  const baseFilter = { archivedAt: null, parentTaskId: null };
+  // Division-only: the Command Centre is a ministry-wide overview of
+  // division work. Personal tasks are private to their creator/owner/
+  // collaborators and must never surface in these aggregates.
+  const baseFilter = { archivedAt: null, parentTaskId: null, visibility: 'division' as const };
 
   const [
     openTotal,

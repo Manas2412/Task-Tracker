@@ -50,6 +50,11 @@ export default async function JsDashboardPage() {
 
   const userId = session.user.id;
   const baseFilter = { archivedAt: null, parentTaskId: null };
+  // Ministry-wide aggregates (priority board, milestones) stay division-only
+  // so another user's Personal task never leaks into a count or list. The
+  // viewer's own-task widgets keep using baseFilter — they are already
+  // scoped to this user, who owns those personal tasks.
+  const divisionFilter = { ...baseFilter, visibility: 'division' as const };
 
   const [
     myTasksCount,
@@ -71,7 +76,7 @@ export default async function JsDashboardPage() {
     }),
     // Total JS Priority board tasks
     prisma.task.count({
-      where: { ...baseFilter, jsPriorityLane: { not: null } },
+      where: { ...divisionFilter, jsPriorityLane: { not: null } },
     }),
     // Tasks due today, owned by or assigned to the JS user
     prisma.task.count({
@@ -85,17 +90,17 @@ export default async function JsDashboardPage() {
         ],
       },
     }),
-    // Milestone tasks visible to JS
+    // Milestone tasks across the ministry (division-only — never personal)
     prisma.task.count({
       where: {
-        ...baseFilter,
+        ...divisionFilter,
         milestone: true,
         status: { not: 'completed' },
       },
     }),
     // All priority board tasks (grouped by lane below)
     prisma.task.findMany({
-      where: { ...baseFilter, jsPriorityLane: { not: null } },
+      where: { ...divisionFilter, jsPriorityLane: { not: null } },
       include: {
         owner: { select: USER_SUMMARY_SELECT },
         division: true,
@@ -105,7 +110,7 @@ export default async function JsDashboardPage() {
     // Upcoming milestone tasks ordered by due date (up to 6)
     prisma.task.findMany({
       where: {
-        ...baseFilter,
+        ...divisionFilter,
         milestone: true,
         status: { not: 'completed' },
       },

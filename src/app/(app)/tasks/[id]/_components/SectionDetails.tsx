@@ -64,7 +64,7 @@ type SectionDetailsProps = {
 
 const VISIBILITY_OPTIONS = [
   { value: 'division', label: 'Division', icon: 'ti-users', hint: 'Visible to your chain and division' },
-  { value: 'personal', label: 'Personal', icon: 'ti-lock', hint: 'Visible only to you — not even superiors' },
+  { value: 'personal', label: 'Personal', icon: 'ti-lock', hint: 'Visible to the owner, creator, and added collaborators only' },
 ] as const;
 
 export function SectionDetails(props: SectionDetailsProps) {
