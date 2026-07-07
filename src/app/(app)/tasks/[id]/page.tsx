@@ -139,6 +139,15 @@ export default async function TaskDetailPage({ params }: PageProps) {
     isHeadOfTaskDivision ||
     (task.visibility === 'personal' && task.ownerId === session.user.id);
 
+  // Archive mirrors archiveTaskAction: a task assigned to an individual can
+  // only be archived by the head of its division, a Super Admin, or a
+  // delegate — isHeadOfTaskDivision folds in active delegations. A user may
+  // still archive their own personal task (which only they can see).
+  const canArchive =
+    session.user.isSuperAdmin ||
+    isHeadOfTaskDivision ||
+    (task.visibility === 'personal' && task.ownerId === session.user.id);
+
   // Working the task — status, priority, description, subtasks — stays open
   // to the owner, creator, Director+ in same division, head, OSD, JS,
   // Super Admin.
@@ -416,10 +425,11 @@ export default async function TaskDetailPage({ params }: PageProps) {
           </Link>
           <MoreMenu
             taskId={task.id}
+            canArchive={canArchive}
             canDelete={canDelete}
             reasonNoDelete={
               !canDelete
-                ? 'Only the owner, creator, a division head, or a Super Admin can delete this task.'
+                ? 'Only a division head or a Super Admin can delete this task.'
                 : undefined
             }
           />

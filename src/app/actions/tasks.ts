@@ -1407,13 +1407,32 @@ export async function archiveTaskAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, archivedAt: true, ownerId: true, createdById: true, divisionId: true },
+    select: {
+      id: true,
+      name: true,
+      archivedAt: true,
+      ownerId: true,
+      createdById: true,
+      divisionId: true,
+      visibility: true,
+    },
   });
   if (!task) return fail('Task not found.', epoch);
   if (task.archivedAt) return ok(epoch);
 
-  if (!(await canEditTask(me.id, task))) {
-    return fail('You do not have permission to archive this task.', epoch);
+  // Archiving a task assigned to an individual is a head power: only the
+  // head of the task's division, a Super Admin, or a delegate holding that
+  // division's power (canActAsHeadOf covers all three). A user may still
+  // archive their own personal task, which only they can see.
+  const actor = await getRbacActor(me.id);
+  const mayArchive =
+    (task.visibility === 'personal' && task.ownerId === me.id) ||
+    (actor !== null && canActAsHeadOf(actor, task.divisionId));
+  if (!mayArchive) {
+    return fail(
+      'Only a division head, a Super Admin, or a delegated user can archive this task.',
+      epoch,
+    );
   }
 
   try {
