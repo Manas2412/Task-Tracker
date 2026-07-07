@@ -333,8 +333,11 @@ export async function createTaskAction(
   if (parsed.data.visibility === 'division') {
     const targetDivision = await prisma.division.findUnique({
       where: { id: targetDivisionId },
-      select: { kind: true },
+      select: { kind: true, name: true },
     });
+    // Office of JS tasks may be owned by any active user (same identifier as
+    // getOfficeOfJsDivisionId — the seeded division name).
+    const isOfficeOfJs = targetDivision?.name === 'Office of JS';
 
     if (parsed.data.ownerId) {
       const chosen = await prisma.user.findUnique({
@@ -344,9 +347,11 @@ export async function createTaskAction(
       const isMember =
         !!chosen &&
         chosen.isActive &&
-        (targetDivision?.kind === 'pmu'
-          ? chosen.pmuId === targetDivisionId
-          : chosen.divisionId === targetDivisionId);
+        (isOfficeOfJs
+          ? true
+          : targetDivision?.kind === 'pmu'
+            ? chosen.pmuId === targetDivisionId
+            : chosen.divisionId === targetDivisionId);
       if (!isMember) {
         return {
           ok: false,

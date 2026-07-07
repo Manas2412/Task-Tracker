@@ -47,7 +47,16 @@ export function useQuickCreate(): QuickCreateContextValue {
 // ------------------------------------------------------------
 
 /** A division or PMU a division-task creator may target (Structure & Hierarchy). */
-export type DivisionTarget = { id: string; name: string; kind: string };
+export type DivisionTarget = {
+  id: string;
+  name: string;
+  kind: string;
+  /** True for the seeded "Office of JS" division, which may be owned by anyone. */
+  isOfficeOfJs: boolean;
+  /** The division head, or a PMU's team leader — offered as a one-click pill. */
+  autoOwnerId: string | null;
+  autoOwnerName: string | null;
+};
 
 /** An active member of a create target, offered as an optional initial owner. */
 export type OwnerCandidate = {
@@ -60,6 +69,9 @@ export type OwnerCandidate = {
   divisionColour: string;
 };
 
+/** The OSD account — a quick-pick owner on Office-of-JS tasks. */
+export type OsdAccount = { id: string; name: string };
+
 type ProviderProps = {
   defaultDivisionId: string;
   s3Configured: boolean;
@@ -69,6 +81,8 @@ type ProviderProps = {
   createTargets: DivisionTarget[];
   /** Active members of those targets — the optional initial-owner pool. */
   ownerCandidates: OwnerCandidate[];
+  /** OSD account, for the quick-pick pill on Office-of-JS tasks. */
+  osdAccount: OsdAccount | null;
   children: ReactNode;
 };
 
@@ -78,6 +92,7 @@ export function QuickCreateProvider({
   canCreateDivisionTasks,
   createTargets,
   ownerCandidates,
+  osdAccount,
   children,
 }: ProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -101,6 +116,7 @@ export function QuickCreateProvider({
             canCreateDivisionTasks={canCreateDivisionTasks}
             createTargets={createTargets}
             ownerCandidates={ownerCandidates}
+            osdAccount={osdAccount}
             prefillDueDate={prefill?.dueDate}
           />
         ) : null}
@@ -138,6 +154,7 @@ type FormProps = {
   canCreateDivisionTasks: boolean;
   createTargets: DivisionTarget[];
   ownerCandidates: OwnerCandidate[];
+  osdAccount: OsdAccount | null;
   /** Prefilled due date (YYYY-MM-DD), e.g. when created from the calendar. */
   prefillDueDate?: string;
 };
@@ -169,6 +186,7 @@ function QuickCreateForm({
   canCreateDivisionTasks,
   createTargets,
   ownerCandidates,
+  osdAccount,
   prefillDueDate,
 }: FormProps) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -281,15 +299,18 @@ function QuickCreateForm({
     setPendingFile(file);
   };
 
-  // Members of the selected division/PMU, offered as the optional initial
-  // owner. The picker only appears for division-task creators (a head power).
+  // Owner candidates for the selected target: its division/PMU members —
+  // or every active user for an Office-of-JS task, which anyone may own. The
+  // picker only appears for division-task creators (a head power).
   const selectedTarget = createTargets.find((t) => t.id === divisionId);
   const ownerOptions: UserPickerOption[] = selectedTarget
     ? ownerCandidates
         .filter((c) =>
-          selectedTarget.kind === 'pmu'
-            ? c.pmuId === selectedTarget.id
-            : c.divisionId === selectedTarget.id,
+          selectedTarget.isOfficeOfJs
+            ? true
+            : selectedTarget.kind === 'pmu'
+              ? c.pmuId === selectedTarget.id
+              : c.divisionId === selectedTarget.id,
         )
         .map((c) => ({
           id: c.id,
@@ -301,6 +322,25 @@ function QuickCreateForm({
     : [];
   const showOwnerPicker =
     canCreateDivisionTasks && visibility === 'division' && ownerOptions.length > 0;
+
+  // One-click owner shortcuts beside the picker: the target's default owner
+  // (division head / PMU team leader), plus the OSD account on Office-of-JS
+  // tasks. Deduped so the same person isn't offered twice.
+  const ownerQuickPicks: { id: string; name: string; role: string }[] = [];
+  if (selectedTarget?.autoOwnerId && selectedTarget.autoOwnerName) {
+    ownerQuickPicks.push({
+      id: selectedTarget.autoOwnerId,
+      name: selectedTarget.autoOwnerName,
+      role: selectedTarget.kind === 'pmu' ? 'Team lead' : 'Head',
+    });
+  }
+  if (
+    selectedTarget?.isOfficeOfJs &&
+    osdAccount &&
+    !ownerQuickPicks.some((p) => p.id === osdAccount.id)
+  ) {
+    ownerQuickPicks.push({ id: osdAccount.id, name: osdAccount.name, role: 'OSD' });
+  }
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-3" noValidate>
@@ -469,21 +509,59 @@ function QuickCreateForm({
           ) : null}
 
           {/* Owner (optional) — a head may name an initial owner from the
-              chosen division/PMU. Blank keeps the default above. */}
+              chosen division/PMU. The pills beside it one-click the default
+              owner (division head / PMU team leader), plus the OSD account on
+              Office-of-JS tasks. Blank keeps the default above. */}
           {showOwnerPicker ? (
             <Field label="Owner" error={state.fieldErrors?.ownerId}>
-              <UserPicker
-                name="ownerId"
-                value={ownerId}
-                onChange={setOwnerId}
-                options={ownerOptions}
-                placeholder={
-                  selectedTarget?.kind === 'pmu'
-                    ? 'Optional — defaults to the team leader'
-                    : 'Optional — leave blank so anyone can pull it'
-                }
-                error={!!state.fieldErrors?.ownerId}
-              />
+              <div className="flex flex-wrap items-start gap-2">
+                <UserPicker
+                  name="ownerId"
+                  value={ownerId}
+                  onChange={setOwnerId}
+                  options={ownerOptions}
+                  placeholder={
+                    selectedTarget?.isOfficeOfJs
+                      ? 'Optional — any user'
+                      : selectedTarget?.kind === 'pmu'
+                        ? 'Optional — defaults to the team leader'
+                        : 'Optional — leave blank so anyone can pull it'
+                  }
+                  error={!!state.fieldErrors?.ownerId}
+                  className="flex-1 min-w-[180px]"
+                />
+                {ownerQuickPicks.map((p) => {
+                  const active = ownerId === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setOwnerId(active ? '' : p.id)}
+                      aria-pressed={active}
+                      title={`${p.name} · ${p.role}`}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg border text-[12px] font-medium transition-colors',
+                        active
+                          ? 'border-ink bg-ink text-white'
+                          : 'border-line bg-panel text-ink-2 hover:border-ink-4 hover:text-ink',
+                      )}
+                    >
+                      <i className="ti ti-user text-[13px]" aria-hidden="true" />
+                      <span className="max-w-[120px] truncate">{p.name}</span>
+                      <span
+                        className={cn('text-[10px]', active ? 'text-white/70' : 'text-ink-3')}
+                      >
+                        {p.role}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedTarget?.isOfficeOfJs ? (
+                <p className="mt-1 text-[11px] text-ink-3">
+                  An Office of JS task can be owned by any user.
+                </p>
+              ) : null}
             </Field>
           ) : null}
 
