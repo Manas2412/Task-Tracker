@@ -14,7 +14,7 @@ import {
   FloatingActionButton,
   PrimaryAction,
 } from '@/components/layout';
-import { Sheet, Switch } from '@/components/ui';
+import { Sheet, Switch, UserPicker, type UserPickerOption } from '@/components/ui';
 import { createTaskAction } from '@/app/actions/tasks';
 import { registerAttachmentAction } from '@/app/actions/attachments';
 import {
@@ -49,6 +49,17 @@ export function useQuickCreate(): QuickCreateContextValue {
 /** A division or PMU a division-task creator may target (Structure & Hierarchy). */
 export type DivisionTarget = { id: string; name: string; kind: string };
 
+/** An active member of a create target, offered as an optional initial owner. */
+export type OwnerCandidate = {
+  id: string;
+  name: string;
+  designation: string;
+  divisionId: string;
+  pmuId: string | null;
+  divisionName: string;
+  divisionColour: string;
+};
+
 type ProviderProps = {
   defaultDivisionId: string;
   s3Configured: boolean;
@@ -56,6 +67,8 @@ type ProviderProps = {
   canCreateDivisionTasks: boolean;
   /** Divisions + PMUs the caller may create a task in (auto-owns to head/leader). */
   createTargets: DivisionTarget[];
+  /** Active members of those targets — the optional initial-owner pool. */
+  ownerCandidates: OwnerCandidate[];
   children: ReactNode;
 };
 
@@ -64,6 +77,7 @@ export function QuickCreateProvider({
   s3Configured,
   canCreateDivisionTasks,
   createTargets,
+  ownerCandidates,
   children,
 }: ProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -86,6 +100,7 @@ export function QuickCreateProvider({
             s3Configured={s3Configured}
             canCreateDivisionTasks={canCreateDivisionTasks}
             createTargets={createTargets}
+            ownerCandidates={ownerCandidates}
             prefillDueDate={prefill?.dueDate}
           />
         ) : null}
@@ -122,6 +137,7 @@ type FormProps = {
   s3Configured: boolean;
   canCreateDivisionTasks: boolean;
   createTargets: DivisionTarget[];
+  ownerCandidates: OwnerCandidate[];
   /** Prefilled due date (YYYY-MM-DD), e.g. when created from the calendar. */
   prefillDueDate?: string;
 };
@@ -152,6 +168,7 @@ function QuickCreateForm({
   s3Configured,
   canCreateDivisionTasks,
   createTargets,
+  ownerCandidates,
   prefillDueDate,
 }: FormProps) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -161,8 +178,6 @@ function QuickCreateForm({
     INITIAL_CREATE_STATE,
   );
 
-  // Open the details section when a due date is prefilled so it is visible.
-  const [showMore, setShowMore] = useState(!!prefillDueDate);
   const [priority, setPriority] = useState<(typeof PRIORITIES)[number]['value']>('low');
   const [visibility, setVisibility] = useState<(typeof VISIBILITIES)[number]['value']>(
     canCreateDivisionTasks ? 'division' : 'personal',
@@ -175,6 +190,11 @@ function QuickCreateForm({
       ? defaultDivisionId
       : createTargets[0]?.id ?? defaultDivisionId,
   );
+  // Optional initial owner. Empty = today's default (a division task starts
+  // unassigned; a PMU task goes to its team leader — resolved on the server).
+  // Cleared whenever the target/visibility changes so a stale cross-division
+  // pick can't be submitted.
+  const [ownerId, setOwnerId] = useState('');
 
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
@@ -261,6 +281,27 @@ function QuickCreateForm({
     setPendingFile(file);
   };
 
+  // Members of the selected division/PMU, offered as the optional initial
+  // owner. The picker only appears for division-task creators (a head power).
+  const selectedTarget = createTargets.find((t) => t.id === divisionId);
+  const ownerOptions: UserPickerOption[] = selectedTarget
+    ? ownerCandidates
+        .filter((c) =>
+          selectedTarget.kind === 'pmu'
+            ? c.pmuId === selectedTarget.id
+            : c.divisionId === selectedTarget.id,
+        )
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          designation: c.designation,
+          divisionName: c.divisionName,
+          divisionColour: c.divisionColour,
+        }))
+    : [];
+  const showOwnerPicker =
+    canCreateDivisionTasks && visibility === 'division' && ownerOptions.length > 0;
+
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-3" noValidate>
       <input
@@ -302,32 +343,8 @@ function QuickCreateForm({
         ) : null}
       </div>
 
-      {/* Add more details toggle */}
-      <button
-        type="button"
-        onClick={() => setShowMore((v) => !v)}
-        aria-expanded={showMore}
-        aria-controls="qc-more"
-        className="flex items-center gap-2 py-2 text-[13px] font-medium text-ink-2 hover:text-ink transition-colors"
-      >
-        <i
-          className={cn(
-            'ti ti-chevron-down text-[15px] transition-transform',
-            showMore && 'rotate-180',
-          )}
-          aria-hidden="true"
-        />
-        Add more details
-      </button>
-
-      {/* Collapsible details */}
-      <div
-        id="qc-more"
-        className={cn(
-          'overflow-hidden transition-[max-height,opacity] duration-300',
-          showMore ? 'max-h-[900px] opacity-100' : 'max-h-0 opacity-0',
-        )}
-      >
+      {/* All details are shown directly — no "add more details" collapse. */}
+      <div>
         <div className="flex flex-col gap-3.5 pb-1">
           {/* Description */}
           <Field label="Description">
@@ -399,7 +416,10 @@ function QuickCreateForm({
                       type="button"
                       role="radio"
                       aria-checked={isActive}
-                      onClick={() => setVisibility(v.value)}
+                      onClick={() => {
+                        setVisibility(v.value);
+                        setOwnerId('');
+                      }}
                       className={cn(
                         'py-2 text-[12px] font-medium rounded-md transition-colors inline-flex items-center justify-center gap-1.5',
                         isActive ? 'bg-panel text-ink shadow-sm' : 'text-ink-2 hover:text-ink',
@@ -429,7 +449,10 @@ function QuickCreateForm({
             <Field label="Division or PMU">
               <select
                 value={divisionId}
-                onChange={(e) => setDivisionId(e.target.value)}
+                onChange={(e) => {
+                  setDivisionId(e.target.value);
+                  setOwnerId('');
+                }}
                 className="w-full px-3 py-2.5 rounded-lg border border-line bg-panel text-[14px] text-ink outline-none focus:border-ink appearance-none"
               >
                 {createTargets.map((t) => (
@@ -440,8 +463,27 @@ function QuickCreateForm({
                 ))}
               </select>
               <p className="mt-1 text-[11px] text-ink-3">
-                A division task starts unassigned — any member of the division can pull it to take ownership. A PMU task is owned by its team leader.
+                Leave the owner below blank and a division task starts unassigned — any member can pull it to take ownership; a PMU task goes to its team leader.
               </p>
+            </Field>
+          ) : null}
+
+          {/* Owner (optional) — a head may name an initial owner from the
+              chosen division/PMU. Blank keeps the default above. */}
+          {showOwnerPicker ? (
+            <Field label="Owner" error={state.fieldErrors?.ownerId}>
+              <UserPicker
+                name="ownerId"
+                value={ownerId}
+                onChange={setOwnerId}
+                options={ownerOptions}
+                placeholder={
+                  selectedTarget?.kind === 'pmu'
+                    ? 'Optional — defaults to the team leader'
+                    : 'Optional — leave blank so anyone can pull it'
+                }
+                error={!!state.fieldErrors?.ownerId}
+              />
             </Field>
           ) : null}
 

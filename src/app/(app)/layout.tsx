@@ -69,6 +69,45 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       })
     : [];
 
+  // Active members of those targets, so a head can optionally name an initial
+  // owner in Quick Create (leaving it blank keeps the unassigned / PMU-leader
+  // default). Only division-task creators see the picker, so only they need
+  // the pool. A division's members have divisionId === target; a PMU's members
+  // have pmuId === target.
+  const divisionTargetIds = createTargets.filter((t) => t.kind !== 'pmu').map((t) => t.id);
+  const pmuTargetIds = createTargets.filter((t) => t.kind === 'pmu').map((t) => t.id);
+  const ownerCandidates =
+    canCreateDivisionTasks && createTargets.length > 0
+      ? (
+          await prisma.user.findMany({
+            where: {
+              isActive: true,
+              OR: [
+                { divisionId: { in: divisionTargetIds } },
+                { pmuId: { in: pmuTargetIds } },
+              ],
+            },
+            orderBy: { name: 'asc' },
+            select: {
+              id: true,
+              name: true,
+              designation: true,
+              divisionId: true,
+              pmuId: true,
+              division: { select: { name: true, avatarColour: true } },
+            },
+          })
+        ).map((u) => ({
+          id: u.id,
+          name: u.name,
+          designation: u.designation,
+          divisionId: u.divisionId,
+          pmuId: u.pmuId,
+          divisionName: u.division.name,
+          divisionColour: u.division.avatarColour,
+        }))
+      : [];
+
   const taskContext = await buildNotificationTaskContext(recentRaw);
 
   const recent: BellNotification[] = recentRaw.map((n) => ({
@@ -107,6 +146,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         s3Configured={isS3Configured()}
         canCreateDivisionTasks={canCreateDivisionTasks}
         createTargets={createTargets}
+        ownerCandidates={ownerCandidates}
       >
         {children}
         <QuickCreateFab />
