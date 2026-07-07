@@ -173,6 +173,32 @@ async function canEditTask(
   return actor !== null && canActAsHeadOf(actor, task.divisionId);
 }
 
+/**
+ * Editing a task's definition — its name, due date, milestone, or
+ * recurrence — and deleting it are privileged actions. Unlike canEditTask,
+ * simply owning the task is NOT enough: a normal user who receives a task
+ * (e.g. via transfer) can work it (status, subtasks) but cannot redefine
+ * or delete it. Allowed for a Super Admin, OSD, JS, a director of the
+ * task's division, or its head — and for a user's own personal task, which
+ * only they can see.
+ */
+async function canEditTaskDetails(
+  callerId: string,
+  task: { ownerId: string; divisionId: string; visibility: string },
+): Promise<boolean> {
+  if (task.visibility === 'personal' && task.ownerId === callerId) return true;
+  const caller = await prisma.user.findUnique({
+    where: { id: callerId },
+    select: { isSuperAdmin: true, hierarchySlot: true, divisionId: true },
+  });
+  if (!caller) return false;
+  if (caller.isSuperAdmin) return true;
+  if (caller.hierarchySlot === 'js' || caller.hierarchySlot === 'osd') return true;
+  if (caller.hierarchySlot === 'director' && caller.divisionId === task.divisionId) return true;
+  const actor = await getRbacActor(callerId);
+  return actor !== null && canActAsHeadOf(actor, task.divisionId);
+}
+
 async function canViewTask(callerId: string, taskId: string): Promise<boolean> {
   const me = await prisma.user.findUnique({
     where: { id: callerId },
@@ -642,6 +668,22 @@ export async function updateTaskFieldsAction(
     return fail('Only the task owner, creator, or head of division can edit this task.', epoch);
   }
 
+  // Name, due date, milestone, and recurrence redefine the task, so they
+  // need the stricter gate — a normal owner (e.g. after a transfer) may
+  // still change status/subtasks/description, but not these. Each editor
+  // posts only its own field, so presence is a reliable signal.
+  const editsDefinition =
+    parsed.data.name !== undefined ||
+    parsed.data.dueDate !== undefined ||
+    parsed.data.milestone !== undefined ||
+    parsed.data.recurrenceRule !== undefined;
+  if (editsDefinition && !(await canEditTaskDetails(me.id, task))) {
+    return fail(
+      'Only a division head, OSD, JS, or Super Admin can change the name, due date, milestone, or recurrence.',
+      epoch,
+    );
+  }
+
   const data: Record<string, unknown> = {};
   const events: { eventType: string; payload: Record<string, unknown> }[] = [];
 
@@ -992,10 +1034,28 @@ export async function updateSubtaskAction(
 
   const updates: Record<string, unknown> = {};
   const activityChanges: string[] = [];
+  // Extra activity detail for a reassignment — who it moved from and to —
+  // so the log plainly records the hand-off, not just "reassigned".
+  let reassignDetail: {
+    fromId?: string;
+    fromName?: string | null;
+    toId?: string;
+    toName?: string | null;
+  } = {};
 
   if (parsed.data.assigneeId && parsed.data.assigneeId !== subtask.ownerId) {
     updates.ownerId = parsed.data.assigneeId;
     activityChanges.push('reassigned');
+    const [fromUser, toUser] = await Promise.all([
+      prisma.user.findUnique({ where: { id: subtask.ownerId }, select: { name: true } }),
+      prisma.user.findUnique({ where: { id: parsed.data.assigneeId }, select: { name: true } }),
+    ]);
+    reassignDetail = {
+      fromId: subtask.ownerId,
+      fromName: fromUser?.name ?? null,
+      toId: parsed.data.assigneeId,
+      toName: toUser?.name ?? null,
+    };
   }
   if (parsed.data.dueDate !== undefined) {
     updates.dueDate = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null;
@@ -1012,7 +1072,12 @@ export async function updateSubtaskAction(
           taskId: parent.id,
           actorId: me.id,
           eventType: 'subtask_updated',
-          payload: { subtaskId: subtask.id, name: subtask.name, changes: activityChanges },
+          payload: {
+            subtaskId: subtask.id,
+            name: subtask.name,
+            changes: activityChanges,
+            ...reassignDetail,
+          },
         },
       }),
     ]);
@@ -1337,21 +1402,22 @@ export async function deleteTaskAction(
       createdById: true,
       ownerId: true,
       divisionId: true,
+      visibility: true,
     },
   });
   if (!task) return fail('Task not found.', epoch);
 
-  // Delete rights: the owner or creator, a Super Admin (any task), or the
-  // head of the task's division. canActAsHeadOf covers Super Admin plus
-  // the direct heads and active delegates of that division.
+  // Delete rights: a Super Admin (any task) or the head of the task's
+  // division (canActAsHeadOf covers both, plus active delegates), and a
+  // user for their own personal task. A normal user who merely owns a
+  // division task — e.g. after a transfer — can no longer delete it.
   const actor = await getRbacActor(me.id);
   const allowed =
-    task.createdById === me.id ||
-    task.ownerId === me.id ||
+    (task.visibility === 'personal' && task.ownerId === me.id) ||
     (actor !== null && canActAsHeadOf(actor, task.divisionId));
   if (!allowed) {
     return fail(
-      'Only the owner, creator, a division head, or a Super Admin can delete this task.',
+      'Only a division head or a Super Admin can delete this task.',
       epoch,
     );
   }

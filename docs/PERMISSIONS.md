@@ -36,7 +36,8 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 | **See Personal-visibility tasks of others** |  |  |  |  |  |  |  |  | ✓ (audit only) |
 | **Create task (personal visibility)** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (in own division, will be PMU-tagged) | ✓ |
 | **Create division-level task** | head³ | ✓ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ |
-| **Edit task they own** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Work a task they own** (status, priority, description, subtasks) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Redefine a task** (name, due date, milestone, recurrence) — see §5.13 | ✓ | ✓ | own div | head³ | head³ | head³ | head³ | head³ | ✓ |
 | **Edit any task they can see** |  | ✓ |  |  |  |  |  |  | ✓ |
 | **Comment / @mention on tasks they can see** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Change status on task they own / collaborate on** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -48,7 +49,7 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 | **Set JS Priority lane** |  | ✓ |  |  |  |  |  |  | ✓ |
 | **Toggle milestone** | own | ✓ | own | own | own | own | own | own | ✓ |
 | **Toggle visibility** | head³ | ✓ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ |
-| **Delete task (hard-delete)** | own | own | own · head³ | own · head³ | own · head³ | own · head³ | own · head³ | own · head³ | ✓ (any) |
+| **Delete task (hard-delete)** — own personal always; division task see §5.13 | head³ | head³ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ (any) |
 | **Archive shared task** | own | ✓ | own | own | own | own | own | own | ✓ (any) |
 | **Restore archived task** |  | ✓ |  |  |  |  |  |  | ✓ |
 
@@ -194,3 +195,12 @@ JS Engagements are the Office of JS's own layer:
 - Fields: title (required), date + start time (required; stored as one `starts_at` instant, IST wall-clock), venue or meeting link (optional), participants (existing active users), MoM notes, and optional attachment links. Attachments reuse the polymorphic `attachments` table (`owner_type = 'js_engagement'`).
 - Every engagement is anchored to the Office of JS division, so the caller's own membership is the only visibility gate needed.
 - From any date the calendar offers quick actions: **Add JS engagement** (managers only), **Create task** (opens Quick Create pre-dated), and **Create timeline file** (OSD / Super Admin). Clicking a task/TF opens its page; clicking an engagement opens its detail sheet with edit/delete for managers.
+
+### 5.13 Working a task vs redefining it (owner ≠ editor)
+
+Owning a task lets you **work** it, not **redefine** it. This matters after a transfer: the new owner is often a normal user, and simply becoming owner must not hand them control of the task's definition.
+
+- **A normal user (even the owner) cannot**: delete the task, or edit its **name**, **due date**, **milestone**, or **recurrence**. These are gated by `canEditTaskDetails` / the delete guard — Super Admin, OSD, JS, a director of the division, or its head. (A user's **own personal task** stays fully theirs to edit and delete.)
+- **The owner (and creator) can still**: change **status** and **priority**, edit the **description**, comment, and manage **subtasks** — including **reassigning a subtask** to someone else.
+- **Subtask reassignment is logged with full detail**: `updateSubtaskAction` records a `subtask_updated` activity event carrying the subtask, the previous and new assignee (`fromName` / `toName`), and the actor; the activity log renders it as "‹actor› reassigned subtask ‹name› to ‹assignee› on ‹date, time›".
+- Enforced on both sides: the task page hides the restricted controls (`canEditDetails`, `canDelete`), and the server actions (`updateTaskFieldsAction`, `deleteTaskAction`) re-check, so a stale client or direct call cannot bypass them.

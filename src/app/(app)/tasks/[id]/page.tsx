@@ -131,16 +131,17 @@ export default async function TaskDetailPage({ params }: PageProps) {
   const isHeadOfTaskDivision =
     actor !== null && actor.headedDivisionIds.includes(task.divisionId);
 
-  // Delete rights mirror deleteTaskAction: owner, creator, Super Admin
-  // (any task), or the head of the task's division.
+  // Delete mirrors deleteTaskAction: a Super Admin or the head of the
+  // task's division — plus a user's own personal task. A normal user who
+  // merely owns a division task (e.g. after a transfer) cannot delete it.
   const canDelete =
-    task.createdById === session.user.id ||
-    isOwner ||
     session.user.isSuperAdmin ||
-    isHeadOfTaskDivision;
+    isHeadOfTaskDivision ||
+    (task.visibility === 'personal' && task.ownerId === session.user.id);
 
-  // Field editing: owner, creator, Director+ in same division, division
-  // head of the task's division, OSD, JS, Super Admin.
+  // Working the task — status, priority, description, subtasks — stays open
+  // to the owner, creator, Director+ in same division, head, OSD, JS,
+  // Super Admin.
   const canEditFields =
     task.ownerId === session.user.id ||
     task.createdById === session.user.id ||
@@ -149,6 +150,17 @@ export default async function TaskDetailPage({ params }: PageProps) {
     session.user.hierarchySlot === 'js' ||
     (session.user.hierarchySlot === 'director' && session.user.divisionId === task.divisionId) ||
     isHeadOfTaskDivision;
+
+  // Redefining the task — name, due date, milestone, recurrence — is
+  // stricter: a normal owner (e.g. after a transfer) cannot. Mirrors
+  // canEditTaskDetails on the server. Own personal tasks stay fully editable.
+  const canEditDetails =
+    session.user.isSuperAdmin ||
+    session.user.hierarchySlot === 'osd' ||
+    session.user.hierarchySlot === 'js' ||
+    (session.user.hierarchySlot === 'director' && session.user.divisionId === task.divisionId) ||
+    isHeadOfTaskDivision ||
+    (task.visibility === 'personal' && task.ownerId === session.user.id);
 
   // Collaborator editing: owner, creator, or OSD / Super Admin can manage.
   const canEditCollaborators =
@@ -443,7 +455,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         {task.refNumber ? (
           <span className="font-mono text-[11px] text-ink-3 tracking-wide">{task.refNumber}</span>
         ) : null}
-        <TaskTitleEditor taskId={task.id} name={task.name} canEdit={canEditFields} />
+        <TaskTitleEditor taskId={task.id} name={task.name} canEdit={canEditDetails} />
 
         <p className="mt-2 text-[11px] text-ink-3 inline-flex items-center gap-1.5">
           <i className="ti ti-edit text-[12px]" aria-hidden="true" />
@@ -487,7 +499,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         reassignCandidates={reassignCandidates}
         pendingReassignment={pendingReassignment}
         canReassign={canReassign}
-        canEditFields={canEditFields}
+        canEditFields={canEditDetails}
         canEditVisibility={canEditVisibility}
         canChangeDivision={canChangeDivision}
         divisions={allDivisions}

@@ -124,6 +124,20 @@ function describeEvent(type: string, payload: Record<string, unknown> | null): s
       return `completed subtask "${String(payload.name ?? '')}"`;
     case 'subtask_reopened':
       return `reopened subtask "${String(payload.name ?? '')}"`;
+    case 'subtask_updated': {
+      const name = String(payload.name ?? '');
+      const changes = Array.isArray(payload.changes) ? (payload.changes as string[]) : [];
+      const reassigned = changes.includes('reassigned');
+      const deadline = changes.includes('deadline updated');
+      if (reassigned && payload.toName) {
+        const to = String(payload.toName);
+        return deadline
+          ? `reassigned subtask "${name}" to ${to} and updated its deadline`
+          : `reassigned subtask "${name}" to ${to}`;
+      }
+      if (deadline) return `updated the deadline of subtask "${name}"`;
+      return `updated subtask "${name}"`;
+    }
     case 'task_archived':
       return 'archived this task';
     case 'task_transferred':
@@ -143,15 +157,17 @@ function describeEvent(type: string, payload: Record<string, unknown> | null): s
 
 /**
  * Events where an exact date and time matters more than a relative phrase:
- * read receipts, and ownership changes (transfer / reassignment) — so the
- * log states plainly who handed a task to whom and exactly when.
+ * read receipts, and ownership/assignment changes (task transfer or
+ * reassignment, subtask reassignment) — so the log states plainly who
+ * handed a task or subtask to whom, and exactly when.
  */
 function showsAbsoluteTime(type: string): boolean {
   return (
     type === 'task_read' ||
     type === 'subtask_read' ||
     type === 'task_transferred' ||
-    type === 'owner_changed'
+    type === 'owner_changed' ||
+    type === 'subtask_updated'
   );
 }
 
