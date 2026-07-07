@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
+import { QuoteCard } from '@/components/ui';
 import { updateTimelineFileFieldsAction } from '@/app/actions/timeline-files';
-import { cn } from '@/lib/utils';
 
 type SecretaryQuoteSectionProps = {
   tfId: string;
@@ -89,21 +89,7 @@ export function SecretaryQuoteSection({
           </div>
         </form>
       ) : comments ? (
-        <blockquote className="relative bg-panel border border-primary-line/40 border-l-4 border-l-primary rounded-r-xl px-4 py-3.5">
-          <span
-            aria-hidden="true"
-            className="absolute top-1 right-3 font-serif text-[34px] leading-none text-primary-line/70 select-none"
-          >
-            &ldquo;
-          </span>
-          <p className="font-serif text-[14px] leading-relaxed text-ink pr-6 whitespace-pre-wrap">
-            {comments}
-          </p>
-          <div className="mt-2.5 flex items-center gap-1.5 text-[11px] font-medium text-primary">
-            <span aria-hidden="true" className="w-4 h-px bg-primary-line" />
-            {signature}
-          </div>
-        </blockquote>
+        <QuoteCard text={comments} signature={signature} tone="primary" />
       ) : null}
     </section>
   );

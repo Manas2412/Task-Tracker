@@ -3,24 +3,26 @@
 import { useEffect, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
+import { QuoteCard } from '@/components/ui';
 import { updateTimelineFileFieldsAction } from '@/app/actions/timeline-files';
 
 type DeskCommentSectionProps = {
   tfId: string;
   comments: string | null;
+  /** Optional attribution row shown under the note; omitted when absent. */
+  signature?: string | null;
   canEdit: boolean;
 };
 
 /**
- * Desk-level note — a plain operational comment, distinct from the
- * Secretary's formal quote callout (no indigo/serif treatment; this is
- * working-level annotation, not a directive).
- *   - canEdit + comments → box + Edit button
+ * Desk-level note, rendered as the same quoted callout as the Secretary's
+ * comments (Design Tokens §6.4) — the section label tells the two apart.
+ *   - canEdit + comments → quote card + Edit button
  *   - canEdit + no comments → small "Add" button
- *   - !canEdit + comments → read-only box
+ *   - !canEdit + comments → read-only quote card
  *   - !canEdit + no comments → nothing renders
  */
-export function DeskCommentSection({ tfId, comments, canEdit }: DeskCommentSectionProps) {
+export function DeskCommentSection({ tfId, comments, signature, canEdit }: DeskCommentSectionProps) {
   const [editing, setEditing] = useState(false);
   const [state, formAction] = useFormState(updateTimelineFileFieldsAction, {
     ok: false,
@@ -84,9 +86,7 @@ export function DeskCommentSection({ tfId, comments, canEdit }: DeskCommentSecti
           </div>
         </form>
       ) : comments ? (
-        <p className="text-[13px] text-ink-2 leading-relaxed whitespace-pre-wrap bg-bg border border-line rounded-lg px-3 py-2.5">
-          {comments}
-        </p>
+        <QuoteCard text={comments} signature={signature} tone="primary" />
       ) : (
         <p className="text-[13px] text-ink-3 italic">No desk comment yet.</p>
       )}
