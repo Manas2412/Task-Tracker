@@ -46,6 +46,8 @@ type DivisionOption = {
 type SectionDetailsProps = {
   taskId: string;
   owner: { id: string; name: string; division: { avatarColour: string } };
+  /** True when the task has no owner yet (a division task awaiting a pull). */
+  isUnassigned: boolean;
   due: Date | null;
   divisionId: string;
   divisionName: string;
@@ -86,6 +88,7 @@ export function SectionDetails(props: SectionDetailsProps) {
         <OwnerRow
           taskId={props.taskId}
           owner={props.owner}
+          isUnassigned={props.isUnassigned}
           candidates={props.reassignCandidates}
           canReassign={props.canReassign && !props.pendingReassignment}
           canViewProfile={props.canViewProfiles}
@@ -147,15 +150,33 @@ function RecurrenceRow({
 // Owner row — clickable if canReassign; opens a user picker sheet
 // ------------------------------------------------------------
 
+// Placeholder shown in the Owner row when a division task has no owner yet
+// (owner still its creator) — the state a division member can pull from.
+function UnassignedOwner() {
+  return (
+    <span className="inline-flex items-center gap-2 text-ink-3">
+      <span
+        className="w-[22px] h-[22px] rounded-full border border-dashed border-line grid place-items-center shrink-0"
+        aria-hidden="true"
+      >
+        <i className="ti ti-user text-[11px]" />
+      </span>
+      Unassigned
+    </span>
+  );
+}
+
 function OwnerRow({
   taskId,
   owner,
+  isUnassigned,
   candidates,
   canReassign,
   canViewProfile,
 }: {
   taskId: string;
   owner: { id: string; name: string; division: { avatarColour: string } };
+  isUnassigned: boolean;
   candidates: ReassignCandidate[];
   canReassign: boolean;
   canViewProfile: boolean;
@@ -181,6 +202,13 @@ function OwnerRow({
     : candidates;
 
   if (!canReassign) {
+    if (isUnassigned) {
+      return (
+        <Row icon="ti-user" label="Owner">
+          <UnassignedOwner />
+        </Row>
+      );
+    }
     const display = (
       <div className="inline-flex items-center gap-2">
         <Avatar
@@ -206,25 +234,29 @@ function OwnerRow({
   return (
     <>
       <Row icon="ti-user" label="Owner" onClick={() => setOpen(true)}>
-        <div className="inline-flex items-center gap-2">
-          <Avatar
-            initials={initialsOf(owner.name)}
-            colour={owner.division.avatarColour}
-            size="xs"
-            ariaLabel={`Owner ${owner.name}`}
-          />
-          {canViewProfile ? (
-            <Link
-              href={`/users/${owner.id}`}
-              onClick={(e) => e.stopPropagation()}
-              className="hover:underline"
-            >
-              {owner.name}
-            </Link>
-          ) : (
-            <span>{owner.name}</span>
-          )}
-        </div>
+        {isUnassigned ? (
+          <UnassignedOwner />
+        ) : (
+          <div className="inline-flex items-center gap-2">
+            <Avatar
+              initials={initialsOf(owner.name)}
+              colour={owner.division.avatarColour}
+              size="xs"
+              ariaLabel={`Owner ${owner.name}`}
+            />
+            {canViewProfile ? (
+              <Link
+                href={`/users/${owner.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="hover:underline"
+              >
+                {owner.name}
+              </Link>
+            ) : (
+              <span>{owner.name}</span>
+            )}
+          </div>
+        )}
       </Row>
 
       <Sheet open={open} onClose={() => { setOpen(false); setSearch(''); }} title="Reassign task">
