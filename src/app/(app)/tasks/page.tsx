@@ -53,9 +53,10 @@ export default async function TasksPage({ searchParams }: PageProps) {
     fetchVisibleTasks({ callerId: me.id, filter, divisionId: divisionFilter || undefined, sort }),
     fetchTaskCounts(me.id),
     prisma.division.findMany({
-      where: { kind: 'division' },
+      // Divisions and their PMUs, so PMU-owned tasks are filterable too.
+      where: { kind: { in: ['division', 'pmu'] } },
       select: { id: true, name: true },
-      orderBy: { displayOrder: 'asc' },
+      orderBy: [{ kind: 'asc' }, { displayOrder: 'asc' }, { name: 'asc' }],
     }),
   ]);
 

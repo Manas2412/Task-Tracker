@@ -355,9 +355,11 @@ export default async function TaskDetailPage({ params }: PageProps) {
       }),
       canChangeDivision
         ? prisma.division.findMany({
-            where: { kind: 'division' },
-            orderBy: { displayOrder: 'asc' },
-            select: { id: true, name: true, avatarColour: true },
+            // Structure & Hierarchy: top-level divisions and their PMUs.
+            // Assigning a task to one auto-owns it to the head / team leader.
+            where: { kind: { in: ['division', 'pmu'] } },
+            orderBy: [{ kind: 'asc' }, { displayOrder: 'asc' }, { name: 'asc' }],
+            select: { id: true, name: true, avatarColour: true, kind: true },
           })
         : Promise.resolve([]),
       canReassign && !reassignAnywhere ? getHeadedDivisionsByUser() : Promise.resolve(new Map<string, string[]>()),

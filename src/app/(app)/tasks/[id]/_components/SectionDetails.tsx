@@ -40,6 +40,7 @@ type DivisionOption = {
   id: string;
   name: string;
   avatarColour: string;
+  kind: string;
 };
 
 type SectionDetailsProps = {
@@ -559,9 +560,15 @@ function DivisionRow({
           <input type="hidden" name="taskId" value={taskId} />
           <input type="hidden" name="divisionId" value={chosen} />
 
+          <p className="text-[12px] text-ink-3">
+            Ownership follows the choice: a division goes to its head, a PMU
+            to its team leader.
+          </p>
+
           <div className="flex flex-col gap-1" role="radiogroup">
             {divisions.map((d) => {
               const active = chosen === d.id;
+              const isPmu = d.kind === 'pmu';
               return (
                 <button
                   key={d.id}
@@ -580,6 +587,11 @@ function DivisionRow({
                     aria-hidden="true"
                   />
                   <span className="flex-1 text-[14px] font-medium text-ink">{d.name}</span>
+                  {isPmu ? (
+                    <span className="shrink-0 text-[10px] font-medium text-ink-2 bg-line-2 border border-line px-1.5 py-0.5 rounded">
+                      PMU
+                    </span>
+                  ) : null}
                   {active ? (
                     <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-white shrink-0">
                       <i className="ti ti-check text-[12px]" aria-hidden="true" />

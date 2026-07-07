@@ -69,6 +69,45 @@ export async function getRbacActor(userId: string): Promise<RbacActor | null> {
 }
 
 /**
+ * Who owns a task placed in a given division or PMU — resolved from
+ * Structure & Hierarchy, the single source of truth:
+ *   - PMU (kind = 'pmu')       → the active user with pmuRole
+ *                                'pmu_team_leader' for that PMU.
+ *   - Division / sub-div / section → the division's head
+ *                                (divisions.head_user_id), if active.
+ * Falls back to `fallbackOwnerId` (the creator, per product rule) when the
+ * head or team leader is unset or inactive, so a task always has an owner.
+ */
+export async function resolveDivisionOwner(
+  divisionId: string,
+  fallbackOwnerId: string,
+): Promise<string> {
+  const division = await prisma.division.findUnique({
+    where: { id: divisionId },
+    select: { kind: true, headUserId: true },
+  });
+  if (!division) return fallbackOwnerId;
+
+  if (division.kind === 'pmu') {
+    const leader = await prisma.user.findFirst({
+      where: { pmuId: divisionId, pmuRole: 'pmu_team_leader', isActive: true },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return leader?.id ?? fallbackOwnerId;
+  }
+
+  if (division.headUserId) {
+    const head = await prisma.user.findUnique({
+      where: { id: division.headUserId },
+      select: { id: true, isActive: true },
+    });
+    if (head?.isActive) return head.id;
+  }
+  return fallbackOwnerId;
+}
+
+/**
  * Map of userId → divisions they head right now (direct + delegated),
  * for decorating candidate lists without one query per user.
  */

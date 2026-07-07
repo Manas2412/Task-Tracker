@@ -46,11 +46,16 @@ export function useQuickCreate(): QuickCreateContextValue {
 // Provider
 // ------------------------------------------------------------
 
+/** A division or PMU a division-task creator may target (Structure & Hierarchy). */
+export type DivisionTarget = { id: string; name: string; kind: string };
+
 type ProviderProps = {
   defaultDivisionId: string;
   s3Configured: boolean;
   /** Division-level creation is a head power — see canCreateDivisionTask. */
   canCreateDivisionTasks: boolean;
+  /** Divisions + PMUs the caller may create a task in (auto-owns to head/leader). */
+  createTargets: DivisionTarget[];
   children: ReactNode;
 };
 
@@ -58,6 +63,7 @@ export function QuickCreateProvider({
   defaultDivisionId,
   s3Configured,
   canCreateDivisionTasks,
+  createTargets,
   children,
 }: ProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -79,6 +85,7 @@ export function QuickCreateProvider({
             defaultDivisionId={defaultDivisionId}
             s3Configured={s3Configured}
             canCreateDivisionTasks={canCreateDivisionTasks}
+            createTargets={createTargets}
             prefillDueDate={prefill?.dueDate}
           />
         ) : null}
@@ -114,6 +121,7 @@ type FormProps = {
   defaultDivisionId: string;
   s3Configured: boolean;
   canCreateDivisionTasks: boolean;
+  createTargets: DivisionTarget[];
   /** Prefilled due date (YYYY-MM-DD), e.g. when created from the calendar. */
   prefillDueDate?: string;
 };
@@ -143,6 +151,7 @@ function QuickCreateForm({
   defaultDivisionId,
   s3Configured,
   canCreateDivisionTasks,
+  createTargets,
   prefillDueDate,
 }: FormProps) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -157,6 +166,14 @@ function QuickCreateForm({
   const [priority, setPriority] = useState<(typeof PRIORITIES)[number]['value']>('low');
   const [visibility, setVisibility] = useState<(typeof VISIBILITIES)[number]['value']>(
     canCreateDivisionTasks ? 'division' : 'personal',
+  );
+  // Which division/PMU a division task lands in — ownership auto-resolves
+  // to that division's head or the PMU's team leader on the server. Default
+  // to the caller's own division when it's a valid target, else the first.
+  const [divisionId, setDivisionId] = useState(
+    createTargets.some((t) => t.id === defaultDivisionId)
+      ? defaultDivisionId
+      : createTargets[0]?.id ?? defaultDivisionId,
   );
 
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -246,7 +263,11 @@ function QuickCreateForm({
 
   return (
     <form ref={formRef} action={formAction} className="flex flex-col gap-3" noValidate>
-      <input type="hidden" name="divisionId" value={defaultDivisionId} />
+      <input
+        type="hidden"
+        name="divisionId"
+        value={visibility === 'division' ? divisionId : defaultDivisionId}
+      />
       <input type="hidden" name="priority" value={priority} />
       <input type="hidden" name="visibility" value={visibility} />
 
@@ -400,6 +421,28 @@ function QuickCreateForm({
               </p>
             )}
           </Field>
+
+          {/* Division / PMU target — ownership auto-resolves to the head or
+              team leader. Only shown to authorized creators of division tasks. */}
+          {canCreateDivisionTasks && visibility === 'division' && createTargets.length > 0 ? (
+            <Field label="Division or PMU">
+              <select
+                value={divisionId}
+                onChange={(e) => setDivisionId(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border border-line bg-panel text-[14px] text-ink outline-none focus:border-ink appearance-none"
+              >
+                {createTargets.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                    {t.kind === 'pmu' ? ' · PMU' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-ink-3">
+                The task is owned by this division&rsquo;s head — or, for a PMU, its team leader.
+              </p>
+            </Field>
+          ) : null}
 
           {/* Milestone */}
           <CheckRow
