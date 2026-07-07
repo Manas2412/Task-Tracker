@@ -306,15 +306,28 @@ export async function createTaskAction(
     return fail('You can only create tasks in your own division.', epoch);
   }
 
-  // Ownership follows Structure & Hierarchy: a division-level task is owned
-  // by the target division's head — or, for a PMU, its team leader — which
-  // also makes a PMU task visible to the whole PMU team (owner-scoped
-  // clause). Personal tasks and any division without a head fall back to
-  // the creator.
-  const ownerId =
-    parsed.data.visibility === 'division'
-      ? await resolveDivisionOwner(targetDivisionId, meRow.id)
-      : meRow.id;
+  // New tasks start unassigned: the owner is left as the creator, which the
+  // pull flow (pullTaskAction) treats as "no owner yet". A division task is
+  // already visible to the whole division through the division-scoped
+  // visibility clause, so any member can see it and pull it to take
+  // ownership — no owner is named up front. Personal tasks are simply owned
+  // by their creator.
+  //
+  // PMUs are the exception: PMU-team visibility is owner-scoped (a member
+  // sees tasks owned by a teammate, not a division board — see
+  // buildVisibilityClausesFrom), so a PMU task must be owned by a PMU member
+  // to stay visible to the team. It keeps the Structure & Hierarchy default:
+  // the PMU's team leader (falling back to the creator when unset).
+  let ownerId = meRow.id;
+  if (parsed.data.visibility === 'division') {
+    const targetDivision = await prisma.division.findUnique({
+      where: { id: targetDivisionId },
+      select: { kind: true },
+    });
+    if (targetDivision?.kind === 'pmu') {
+      ownerId = await resolveDivisionOwner(targetDivisionId, meRow.id);
+    }
+  }
 
   try {
     const task = await prisma.$transaction(async (tx) => {
@@ -394,8 +407,9 @@ export async function createTaskAction(
       return created;
     });
 
-    // When ownership was auto-assigned to a head / team leader other than
-    // the creator, let them know they now own the task.
+    // When ownership was auto-assigned to a PMU team leader other than the
+    // creator, let them know they now own the task. (Regular division tasks
+    // start unassigned, so ownerId === meRow.id and this does not fire.)
     if (ownerId !== meRow.id) {
       await prisma.notification.create({
         data: {

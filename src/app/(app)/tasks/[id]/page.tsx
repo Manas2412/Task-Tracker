@@ -118,6 +118,12 @@ export default async function TaskDetailPage({ params }: PageProps) {
 
   const isOwner = task.ownerId === session.user.id;
   const isUnassigned = task.ownerId === task.createdById;
+  // The Owner row reads as "Unassigned" for a top-level division task still
+  // owned by its creator — the state a division member can pull from. A
+  // personal task is genuinely owned by its creator, and subtasks are always
+  // assigned, so neither shows the unassigned label.
+  const ownerUnassigned =
+    isUnassigned && task.visibility !== 'personal' && !task.parentTaskId;
   const canPull =
     isUnassigned &&
     !isOwner &&
@@ -502,6 +508,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
       <SectionDetails
         taskId={task.id}
         owner={task.owner}
+        isUnassigned={ownerUnassigned}
         due={task.dueDate}
         divisionId={task.divisionId}
         divisionName={task.division.name}

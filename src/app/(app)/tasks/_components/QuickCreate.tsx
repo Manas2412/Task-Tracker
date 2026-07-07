@@ -422,8 +422,9 @@ function QuickCreateForm({
             )}
           </Field>
 
-          {/* Division / PMU target — ownership auto-resolves to the head or
-              team leader. Only shown to authorized creators of division tasks. */}
+          {/* Division / PMU target. A division task starts unassigned for any
+              member to pull; a PMU task is owned by its team leader. Only shown
+              to authorized creators of division tasks. */}
           {canCreateDivisionTasks && visibility === 'division' && createTargets.length > 0 ? (
             <Field label="Division or PMU">
               <select
@@ -439,7 +440,7 @@ function QuickCreateForm({
                 ))}
               </select>
               <p className="mt-1 text-[11px] text-ink-3">
-                The task is owned by this division&rsquo;s head — or, for a PMU, its team leader.
+                A division task starts unassigned — any member of the division can pull it to take ownership. A PMU task is owned by its team leader.
               </p>
             </Field>
           ) : null}
