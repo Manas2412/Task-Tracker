@@ -74,13 +74,22 @@ export function describeNotification(
     }
     case 'mention': {
       const by = typeof p.actorName === 'string' ? p.actorName.trim() : '';
+      // A mention lives on a task or a Timeline File; the payload carries
+      // whichever it is, so link and title follow suit.
+      const onTf = typeof p.timelineFileId === 'string';
+      const href = onTf ? `/timeline-files/${String(p.timelineFileId)}` : taskHref;
+      const label = onTf
+        ? typeof p.tfSubject === 'string'
+          ? p.tfSubject.trim()
+          : ''
+        : title;
       return {
         icon: 'ti-at',
         iconClass: 'text-primary',
-        text: title
-          ? `${by ? `${by} mentioned` : 'Mentioned'} you on "${title}"`
+        text: label
+          ? `${by ? `${by} mentioned` : 'Mentioned'} you on "${label}"`
           : 'Mentioned you in a comment',
-        href: taskHref,
+        href,
         accent: 'primary',
       };
     }

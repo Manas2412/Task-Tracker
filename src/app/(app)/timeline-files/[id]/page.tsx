@@ -10,6 +10,12 @@ import {
 } from '@/components/ui';
 import { CompleteButton } from '@/components/ui/CompleteButton';
 import { canEditTfAttachments } from '@/app/actions/attachments';
+import {
+  postTfCommentAction,
+  editTfCommentAction,
+  deleteTfCommentAction,
+} from '@/app/actions/timeline-files';
+import { Discussion, type Mentionable } from '@/components/discussion/Discussion';
 import { updateTimelineFileStatusAction } from '@/app/actions/timeline-files';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
@@ -93,10 +99,43 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         include: { actor: { select: ACTOR_SUMMARY_SELECT } },
         orderBy: { createdAt: 'desc' },
       },
+      comments: {
+        where: { parentCommentId: null },
+        include: {
+          user: { select: USER_SUMMARY_SELECT },
+          replies: {
+            include: { user: { select: USER_SUMMARY_SELECT } },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      },
     },
   });
 
   if (!tf) notFound();
+
+  // Mentionables for the discussion typeahead: active users, capped for the
+  // in-memory picker (filtered client-side).
+  const mentionableRows = await prisma.user.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      designation: true,
+      division: { select: { avatarColour: true } },
+    },
+    orderBy: { name: 'asc' },
+    take: 200,
+  });
+  const mentionables: Mentionable[] = mentionableRows.map((u) => ({
+    id: u.id,
+    name: u.name,
+    username: u.username,
+    designation: u.designation,
+    divisionColour: u.division.avatarColour,
+  }));
 
   // For the marked-to editor — OSD picks from any top-level division.
   const allDivisions: DivisionOption[] = canEditFieldsHelper(me)
@@ -371,6 +410,20 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
           </Row>
         </dl>
       </section>
+
+      <Discussion
+        entityField="id"
+        entityId={tf.id}
+        actions={{
+          post: postTfCommentAction,
+          edit: editTfCommentAction,
+          del: deleteTfCommentAction,
+        }}
+        comments={tf.comments}
+        mentionables={mentionables}
+        currentUserId={me.id}
+        canViewProfiles={me.isSuperAdmin || me.hierarchySlot === 'osd'}
+      />
 
       <TfActivitySection
         activity={tf.activity.map((a) => ({

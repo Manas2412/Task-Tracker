@@ -4,8 +4,11 @@ import { logError } from '@/lib/utils/log';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
+import { Prisma } from '@prisma/client';
+
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { buildTfVisibilityClause } from '@/lib/timeline-files';
 
 /**
  * Timeline File server actions (PRD §5.2).
@@ -855,5 +858,191 @@ export async function deleteTimelineFileAction(
   }
 
   revalidatePath('/timeline-files');
+  return ok(epoch);
+}
+
+// ============================================================
+// Discussion — threaded comments on a Timeline File
+// (mirrors the task comment actions in src/app/actions/tasks.ts)
+// ============================================================
+
+const TF_COMMENT_EDIT_WINDOW_MS = 5 * 60 * 1000;
+
+/** Resolve `@username` handles in a comment body to user ids. */
+async function resolveTfMentions(body: string): Promise<string[]> {
+  const handles = Array.from(body.matchAll(/@([a-z0-9][a-z0-9._-]{1,40})/gi)).map(
+    (m) => m[1].toLowerCase(),
+  );
+  if (handles.length === 0) return [];
+  const users = await prisma.user.findMany({
+    where: { username: { in: handles } },
+    select: { id: true },
+  });
+  return users.map((u) => u.id);
+}
+
+/** A user may join a TF discussion exactly when they can see the file. */
+async function canViewTf(userId: string, tfId: string): Promise<boolean> {
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, hierarchySlot: true, isSuperAdmin: true, divisionId: true },
+  });
+  if (!me) return false;
+  const clause = await buildTfVisibilityClause(me);
+  const count = await prisma.timelineFile.count({ where: { id: tfId, ...clause } });
+  return count > 0;
+}
+
+const postTfCommentSchema = z.object({
+  id: z.string().uuid(),
+  body: z.string().trim().min(1, 'Comment cannot be empty').max(4000),
+  parentCommentId: z.string().uuid().optional(),
+});
+
+export async function postTfCommentAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const rawParent = formData.get('parentCommentId');
+  const parsed = postTfCommentSchema.safeParse({
+    id: formData.get('id'),
+    body: formData.get('body'),
+    parentCommentId: rawParent && rawParent !== '' ? String(rawParent) : undefined,
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
+    return { ok: false, fieldErrors, epoch };
+  }
+
+  const tf = await prisma.timelineFile.findUnique({
+    where: { id: parsed.data.id },
+    select: { id: true, subject: true, archivedAt: true },
+  });
+  if (!tf || tf.archivedAt) return fail('Timeline file not found.', epoch);
+  if (!(await canViewTf(me.id, tf.id))) return fail('Timeline file not found.', epoch);
+
+  const mentions = await resolveTfMentions(parsed.data.body);
+
+  try {
+    const comment = await prisma.timelineFileComment.create({
+      data: {
+        timelineFileId: tf.id,
+        userId: me.id,
+        body: parsed.data.body,
+        mentions,
+        parentCommentId: parsed.data.parentCommentId ?? null,
+      },
+    });
+
+    const mentionNotifs: Prisma.NotificationCreateManyInput[] = mentions
+      .filter((uid) => uid !== me.id)
+      .map((uid) => ({
+        userId: uid,
+        type: 'mention' as const,
+        payload: {
+          timelineFileId: tf.id,
+          tfSubject: tf.subject,
+          commentId: comment.id,
+          actorId: me.id,
+          actorName: me.name ?? null,
+        },
+      }));
+    if (mentionNotifs.length > 0) {
+      await prisma.notification.createMany({ data: mentionNotifs });
+    }
+  } catch (err) {
+    logError('postTfCommentAction failed', err);
+    return fail('Could not post comment.', epoch);
+  }
+
+  revalidateTf(tf.id);
+  return ok(epoch);
+}
+
+const editTfCommentSchema = z.object({
+  commentId: z.string().uuid(),
+  body: z.string().trim().min(1, 'Comment cannot be empty').max(4000),
+});
+
+export async function editTfCommentAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const parsed = editTfCommentSchema.safeParse({
+    commentId: formData.get('commentId'),
+    body: formData.get('body'),
+  });
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message;
+    return { ok: false, fieldErrors, epoch };
+  }
+
+  const comment = await prisma.timelineFileComment.findUnique({
+    where: { id: parsed.data.commentId },
+    select: { id: true, userId: true, timelineFileId: true, createdAt: true },
+  });
+  if (!comment) return fail('Comment not found.', epoch);
+  if (comment.userId !== me.id) return fail('You can only edit your own comments.', epoch);
+  if (Date.now() - comment.createdAt.getTime() > TF_COMMENT_EDIT_WINDOW_MS) {
+    return fail('Comments can only be edited within 5 minutes of posting.', epoch);
+  }
+
+  const mentions = await resolveTfMentions(parsed.data.body);
+
+  try {
+    await prisma.timelineFileComment.update({
+      where: { id: comment.id },
+      data: { body: parsed.data.body, mentions, editedAt: new Date() },
+    });
+  } catch (err) {
+    logError('editTfCommentAction failed', err);
+    return fail('Could not edit comment.', epoch);
+  }
+
+  revalidateTf(comment.timelineFileId);
+  return ok(epoch);
+}
+
+const deleteTfCommentSchema = z.object({ commentId: z.string().uuid() });
+
+export async function deleteTfCommentAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const parsed = deleteTfCommentSchema.safeParse({ commentId: formData.get('commentId') });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const comment = await prisma.timelineFileComment.findUnique({
+    where: { id: parsed.data.commentId },
+    select: { id: true, userId: true, timelineFileId: true, createdAt: true },
+  });
+  if (!comment) return fail('Comment not found.', epoch);
+  if (comment.userId !== me.id) return fail('You can only delete your own comments.', epoch);
+  if (Date.now() - comment.createdAt.getTime() > TF_COMMENT_EDIT_WINDOW_MS) {
+    return fail('Comments can only be deleted within 5 minutes of posting.', epoch);
+  }
+
+  try {
+    await prisma.timelineFileComment.delete({ where: { id: comment.id } });
+  } catch (err) {
+    logError('deleteTfCommentAction failed', err);
+    return fail('Could not delete comment.', epoch);
+  }
+
+  revalidateTf(comment.timelineFileId);
   return ok(epoch);
 }
