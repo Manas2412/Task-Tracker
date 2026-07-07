@@ -96,8 +96,14 @@ export type SearchTaskFilters = {
 // Helpers
 // ============================================================
 
+const MAX_QUERY_LENGTH = 200;
+
 function normaliseQuery(raw: string | null | undefined): string {
-  return (raw ?? '').trim();
+  return escapeIlike((raw ?? '').trim().slice(0, MAX_QUERY_LENGTH));
+}
+
+function escapeIlike(s: string): string {
+  return s.replace(/[%_\\]/g, (c) => `\\${c}`);
 }
 
 export function isQuerySearchable(query: string): boolean {
@@ -273,6 +279,7 @@ export async function searchUsersFor(
   if (!isQuerySearchable(q)) return { rows: [], total: 0 };
 
   const where: Prisma.UserWhereInput = {
+    isActive: true,
     OR: [
       { name: { contains: q, mode: 'insensitive' } },
       { username: { contains: q, mode: 'insensitive' } },

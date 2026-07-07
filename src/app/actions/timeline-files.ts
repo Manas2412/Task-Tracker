@@ -257,12 +257,13 @@ export async function updateTimelineFileStatusAction(
 
   const tf = await prisma.timelineFile.findUnique({
     where: { id: parsed.data.id },
-    include: { markedTo: { select: { divisionId: true } } },
+    include: {
+      createdBy: { select: { divisionId: true } },
+    },
   });
   if (!tf) return fail('Timeline file not found.', epoch);
   if (tf.status === parsed.data.status) return ok(epoch);
 
-  // Authorisation: OSD/Super Admin OR Director of a marked-to division.
   const meRow = await prisma.user.findUnique({
     where: { id: me.id },
     select: { hierarchySlot: true, isSuperAdmin: true, divisionId: true },
@@ -272,7 +273,7 @@ export async function updateTimelineFileStatusAction(
     (meRow.isSuperAdmin ||
       meRow.hierarchySlot === 'osd' ||
       (meRow.hierarchySlot === 'director' &&
-        tf.markedTo.some((m) => m.divisionId === meRow.divisionId)));
+        meRow.divisionId === tf.createdBy.divisionId));
   if (!allowed) return fail('You do not have permission to change this status.', epoch);
 
   try {
@@ -324,13 +325,11 @@ export async function updateTimelineFilePriorityAction(
 
   const tf = await prisma.timelineFile.findUnique({
     where: { id: parsed.data.id },
-    include: { markedTo: { select: { divisionId: true } } },
+    include: { createdBy: { select: { divisionId: true } } },
   });
   if (!tf) return fail('Timeline file not found.', epoch);
   if (tf.priority === parsed.data.priority) return ok(epoch);
 
-  // Same gate as status: OSD/Super Admin OR Director of a marked-to
-  // division — priority is a triage signal those officers own.
   const meRow = await prisma.user.findUnique({
     where: { id: me.id },
     select: { hierarchySlot: true, isSuperAdmin: true, divisionId: true },
@@ -340,7 +339,7 @@ export async function updateTimelineFilePriorityAction(
     (meRow.isSuperAdmin ||
       meRow.hierarchySlot === 'osd' ||
       (meRow.hierarchySlot === 'director' &&
-        tf.markedTo.some((m) => m.divisionId === meRow.divisionId)));
+        meRow.divisionId === tf.createdBy.divisionId));
   if (!allowed) return fail('You do not have permission to change this priority.', epoch);
 
   try {

@@ -63,6 +63,13 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!isAllowedMimeType(parsed.data.contentType)) {
+    return NextResponse.json(
+      { error: 'File type not allowed' },
+      { status: 400 },
+    );
+  }
+
   // Permission gate
   const allowed =
     parsed.data.scope === 'task'
@@ -94,4 +101,29 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+const ALLOWED_MIME_PREFIXES = ['image/', 'audio/', 'video/'];
+const ALLOWED_MIME_EXACT = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.oasis.opendocument.text',
+  'application/vnd.oasis.opendocument.spreadsheet',
+  'application/vnd.oasis.opendocument.presentation',
+  'application/zip',
+  'application/x-rar-compressed',
+  'application/x-7z-compressed',
+  'text/plain',
+  'text/csv',
+]);
+
+function isAllowedMimeType(mime: string): boolean {
+  const lower = mime.toLowerCase();
+  if (ALLOWED_MIME_EXACT.has(lower)) return true;
+  return ALLOWED_MIME_PREFIXES.some((prefix) => lower.startsWith(prefix));
 }

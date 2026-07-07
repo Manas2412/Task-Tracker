@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { canActAsHeadOf, getRbacActor } from '@/lib/rbac';
 
 /**
  * Tag actions (Phase 3 — final).
@@ -209,15 +210,15 @@ export async function deleteTagAction(
 // ============================================================
 
 async function canEditTaskTags(
-  me: { id: string; hierarchySlot: string; isSuperAdmin: boolean },
-  task: { ownerId: string; createdById: string },
+  me: { id: string; hierarchySlot: string; isSuperAdmin: boolean; divisionId: string },
+  task: { ownerId: string; createdById: string; divisionId: string },
 ): Promise<boolean> {
-  return (
-    me.isSuperAdmin ||
-    me.hierarchySlot === 'osd' ||
-    me.id === task.ownerId ||
-    me.id === task.createdById
-  );
+  if (me.isSuperAdmin) return true;
+  if (me.hierarchySlot === 'osd' || me.hierarchySlot === 'js') return true;
+  if (me.id === task.ownerId || me.id === task.createdById) return true;
+  if (me.hierarchySlot === 'director' && me.divisionId === task.divisionId) return true;
+  const actor = await getRbacActor(me.id);
+  return actor !== null && canActAsHeadOf(actor, task.divisionId);
 }
 
 const assignSchema = z.object({
@@ -241,7 +242,7 @@ export async function addTagToTaskAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, ownerId: true, createdById: true },
+    select: { id: true, ownerId: true, createdById: true, divisionId: true },
   });
   if (!task) return fail('Task not found.', epoch);
 
@@ -300,7 +301,7 @@ export async function removeTagFromTaskAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, ownerId: true, createdById: true },
+    select: { id: true, ownerId: true, createdById: true, divisionId: true },
   });
   if (!task) return fail('Task not found.', epoch);
 

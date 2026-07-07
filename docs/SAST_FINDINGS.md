@@ -239,7 +239,7 @@
 
 **Remediation:** Check `canCreateDivisionTask` before promoting visibility, or keep the task personal and let the new owner decide.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — visibility promotion now gated by `canCreateDivisionTask`; personal tasks stay personal when transferor lacks head power
 
 ---
 
@@ -256,7 +256,7 @@
 
 **Remediation:** Validate assignee is in the same division as the parent task. Use `canAssignTaskTo` check.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — subtask assignee validated: must be active and in the same division as parent task
 
 ---
 
@@ -273,7 +273,7 @@
 
 **Remediation:** Restrict TF status changes to the creator's division head, OSD, or Super Admin.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — TF status/priority changes restricted to creator's division Director, OSD, or Super Admin
 
 ---
 
@@ -290,7 +290,7 @@
 
 **Remediation:** Use `updateMany` with a `where: { id, status: 'pending' }` filter so only one execution wins.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — atomic `updateMany` with `status: 'pending'` filter claims the request before executing side effects
 
 ---
 
@@ -358,7 +358,7 @@
 
 **Remediation:** Add an allowlist of safe MIME types (e.g., `application/pdf`, `image/*`, `application/msword`, common office formats). Reject others.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `isAllowedMimeType` allowlist: image/audio/video prefixes + PDF, Office, ODF, archives, text/csv
 
 ---
 
@@ -598,7 +598,7 @@
 
 **Remediation:** Reuse `canEditTask` from tasks.ts instead of reimplementing.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `canEditTaskTags` now includes JS, Director (same division), and delegated head checks via `canActAsHeadOf`
 
 ---
 
@@ -615,7 +615,7 @@
 
 **Remediation:** Validate `canCreateDivisionTask` for each row with `visibility: 'division'`.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `commitImportAction` now checks `canCreateDivisionTask` per row; non-head division rows are skipped
 
 ---
 
@@ -632,7 +632,7 @@
 
 **Remediation:** Escape `%` and `_` in search input. Add a max query length (e.g., 200 chars).
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `escapeIlike` escapes `%`, `_`, `\\`; query truncated to 200 chars
 
 ---
 
@@ -649,7 +649,7 @@
 
 **Remediation:** Add `isActive: true` filter to user search query.
 
-**Status:** [ ] Not started
+**Status:** [x] Fixed — `searchUsersFor` now filters `isActive: true`
 
 ---
 

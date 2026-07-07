@@ -7,6 +7,7 @@ import { auth } from '@/lib/auth';
 import { parseCsv, rowsToObjects } from '@/lib/csv';
 import { prisma } from '@/lib/db';
 import { parseDueDateInput } from '@/lib/format';
+import { canCreateDivisionTask, getRbacActor } from '@/lib/rbac';
 
 /**
  * Bulk-import server actions (PRD §5.5 — UI present in v1, real commits
@@ -339,12 +340,17 @@ export async function commitImportAction(
     }
   }
 
+  const actor = await getRbacActor(guard.userId);
+
   let createdCount = 0;
   let skippedCount = 0;
 
-  // Per-row create — failures don't abort the whole batch.
   for (const row of parsed.data.rows) {
     if (!validDivIds.has(row.divisionId) || !validOwnerIds.has(row.ownerId)) {
+      skippedCount++;
+      continue;
+    }
+    if (row.visibility === 'division' && actor && !canCreateDivisionTask(actor, row.divisionId)) {
       skippedCount++;
       continue;
     }

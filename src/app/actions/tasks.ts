@@ -810,6 +810,19 @@ export async function addSubtaskAction(
 
   const assigneeId = parsed.data.assigneeId ?? me.id;
 
+  if (assigneeId !== me.id) {
+    const assignee = await prisma.user.findUnique({
+      where: { id: assigneeId },
+      select: { id: true, isActive: true, divisionId: true },
+    });
+    if (!assignee || !assignee.isActive) {
+      return fail('Assignee not found or inactive.', epoch);
+    }
+    if (assignee.divisionId !== parent.divisionId) {
+      return fail('Subtask assignee must be in the same division as the parent task.', epoch);
+    }
+  }
+
   try {
     const subtask = await prisma.$transaction(async (tx) => {
       const refNumber = await nextTaskRefNumber(parent.divisionId, tx);
@@ -1940,12 +1953,14 @@ export async function resolveReassignmentAction(
 
   const approved = parsed.data.action === 'approve';
 
+  const claimed = await prisma.reassignmentRequest.updateMany({
+    where: { id: request.id, status: 'pending' },
+    data: { status: approved ? 'approved' : 'rejected', resolvedAt: new Date() },
+  });
+  if (claimed.count === 0) return fail('This request has already been resolved.', epoch);
+
   if (approved) {
     await prisma.$transaction([
-      prisma.reassignmentRequest.update({
-        where: { id: request.id },
-        data: { status: 'approved', resolvedAt: new Date() },
-      }),
       prisma.task.update({
         where: { id: request.taskId },
         data: { ownerId: request.proposedOwnerId },
@@ -1993,20 +2008,14 @@ export async function resolveReassignmentAction(
       ],
     });
   } else {
-    await prisma.$transaction([
-      prisma.reassignmentRequest.update({
-        where: { id: request.id },
-        data: { status: 'rejected', resolvedAt: new Date() },
-      }),
-      prisma.taskActivity.create({
-        data: {
-          taskId: request.taskId,
-          actorId: me.id,
-          eventType: 'reassignment_rejected',
-          payload: { proposedOwnerId: request.proposedOwnerId, proposedOwnerName: request.proposedOwner.name },
-        },
-      }),
-    ]);
+    await prisma.taskActivity.create({
+      data: {
+        taskId: request.taskId,
+        actorId: me.id,
+        eventType: 'reassignment_rejected',
+        payload: { proposedOwnerId: request.proposedOwnerId, proposedOwnerName: request.proposedOwner.name },
+      },
+    });
     await prisma.notification.create({
       data: {
         userId: request.requestedById,
@@ -2102,7 +2111,9 @@ export async function transferTaskAction(
     ownerId: target.id,
   };
   if (task.visibility === 'personal') {
-    updates.visibility = 'division';
+    if (canCreateDivisionTask(actor, task.divisionId)) {
+      updates.visibility = 'division';
+    }
   }
 
   try {
