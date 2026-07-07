@@ -5,6 +5,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import {
   AttachmentList,
   type AttachmentRow,
+  BackButton,
   Pill,
 } from '@/components/ui';
 import { canEditTfAttachments } from '@/app/actions/attachments';
@@ -209,14 +210,11 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
       {/* App-bar */}
       <header className="sticky top-14 md:top-16 z-10 bg-bg/90 backdrop-blur-sm border-b border-line-2">
         <div className="flex items-center justify-between gap-3 px-4 md:px-6 h-12">
-          <Link
-            href="/timeline-files"
-            aria-label="Back to timeline files"
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-2 hover:text-ink"
-          >
-            <i className="ti ti-arrow-left text-[16px]" aria-hidden="true" />
-            <span className="hidden md:inline">Back to timeline files</span>
-          </Link>
+          <BackButton
+            fallbackHref="/timeline-files"
+            label="Back to timeline files"
+            hideLabelOnMobile
+          />
           <TfMoreMenu
             tfId={tf.id}
             refNo={tf.refNo}

@@ -18,6 +18,7 @@ export type { TimelineFileCardProps } from './TimelineFileCard';
 
 export { Sheet } from './Sheet';
 export { Switch } from './Switch';
+export { BackButton } from './BackButton';
 
 export { AttachmentList, type AttachmentRow } from './AttachmentList';
 
