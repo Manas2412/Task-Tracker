@@ -9,6 +9,7 @@ import {
 } from '@/lib/audit';
 
 import { AuditTable } from './_components/AuditTable';
+import { AuditDangerZone } from './_components/AuditDangerZone';
 
 const ENTITY_OPTIONS: { value: AuditEntity | 'all'; label: string }[] = [
   { value: 'all', label: 'All entities' },
@@ -135,6 +136,8 @@ export default async function AuditPage({ searchParams }: PageProps) {
             ) : null}
           </nav>
         ) : null}
+
+        <AuditDangerZone />
       </div>
     </div>
   );
