@@ -8,7 +8,6 @@ import {
   BackButton,
   Pill,
 } from '@/components/ui';
-import { CompleteButton } from '@/components/ui/CompleteButton';
 import { canEditTfAttachments } from '@/app/actions/attachments';
 import {
   postTfCommentAction,
@@ -16,7 +15,6 @@ import {
   deleteTfCommentAction,
 } from '@/app/actions/timeline-files';
 import { Discussion, type Mentionable } from '@/components/discussion/Discussion';
-import { updateTimelineFileStatusAction } from '@/app/actions/timeline-files';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { ACTOR_SUMMARY_SELECT, USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
@@ -286,20 +284,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
           ) : null}
         </div>
 
-        <TfTitleEditor
-          tfId={tf.id}
-          subject={tf.subject}
-          canEdit={canEditFields}
-          trailing={
-            canEditStatus && !isClosed ? (
-              <CompleteButton
-                action={updateTimelineFileStatusAction}
-                fields={{ id: tf.id, status: 'closed' }}
-                label="Mark file complete"
-              />
-            ) : null
-          }
-        />
+        <TfTitleEditor tfId={tf.id} subject={tf.subject} canEdit={canEditFields} />
 
         <p className="text-[12px] text-ink-2">
           From <span className="text-ink font-medium">{tf.fromWhom}</span>
