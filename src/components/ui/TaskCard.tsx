@@ -35,6 +35,8 @@ export type TaskCardProps = {
   name: string;
   /** Full description — not shown on the card, used by the hover preview. */
   description?: string | null;
+  /** Attachment file names — not shown on the card, used by the hover preview. */
+  attachmentNames?: string[];
   division: { name: string };
   status: PillStatusTone;
   priority: PillPriorityTone;
