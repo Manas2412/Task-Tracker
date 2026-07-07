@@ -3,7 +3,9 @@ import { notFound, redirect } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 
 import { AttachmentList, type AttachmentRow, BackButton, Pill, TimelineFileCard } from '@/components/ui';
+import { CompleteButton } from '@/components/ui/CompleteButton';
 import { canEditTaskAttachments } from '@/app/actions/attachments';
+import { updateTaskStatusAction } from '@/app/actions/tasks';
 import { isS3Configured } from '@/lib/s3';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
@@ -462,7 +464,20 @@ export default async function TaskDetailPage({ params }: PageProps) {
         {task.refNumber ? (
           <span className="font-mono text-[11px] text-ink-3 tracking-wide">{task.refNumber}</span>
         ) : null}
-        <TaskTitleEditor taskId={task.id} name={task.name} canEdit={canEditDetails} />
+        <TaskTitleEditor
+          taskId={task.id}
+          name={task.name}
+          canEdit={canEditDetails}
+          trailing={
+            canEditFields && task.status !== 'completed' ? (
+              <CompleteButton
+                action={updateTaskStatusAction}
+                fields={{ taskId: task.id, status: 'completed' }}
+                label="Mark task complete"
+              />
+            ) : null
+          }
+        />
 
         <p className="mt-2 text-[11px] text-ink-3 inline-flex items-center gap-1.5">
           <i className="ti ti-edit text-[12px]" aria-hidden="true" />
