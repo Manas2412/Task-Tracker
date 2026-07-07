@@ -314,6 +314,10 @@ const updateUserSchema = z.object({
   sectionId: optionalRelationToNull,
   pmuId: optionalRelationToNull,
   supervisorId: optionalRelationToNull,
+  isSuperAdmin: z
+    .string()
+    .optional()
+    .transform((v) => v === 'on'),
   // phone + work activities are self-service on /profile — the admin form
   // never collects them, so they are intentionally absent here (and must
   // never be written from this action, which would wipe self-set values).
@@ -338,6 +342,7 @@ export async function updateUserAction(
     sectionId: formData.get('sectionId'),
     pmuId: formData.get('pmuId'),
     supervisorId: formData.get('supervisorId'),
+    isSuperAdmin: formData.get('isSuperAdmin'),
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -359,9 +364,26 @@ export async function updateUserAction(
       pmuId: true,
       isPmu: true,
       supervisorId: true,
+      isSuperAdmin: true,
     },
   });
   if (!before) return fail('User not found.', epoch);
+
+  // Don't let the last active Super Admin strip their own access and lock
+  // the console for everyone — mirrors setUserActiveAction and
+  // setUserSuperAdminAction.
+  if (
+    before.isSuperAdmin &&
+    !parsed.data.isSuperAdmin &&
+    parsed.data.userId === guard.userId
+  ) {
+    const superAdminCount = await prisma.user.count({
+      where: { isActive: true, isSuperAdmin: true },
+    });
+    if (superAdminCount <= 1) {
+      return fail('At least one Super Admin must remain.', epoch);
+    }
+  }
 
   if (parsed.data.supervisorId === parsed.data.userId) {
     return {
@@ -406,6 +428,7 @@ export async function updateUserAction(
         // Dropping PMU membership clears the now-meaningless PMU role too.
         ...(removingPmu ? { pmuRole: null } : {}),
         supervisorId: parsed.data.supervisorId,
+        isSuperAdmin: parsed.data.isSuperAdmin,
       },
     });
 
@@ -419,7 +442,20 @@ export async function updateUserAction(
       sectionId: updated.sectionId,
       pmuId: updated.pmuId,
       supervisorId: updated.supervisorId,
+      isSuperAdmin: updated.isSuperAdmin,
     });
+
+    // Granting or revoking Super Admin is security-sensitive — leave a
+    // distinct role_change entry so it is easy to find in the audit trail.
+    if (before.isSuperAdmin !== updated.isSuperAdmin) {
+      await audit(
+        guard.userId,
+        'role_change',
+        updated.id,
+        { isSuperAdmin: before.isSuperAdmin },
+        { isSuperAdmin: updated.isSuperAdmin },
+      );
+    }
 
     revalidateAll();
     return ok(epoch, { userId: updated.id });
