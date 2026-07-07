@@ -88,7 +88,7 @@ export function SectionComments({
 
       {comments.length === 0 ? (
         <p className="text-[13px] text-ink-3 italic mb-4">
-          No comments yet. Tag someone with @ to start a discussion.
+          No comments yet. Type a name to mention someone and start a discussion.
         </p>
       ) : (
         <ul className="flex flex-col">
@@ -286,7 +286,7 @@ function CommentRow({
             'text-ink leading-relaxed whitespace-pre-wrap',
             compact ? 'text-[12px]' : 'text-[13px]',
           )}
-          dangerouslySetInnerHTML={{ __html: renderMentions(comment.body) }}
+          dangerouslySetInnerHTML={{ __html: renderMentions(comment.body, mentionables) }}
         />
         {comment.statusTransition ? (
           <div className="mt-1.5 inline-flex">
@@ -427,14 +427,25 @@ function EditComposer({
     if (!ta) return;
     const cursor = ta.selectionStart ?? 0;
     const before = ta.value.slice(0, cursor);
-    const m = before.match(/(?:^|[\s.,;:()\[\]!?])@([a-z0-9._-]{0,40})$/i);
-    if (m) {
-      setQuery(m[1]);
-      setMentionStart(cursor - m[1].length - 1);
+    // Explicit @ trigger — a handle being typed after an @.
+    const at = before.match(/(?:^|[\s.,;:()\[\]!?])@([a-z0-9._-]{0,40})$/i);
+    if (at) {
+      setQuery(at[1]);
+      setMentionStart(cursor - at[1].length - 1);
       setPickerOpen(true);
-    } else {
-      closePicker();
+      return;
     }
+    // No @ needed — the word at the cursor (2+ letters) is matched against
+    // names. It only opens when the word actually prefixes someone's name, so
+    // ordinary prose never pops the menu.
+    const word = before.match(/(?:^|[\s.,;:()\[\]!?])([A-Za-z][A-Za-z.'-]{1,40})$/);
+    if (word && nameMatches(mentionables, word[1])) {
+      setQuery(word[1]);
+      setMentionStart(cursor - word[1].length);
+      setPickerOpen(true);
+      return;
+    }
+    closePicker();
   };
 
   const insertMention = (m: Mentionable) => {
@@ -521,14 +532,27 @@ function SaveButton() {
   );
 }
 
-function renderMentions(body: string): string {
-  const escaped = body
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  return escaped.replace(
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Render a comment body, turning each `@username` marker into the person's
+ * full name styled as a link — the app's mention colour (indigo) underlined.
+ * An unknown handle (author no longer mentionable) keeps its raw text so the
+ * sentence still reads. Returns HTML for dangerouslySetInnerHTML, so every
+ * interpolated value is escaped.
+ */
+function renderMentions(body: string, mentionables: Mentionable[]): string {
+  const nameByUsername = new Map(
+    mentionables.map((m) => [m.username.toLowerCase(), m.name] as const),
+  );
+  return escapeHtml(body).replace(
     /@([a-z0-9][a-z0-9._-]{1,40})/gi,
-    '<span class="text-primary bg-primary-soft px-1 py-0.5 rounded-md font-medium">@$1</span>',
+    (whole, handle: string) => {
+      const name = nameByUsername.get(handle.toLowerCase());
+      if (!name) return whole;
+      return `<span class="text-primary underline underline-offset-2 decoration-primary-line">${escapeHtml(name)}</span>`;
+    },
   );
 }
 
@@ -658,14 +682,25 @@ function Composer({
     if (!ta) return;
     const cursor = ta.selectionStart ?? 0;
     const before = ta.value.slice(0, cursor);
-    const m = before.match(/(?:^|[\s.,;:()\[\]!?])@([a-z0-9._-]{0,40})$/i);
-    if (m) {
-      setQuery(m[1]);
-      setMentionStart(cursor - m[1].length - 1);
+    // Explicit @ trigger — a handle being typed after an @.
+    const at = before.match(/(?:^|[\s.,;:()\[\]!?])@([a-z0-9._-]{0,40})$/i);
+    if (at) {
+      setQuery(at[1]);
+      setMentionStart(cursor - at[1].length - 1);
       setPickerOpen(true);
-    } else {
-      closePicker();
+      return;
     }
+    // No @ needed — the word at the cursor (2+ letters) is matched against
+    // names. It only opens when the word actually prefixes someone's name, so
+    // ordinary prose never pops the menu.
+    const word = before.match(/(?:^|[\s.,;:()\[\]!?])([A-Za-z][A-Za-z.'-]{1,40})$/);
+    if (word && nameMatches(mentionables, word[1])) {
+      setQuery(word[1]);
+      setMentionStart(cursor - word[1].length);
+      setPickerOpen(true);
+      return;
+    }
+    closePicker();
   };
 
   const insertMention = (m: Mentionable) => {
@@ -734,7 +769,7 @@ function Composer({
             name="body"
             rows={1}
             required
-            placeholder={placeholder ?? 'Add a comment or ask for an update… use @ to mention'}
+            placeholder={placeholder ?? 'Add a comment — type a name to mention someone'}
             onInput={() => { autoSize(); checkMention(); }}
             onKeyDown={(e) => {
               if (!pickerOpen || matches.length === 0) return;
@@ -766,6 +801,22 @@ function filterMentionables(list: Mentionable[], rawQuery: string): Mentionable[
   if (!q) return list;
   return list.filter((m) =>
     m.username.toLowerCase().includes(q) || m.name.toLowerCase().includes(q),
+  );
+}
+
+/**
+ * Whether a bare typed word (no @) should open the mention menu: true only
+ * when it's 2+ chars and prefixes a username or any part of a person's name.
+ * Prefix-matching keeps everyday words from popping the menu — it opens on
+ * "raj" (→ Rajesh) but not on "the" or "review".
+ */
+function nameMatches(list: Mentionable[], word: string): boolean {
+  const q = word.toLowerCase();
+  if (q.length < 2) return false;
+  return list.some(
+    (m) =>
+      m.username.toLowerCase().startsWith(q) ||
+      m.name.toLowerCase().split(/\s+/).some((part) => part.startsWith(q)),
   );
 }
 
