@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { BetaAnalyticsDataClient } from '@google-analytics/data';
 
+import { auth } from '@/lib/auth';
+
 const propertyId = process.env.GA4_PROPERTY_ID;
 const clientEmail = process.env.GA4_CLIENT_EMAIL;
 const privateKey = process.env.GA4_PRIVATE_KEY?.replace(/\\n/g, '\n');
@@ -13,6 +15,10 @@ function getClient() {
 }
 
 export async function GET() {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const client = getClient();
   if (!client) {
     return NextResponse.json(

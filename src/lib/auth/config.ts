@@ -30,15 +30,15 @@ export const authConfig = {
       const pathname = nextUrl.pathname;
 
       const isOnLogin = pathname.startsWith('/login');
-      const isOnApi = pathname.startsWith('/api');
       const isOnChangePassword = pathname.startsWith('/profile/change-password');
-      const isOnPublicAsset =
+      const isOnPublicRoute =
         pathname.startsWith('/_next') ||
         pathname.startsWith('/favicon') ||
-        pathname === '/robots.txt';
+        pathname === '/robots.txt' ||
+        pathname.startsWith('/api/auth') ||
+        pathname.startsWith('/api/cron');
 
-      // Always allow public assets and auth API endpoints.
-      if (isOnPublicAsset || isOnApi) return true;
+      if (isOnPublicRoute) return true;
 
       // Not logged in: only the login page is accessible.
       if (!isLoggedIn) {

@@ -15,13 +15,16 @@ import { prisma } from '@/lib/db';
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const url = new URL(request.url);
-    const qSecret = url.searchParams.get('secret');
-    const hSecret = request.headers.get('authorization')?.replace('Bearer ', '');
-    if (qSecret !== secret && hSecret !== secret) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (!secret) {
+    return NextResponse.json(
+      { error: 'CRON_SECRET is not configured' },
+      { status: 503 },
+    );
+  }
+
+  const hSecret = request.headers.get('authorization')?.replace('Bearer ', '');
+  if (hSecret !== secret) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const now = new Date();

@@ -44,5 +44,15 @@ coverage/
 Project_Task_Tracker.xlsx
 Task Tracker/
 
+# Credential / export files — never commit
+credentials.*
+*.credentials.*
+**/credentials.html
+**/credentials.pdf
+MYAS Task Tracker*.pdf
+scripts/export.json
+scripts/tasks-export.json
+package-lock.json
+
 # Local Claude Code session config
 .claude/
