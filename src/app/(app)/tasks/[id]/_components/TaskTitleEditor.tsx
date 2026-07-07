@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
 import { updateTaskFieldsAction } from '@/app/actions/tasks';
@@ -13,8 +13,6 @@ type TaskTitleEditorProps = {
   taskId: string;
   name: string;
   canEdit: boolean;
-  /** Rendered at the right of the title in view mode — e.g. the complete tick. */
-  trailing?: ReactNode;
 };
 
 /**
@@ -23,7 +21,7 @@ type TaskTitleEditorProps = {
  * creator, Director of the division, OSD, JS, Super Admin). Edit mode
  * swaps in a single-line form that submits only the name field.
  */
-export function TaskTitleEditor({ taskId, name, canEdit, trailing }: TaskTitleEditorProps) {
+export function TaskTitleEditor({ taskId, name, canEdit }: TaskTitleEditorProps) {
   const [editing, setEditing] = useState(false);
   const [state, formAction] = useFormState<UpdateFieldsState, FormData>(
     updateTaskFieldsAction,
@@ -91,7 +89,6 @@ export function TaskTitleEditor({ taskId, name, canEdit, trailing }: TaskTitleEd
           <i className="ti ti-pencil text-[16px]" aria-hidden="true" />
         </button>
       ) : null}
-      {trailing ? <div className="mt-2 shrink-0">{trailing}</div> : null}
     </div>
   );
 }
