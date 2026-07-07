@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { AppShell, type BellNotification } from '@/components/layout';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { getOfficeOfJsDivisionId } from '@/lib/engagements';
 import { initialsOf } from '@/lib/format';
 import { buildNotificationTaskContext } from '@/lib/notification-context';
 import { getHeadedDivisionIds } from '@/lib/rbac';
@@ -17,28 +18,30 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await auth();
   if (!session?.user) redirect('/login');
 
-  const [me, unreadCount, recentRaw, headedDivisionIds] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      include: { division: true },
-    }),
-    prisma.notification.count({
-      where: { userId: session.user.id, readAt: null },
-    }),
-    prisma.notification.findMany({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-      select: {
-        id: true,
-        type: true,
-        payload: true,
-        readAt: true,
-        createdAt: true,
-      },
-    }),
-    getHeadedDivisionIds(session.user.id),
-  ]);
+  const [me, unreadCount, recentRaw, headedDivisionIds, officeOfJsDivisionId] =
+    await Promise.all([
+      prisma.user.findUnique({
+        where: { id: session.user.id },
+        include: { division: true },
+      }),
+      prisma.notification.count({
+        where: { userId: session.user.id, readAt: null },
+      }),
+      prisma.notification.findMany({
+        where: { userId: session.user.id },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+        select: {
+          id: true,
+          type: true,
+          payload: true,
+          readAt: true,
+          createdAt: true,
+        },
+      }),
+      getHeadedDivisionIds(session.user.id),
+      getOfficeOfJsDivisionId(),
+    ]);
   if (!me) redirect('/login');
 
   // Quick Create targets the user's home division, so the Division
@@ -53,7 +56,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // (Structure & Hierarchy). Ownership auto-resolves to that division's head
   // — or a PMU's team leader — on the server. Super Admin / OSD see all;
   // a head sees the divisions they head plus those divisions' PMUs.
-  const createTargets = canCreateDivisionTasks
+  const createTargetsRaw = canCreateDivisionTasks
     ? await prisma.division.findMany({
         where:
           me.isSuperAdmin || me.hierarchySlot === 'osd'
@@ -65,48 +68,90 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 ],
               },
         orderBy: [{ kind: 'asc' }, { displayOrder: 'asc' }, { name: 'asc' }],
-        select: { id: true, name: true, kind: true },
+        select: { id: true, name: true, kind: true, headUserId: true },
       })
     : [];
 
-  // Active members of those targets, so a head can optionally name an initial
-  // owner in Quick Create (leaving it blank keeps the unassigned / PMU-leader
-  // default). Only division-task creators see the picker, so only they need
-  // the pool. A division's members have divisionId === target; a PMU's members
-  // have pmuId === target.
-  const divisionTargetIds = createTargets.filter((t) => t.kind !== 'pmu').map((t) => t.id);
-  const pmuTargetIds = createTargets.filter((t) => t.kind === 'pmu').map((t) => t.id);
-  const ownerCandidates =
-    canCreateDivisionTasks && createTargets.length > 0
-      ? (
-          await prisma.user.findMany({
-            where: {
-              isActive: true,
-              OR: [
-                { divisionId: { in: divisionTargetIds } },
-                { pmuId: { in: pmuTargetIds } },
-              ],
-            },
-            orderBy: { name: 'asc' },
-            select: {
-              id: true,
-              name: true,
-              designation: true,
-              divisionId: true,
-              pmuId: true,
-              division: { select: { name: true, avatarColour: true } },
-            },
-          })
-        ).map((u) => ({
-          id: u.id,
-          name: u.name,
-          designation: u.designation,
-          divisionId: u.divisionId,
-          pmuId: u.pmuId,
-          divisionName: u.division.name,
-          divisionColour: u.division.avatarColour,
-        }))
+  // The optional-owner pool for Quick Create: active members of those targets
+  // (a division's members have divisionId === target; a PMU's have pmuId ===
+  // target). Office-of-JS tasks may be owned by anyone, so if that division is
+  // a target the pool is the whole active directory instead. pmuRole /
+  // hierarchySlot ride along so we can pick out each target's default owner
+  // (head or PMU team leader) and the OSD account without another query.
+  const divisionTargetIds = createTargetsRaw.filter((t) => t.kind !== 'pmu').map((t) => t.id);
+  const pmuTargetIds = createTargetsRaw.filter((t) => t.kind === 'pmu').map((t) => t.id);
+  const canTargetOfficeOfJs =
+    officeOfJsDivisionId !== null &&
+    createTargetsRaw.some((t) => t.id === officeOfJsDivisionId);
+
+  const candidatesRaw =
+    canCreateDivisionTasks && createTargetsRaw.length > 0
+      ? await prisma.user.findMany({
+          where: {
+            isActive: true,
+            ...(canTargetOfficeOfJs
+              ? {}
+              : {
+                  OR: [
+                    { divisionId: { in: divisionTargetIds } },
+                    { pmuId: { in: pmuTargetIds } },
+                  ],
+                }),
+          },
+          orderBy: { name: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            designation: true,
+            divisionId: true,
+            pmuId: true,
+            pmuRole: true,
+            hierarchySlot: true,
+            division: { select: { name: true, avatarColour: true } },
+          },
+        })
       : [];
+
+  const ownerCandidates = candidatesRaw.map((u) => ({
+    id: u.id,
+    name: u.name,
+    designation: u.designation,
+    divisionId: u.divisionId,
+    pmuId: u.pmuId,
+    divisionName: u.division.name,
+    divisionColour: u.division.avatarColour,
+  }));
+
+  // Each target's default owner — the division head, or a PMU's team leader —
+  // surfaced as a one-click pill in Quick Create. Derived from the pool above,
+  // so no extra query; absent (null) when that person is inactive or unset.
+  const candidateById = new Map(candidatesRaw.map((u) => [u.id, u]));
+  const pmuLeadByPmu = new Map(
+    candidatesRaw
+      .filter((u) => u.pmuRole === 'pmu_team_leader' && u.pmuId)
+      .map((u) => [u.pmuId as string, u]),
+  );
+  const createTargets = createTargetsRaw.map((t) => {
+    const auto =
+      t.kind === 'pmu'
+        ? pmuLeadByPmu.get(t.id)
+        : t.headUserId
+          ? candidateById.get(t.headUserId)
+          : undefined;
+    return {
+      id: t.id,
+      name: t.name,
+      kind: t.kind,
+      isOfficeOfJs: t.id === officeOfJsDivisionId,
+      autoOwnerId: auto?.id ?? null,
+      autoOwnerName: auto?.name ?? null,
+    };
+  });
+
+  // The OSD account — a one-click pill on Office-of-JS tasks (present in the
+  // pool whenever OJS is targetable, since that widens it to everyone).
+  const osdCandidate = candidatesRaw.find((u) => u.hierarchySlot === 'osd');
+  const osdAccount = osdCandidate ? { id: osdCandidate.id, name: osdCandidate.name } : null;
 
   const taskContext = await buildNotificationTaskContext(recentRaw);
 
@@ -147,6 +192,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         canCreateDivisionTasks={canCreateDivisionTasks}
         createTargets={createTargets}
         ownerCandidates={ownerCandidates}
+        osdAccount={osdAccount}
       >
         {children}
         <QuickCreateFab />
