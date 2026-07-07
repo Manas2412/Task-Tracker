@@ -16,6 +16,7 @@ import {
 } from '@/lib/notification-context';
 import { cn } from '@/lib/utils';
 
+import { ClearAllButton } from './_components/ClearAllButton';
 import { NotificationRowSwipe } from './_components/NotificationRowSwipe';
 
 type Filter = 'all' | 'unread';
@@ -64,16 +65,21 @@ export default async function NotificationsPage({ searchParams }: PageProps) {
             </span>
           </p>
         </div>
-        {unreadCount > 0 ? (
-          <form action={markAllNotificationsReadAction}>
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line text-[12px] font-medium text-ink hover:bg-line-2"
-            >
-              <i className="ti ti-checks text-[14px]" aria-hidden="true" />
-              Mark all read
-            </button>
-          </form>
+        {totalCount > 0 ? (
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 ? (
+              <form action={markAllNotificationsReadAction}>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line text-[12px] font-medium text-ink hover:bg-line-2"
+                >
+                  <i className="ti ti-checks text-[14px]" aria-hidden="true" />
+                  Mark all read
+                </button>
+              </form>
+            ) : null}
+            <ClearAllButton count={totalCount} />
+          </div>
         ) : null}
       </header>
 
