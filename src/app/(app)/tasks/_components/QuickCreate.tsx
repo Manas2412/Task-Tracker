@@ -14,7 +14,7 @@ import {
   FloatingActionButton,
   PrimaryAction,
 } from '@/components/layout';
-import { Sheet, Switch, UserPicker, type UserPickerOption } from '@/components/ui';
+import { Sheet, UserPicker, type UserPickerOption } from '@/components/ui';
 import { createTaskAction } from '@/app/actions/tasks';
 import { registerAttachmentAction } from '@/app/actions/attachments';
 import {
@@ -601,15 +601,6 @@ function QuickCreateForm({
             </Field>
           ) : null}
 
-          {/* Milestone */}
-          <CheckRow
-            icon="ti-flag-3"
-            iconColour="text-accent"
-            label="Mark as milestone"
-          >
-            <Switch name="milestone" ariaLabel="Mark as milestone" />
-          </CheckRow>
-
           {/* Attachments */}
           <Field label="Attach">
             <div className="flex flex-wrap gap-2">
@@ -733,27 +724,6 @@ function Field({
   );
 }
 
-function CheckRow({
-  icon,
-  iconColour = 'text-ink-3',
-  label,
-  children,
-}: {
-  icon: string;
-  iconColour?: string;
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between py-2.5 border-t border-line-2">
-      <span className="text-[13px] text-ink inline-flex items-center gap-2">
-        <i className={cn('ti', icon, 'text-[15px]', iconColour)} aria-hidden="true" />
-        {label}
-      </span>
-      {children}
-    </div>
-  );
-}
 
 function SaveButton({ uploading }: { uploading: boolean }) {
   const { pending } = useFormStatus();

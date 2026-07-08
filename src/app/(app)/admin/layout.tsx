@@ -24,7 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             Settings
           </h1>
         </div>
-        <AdminSubNav />
+        <AdminSubNav isSuperAdmin={session.user.isSuperAdmin} />
       </header>
 
       <div className="px-4 md:px-6 lg:px-8 py-5 md:py-6">{children}</div>

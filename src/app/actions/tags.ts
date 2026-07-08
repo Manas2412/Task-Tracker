@@ -6,13 +6,12 @@ import { z } from 'zod';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { canActAsHeadOf, getRbacActor } from '@/lib/rbac';
 
 /**
  * Tag actions (Phase 3 — final).
  *
  *   - createTagAction / renameTagAction / deleteTagAction → Super Admin only
- *   - addTagToTaskAction / removeTagFromTaskAction → anyone who can edit the task
+ *   - addTagToTaskAction / removeTagFromTaskAction → Super Admin only
  *
  * Tag CRUD writes audit_log entries. Task-tag assignments write per-task
  * activity (user-facing) but skip audit_log to keep that log focused on
@@ -207,19 +206,11 @@ export async function deleteTagAction(
 }
 
 // ============================================================
-// Assignment — anyone who can edit a task
+// Assignment — Super Admin only (tags are a Super Admin feature)
 // ============================================================
 
-async function canEditTaskTags(
-  me: { id: string; hierarchySlot: string; isSuperAdmin: boolean; divisionId: string },
-  task: { ownerId: string; createdById: string; divisionId: string },
-): Promise<boolean> {
-  if (me.isSuperAdmin) return true;
-  if (me.hierarchySlot === 'osd' || me.hierarchySlot === 'js') return true;
-  if (me.id === task.ownerId || me.id === task.createdById) return true;
-  if (me.hierarchySlot === 'director' && me.divisionId === task.divisionId) return true;
-  const actor = await getRbacActor(me.id);
-  return actor !== null && canActAsHeadOf(actor, task.divisionId);
+function canManageTaskTags(me: { isSuperAdmin: boolean }): boolean {
+  return me.isSuperAdmin;
 }
 
 const assignSchema = z.object({
@@ -247,8 +238,8 @@ export async function addTagToTaskAction(
   });
   if (!task) return fail('Task not found.', epoch);
 
-  if (!(await canEditTaskTags(me, task))) {
-    return fail('You do not have permission to tag this task.', epoch);
+  if (!canManageTaskTags(me)) {
+    return fail('Only a Super Admin can tag a task.', epoch);
   }
 
   const tag = await prisma.tag.findUnique({
@@ -306,8 +297,8 @@ export async function removeTagFromTaskAction(
   });
   if (!task) return fail('Task not found.', epoch);
 
-  if (!(await canEditTaskTags(me, task))) {
-    return fail('You do not have permission to edit tags on this task.', epoch);
+  if (!canManageTaskTags(me)) {
+    return fail('Only a Super Admin can edit tags on a task.', epoch);
   }
 
   const tag = await prisma.tag.findUnique({

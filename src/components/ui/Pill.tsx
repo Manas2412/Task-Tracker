@@ -42,10 +42,6 @@ type JsPillProps = CommonProps & {
   lane: PillJsLane;
 };
 
-type MilestonePillProps = CommonProps & {
-  variant: 'milestone';
-};
-
 type DeadlinePillProps = CommonProps & {
   variant: 'deadline';
   daysLeft: number;
@@ -56,7 +52,6 @@ export type PillProps =
   | StatusPillProps
   | PriorityPillProps
   | JsPillProps
-  | MilestonePillProps
   | DeadlinePillProps;
 
 const STATUS_ICON: Record<PillStatusTone, string> = {
@@ -135,15 +130,6 @@ export function Pill(props: PillProps) {
       >
         <i className="ti ti-bookmark-filled text-[9px]" aria-hidden="true" />
         {JS_LABEL[props.lane]}
-      </span>
-    );
-  }
-
-  if (props.variant === 'milestone') {
-    return (
-      <span className={cn(PILL_BASE, 'bg-primary-soft text-primary', props.className)}>
-        <i className="ti ti-flag-3 text-[11px]" aria-hidden="true" />
-        Milestone
       </span>
     );
   }

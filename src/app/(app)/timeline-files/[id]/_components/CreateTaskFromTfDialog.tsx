@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFormState, useFormStatus } from 'react-dom';
 
-import { Sheet, Switch } from '@/components/ui';
+import { Sheet } from '@/components/ui';
 import { createTaskAction } from '@/app/actions/tasks';
 import { INITIAL_CREATE_STATE, type CreateTaskState } from '@/app/actions/states';
 import { cn } from '@/lib/utils';
@@ -209,18 +209,6 @@ export function CreateTaskFromTfDialog({
                 })}
               </div>
             </div>
-
-            {/* Milestone */}
-            <label className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-line">
-              <span className="text-[12px] text-ink inline-flex items-center gap-2">
-                <i
-                  className="ti ti-flag-3 text-[14px] text-accent"
-                  aria-hidden="true"
-                />
-                Mark as milestone
-              </span>
-              <Switch name="milestone" ariaLabel="Mark as milestone" />
-            </label>
 
             {state.error ? (
               <p

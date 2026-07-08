@@ -30,7 +30,6 @@ export type BoardTask = {
   jsPriorityLane: PillJsLane;
   divisionName: string;
   due: Date | null;
-  milestone: boolean;
   owner: {
     name: string;
     initials: string;

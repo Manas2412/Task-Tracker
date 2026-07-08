@@ -25,7 +25,6 @@ type PageProps = {
     dueFrom?: string;
     dueTo?: string;
     jsP?: string;
-    milestone?: string;
     tag?: string;
   };
 };
@@ -54,7 +53,12 @@ export default async function SearchPage({ searchParams }: PageProps) {
   if (!session?.user) redirect('/login');
 
   const rawQuery = (searchParams?.q ?? '').trim();
-  const type: SearchType = isType(searchParams?.type) ? searchParams!.type : 'all';
+  // Tags are a Super Admin-only feature — non-admins never get the tag tab
+  // or tag results (also enforced in the search library).
+  const isSuperAdmin = session.user.isSuperAdmin;
+  let type: SearchType = isType(searchParams?.type) ? searchParams!.type : 'all';
+  if (type === 'tags' && !isSuperAdmin) type = 'all';
+  const visibleTypes = isSuperAdmin ? TYPES : TYPES.filter((t) => t.id !== 'tags');
 
   const taskFilters: SearchTaskFilters = {};
   if (searchParams?.status) taskFilters.status = searchParams.status;
@@ -63,7 +67,6 @@ export default async function SearchPage({ searchParams }: PageProps) {
   if (searchParams?.dueFrom) taskFilters.dueFrom = searchParams.dueFrom;
   if (searchParams?.dueTo) taskFilters.dueTo = searchParams.dueTo;
   if (searchParams?.jsP === '1') taskFilters.jsPriority = true;
-  if (searchParams?.milestone === '1') taskFilters.milestone = true;
   if (searchParams?.tag) taskFilters.tagId = searchParams.tag;
 
   const showTaskFilters = type === 'all' || type === 'tasks';
@@ -123,7 +126,7 @@ export default async function SearchPage({ searchParams }: PageProps) {
         aria-label="Filter results by type"
         className="flex gap-1.5 flex-wrap mb-5"
       >
-        {TYPES.map((t) => {
+        {visibleTypes.map((t) => {
           const active = t.id === type;
           const sp = new URLSearchParams();
           sp.set('q', rawQuery);

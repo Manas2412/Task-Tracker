@@ -1,9 +1,16 @@
+import { redirect } from 'next/navigation';
+
+import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 
 import { CreateTagDialog } from './_components/CreateTagDialog';
 import { TagsAdminList, type TagRow } from './_components/TagsAdminList';
 
 export default async function AdminTagsPage() {
+  // Tags are a Super Admin-only feature — OSD can reach /admin but not tags.
+  const session = await auth();
+  if (!session?.user?.isSuperAdmin) redirect('/admin');
+
   const tags = await prisma.tag.findMany({
     orderBy: { name: 'asc' },
     include: {

@@ -27,14 +27,16 @@ const TABS: Tab[] = [
   { href: '/admin/settings', label: 'Settings', icon: 'ti-settings', phase: 1 },
 ];
 
-export function AdminSubNav() {
+export function AdminSubNav({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const pathname = usePathname();
+  // Tags are a Super Admin-only feature — hide the tab from everyone else.
+  const tabs = isSuperAdmin ? TABS : TABS.filter((t) => t.href !== '/admin/tags');
   return (
     <nav
       aria-label="Super Admin sections"
       className="px-2 md:px-4 lg:px-6 flex gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
     >
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const isActive = pathname?.startsWith(tab.href);
         const isSoon = tab.phase > 1;
         return (

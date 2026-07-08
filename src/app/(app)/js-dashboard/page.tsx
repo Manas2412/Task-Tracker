@@ -16,9 +16,8 @@ import type { PillJsLane, PillStatusTone } from '@/components/ui/Pill';
  * JS Dashboard — per PRD §5.5.
  *
  * Read-only dashboard for the Joint Secretary. Combines:
- *   - Personal task counters (mine, priority board, due today, milestones)
+ *   - Personal task counters (mine, priority board, due today)
  *   - JS Priority lanes as compact tap-to-view panels (no drag-and-drop)
- *   - Upcoming milestones
  *   - Personal task list (owned by JS, not completed)
  *
  * Access: hierarchySlot === 'js' | isSuperAdmin | hierarchySlot === 'osd'.
@@ -50,7 +49,7 @@ export default async function JsDashboardPage() {
 
   const userId = session.user.id;
   const baseFilter = { archivedAt: null, parentTaskId: null };
-  // Ministry-wide aggregates (priority board, milestones) stay division-only
+  // Ministry-wide aggregates (priority board) stay division-only
   // so another user's Personal task never leaks into a count or list. The
   // viewer's own-task widgets keep using baseFilter — they are already
   // scoped to this user, who owns those personal tasks.
@@ -60,9 +59,7 @@ export default async function JsDashboardPage() {
     myTasksCount,
     jsPriorityCount,
     dueTodayCount,
-    milestonesCount,
     allPriorityTasks,
-    milestoneTasks,
     myTasks,
     me,
   ] = await Promise.all([
@@ -90,14 +87,6 @@ export default async function JsDashboardPage() {
         ],
       },
     }),
-    // Milestone tasks across the ministry (division-only — never personal)
-    prisma.task.count({
-      where: {
-        ...divisionFilter,
-        milestone: true,
-        status: { not: 'completed' },
-      },
-    }),
     // All priority board tasks (grouped by lane below)
     prisma.task.findMany({
       where: { ...divisionFilter, jsPriorityLane: { not: null } },
@@ -106,20 +95,6 @@ export default async function JsDashboardPage() {
         division: true,
       },
       orderBy: [{ priority: 'desc' }, { dueDate: { sort: 'asc', nulls: 'last' } }],
-    }),
-    // Upcoming milestone tasks ordered by due date (up to 6)
-    prisma.task.findMany({
-      where: {
-        ...divisionFilter,
-        milestone: true,
-        status: { not: 'completed' },
-      },
-      include: {
-        owner: { select: USER_SUMMARY_SELECT },
-        division: true,
-      },
-      orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }],
-      take: 6,
     }),
     // Personal tasks owned by JS, not completed (up to 8)
     prisma.task.findMany({
@@ -197,13 +172,6 @@ export default async function JsDashboardPage() {
           href="/tasks?filter=today"
           icon="ti-clock"
         />
-        <Stat
-          label="Milestones"
-          value={milestonesCount}
-          tone="primary"
-          href="/calendar"
-          icon="ti-flag-3"
-        />
       </section>
 
       {/* Priority lanes */}
@@ -235,97 +203,8 @@ export default async function JsDashboardPage() {
         </div>
       </section>
 
-      {/* Two-column section: milestones + my tasks */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-5">
-        {/* Milestones */}
-        <section
-          aria-labelledby="jsd-milestones"
-          className="bg-panel border border-line rounded-xl"
-        >
-          <header className="flex items-center justify-between px-4 py-3 border-b border-line-2">
-            <div>
-              <h2
-                id="jsd-milestones"
-                className="font-serif text-[18px] text-ink leading-none"
-              >
-                Milestones
-              </h2>
-              <p className="text-[10px] text-ink-3 mt-1">
-                Upcoming milestone tasks, sorted by due date
-              </p>
-            </div>
-            <span className="text-[10px] font-medium text-ink-3 bg-line-2 px-2 py-0.5 rounded-full">
-              {milestonesCount} open
-            </span>
-          </header>
-
-          {milestoneTasks.length === 0 ? (
-            <div className="px-4 py-10 text-center">
-              <i className="ti ti-flag-3 text-[28px] text-ink-3 block mb-2" aria-hidden="true" />
-              <p className="text-[12px] text-ink-2">No open milestones right now.</p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-line-2">
-              {milestoneTasks.map((t) => {
-                const due = formatDue(t.dueDate, now);
-                return (
-                  <li key={t.id}>
-                    <Link
-                      href={`/tasks/${t.id}`}
-                      className="flex items-start gap-3 px-4 py-3 hover:bg-bg transition-colors"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          'w-1 self-stretch rounded-full shrink-0',
-                          t.priority === 'urgent' && 'bg-urgent',
-                          t.priority === 'high' && 'bg-high',
-                          t.priority === 'medium' && 'bg-medium',
-                          t.priority === 'low' && 'bg-low',
-                        )}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium text-ink leading-snug truncate">
-                          {t.name}
-                        </p>
-                        <p className="text-[10px] text-ink-3 mt-0.5 truncate">
-                          {t.division.name}
-                        </p>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          <Pill variant="milestone" />
-                          <Pill
-                            variant="status"
-                            tone={t.status as PillStatusTone}
-                            label={TASK_STATUS_LABEL[t.status] ?? t.status}
-                          />
-                          {due.tone !== 'none' ? (
-                            <span
-                              className={cn(
-                                'text-[10px]',
-                                due.tone === 'overdue' && 'text-urgent font-medium',
-                                due.tone === 'today' && 'text-accent font-medium',
-                                (due.tone === 'soon' || due.tone === 'future') && 'text-ink-3',
-                              )}
-                            >
-                              {due.label}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                      <Avatar
-                        initials={initialsOf(t.owner.name)}
-                        colour={t.owner.division.avatarColour}
-                        size="sm"
-                        ariaLabel={`Owner ${t.owner.name}`}
-                      />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-
+      {/* My tasks */}
+      <div className="grid grid-cols-1 gap-5">
         {/* My assigned tasks */}
         <section
           aria-labelledby="jsd-mine"
@@ -439,10 +318,6 @@ export default async function JsDashboardPage() {
         <span>·</span>
         <Link href="/tasks?filter=today" className="text-primary hover:underline">
           Due today
-        </Link>
-        <span>·</span>
-        <Link href="/calendar" className="text-primary hover:underline">
-          Milestones
         </Link>
       </nav>
     </div>
