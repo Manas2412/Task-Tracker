@@ -14,6 +14,8 @@ import type {
 } from '@/lib/search';
 import { cn } from '@/lib/utils';
 
+import { UserProfilePopup } from './UserProfilePopup';
+
 const DEBOUNCE_MS = 200;
 const MIN_LENGTH = 2;
 
@@ -39,6 +41,8 @@ export function SearchField() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResults>(EMPTY);
   const [activeIndex, setActiveIndex] = useState(0);
+  // The person whose view-only profile popup is open (from a People result).
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
 
   // Debounce the query
   useEffect(() => {
@@ -142,6 +146,13 @@ export function SearchField() {
     router.push(href);
   };
 
+  // People results open a view-only profile popup rather than navigating.
+  const openProfile = (userId: string) => {
+    setOpen(false);
+    closeMobile();
+    setProfileUserId(userId);
+  };
+
   const closeMobile = () => {
     setMobileOpen(false);
     setQuery('');
@@ -154,7 +165,8 @@ export function SearchField() {
       if (totalShown > 0) {
         const item = flat[activeIndex];
         if (item) {
-          navigateToResult(item.href);
+          if (item.kind === 'user') openProfile(item.id);
+          else navigateToResult(item.href);
           return;
         }
       }
@@ -233,6 +245,7 @@ export function SearchField() {
                   results={results}
                   activeIndex={activeIndex}
                   onSelect={(href) => navigateToResult(href)}
+                  onSelectUser={openProfile}
                   onHoverIndex={setActiveIndex}
                 />
               )}
@@ -306,6 +319,7 @@ export function SearchField() {
                       results={results}
                       activeIndex={activeIndex}
                       onSelect={(href) => navigateToResult(href)}
+                      onSelectUser={openProfile}
                       onHoverIndex={setActiveIndex}
                     />
                     {isQuerying ? (
@@ -324,6 +338,9 @@ export function SearchField() {
             document.body,
           )
         : null}
+
+      {/* View-only profile popup — opened from a People result */}
+      <UserProfilePopup userId={profileUserId} onClose={() => setProfileUserId(null)} />
     </>
   );
 }
@@ -336,11 +353,13 @@ function DropdownGroups({
   results,
   activeIndex,
   onSelect,
+  onSelectUser,
   onHoverIndex,
 }: {
   results: SearchResults;
   activeIndex: number;
   onSelect: (href: string) => void;
+  onSelectUser: (userId: string) => void;
   onHoverIndex: (i: number) => void;
 }) {
   let runningIndex = 0;
@@ -396,7 +415,7 @@ function DropdownGroups({
                 row={r}
                 active={idx === activeIndex}
                 onMouseEnter={() => onHoverIndex(idx)}
-                onSelect={() => onSelect(r.href)}
+                onSelect={() => onSelectUser(r.id)}
               />
             );
           })}
@@ -495,6 +514,37 @@ function RowLink({
   );
 }
 
+function RowButton({
+  active,
+  onMouseEnter,
+  onSelect,
+  children,
+}: {
+  active: boolean;
+  onMouseEnter: () => void;
+  onSelect: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        role="option"
+        aria-selected={active}
+        onMouseEnter={onMouseEnter}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={onSelect}
+        className={cn(
+          'w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors',
+          active ? 'bg-primary-soft' : 'hover:bg-bg',
+        )}
+      >
+        {children}
+      </button>
+    </li>
+  );
+}
+
 function TaskRow({
   row,
   active,
@@ -571,7 +621,7 @@ function UserRow({
   onSelect: () => void;
 }) {
   return (
-    <RowLink href={row.href} active={active} onMouseEnter={onMouseEnter} onSelect={onSelect}>
+    <RowButton active={active} onMouseEnter={onMouseEnter} onSelect={onSelect}>
       <span
         className="w-7 h-7 grid place-items-center rounded-full text-white text-[10px] font-medium shrink-0"
         style={{ backgroundColor: row.divisionColour }}
@@ -595,7 +645,12 @@ function UserRow({
           {row.designation}
         </span>
       </span>
-    </RowLink>
+      {/* Hints that selecting opens a profile card rather than navigating. */}
+      <i
+        className="ti ti-id-badge-2 text-[15px] text-ink-3 shrink-0"
+        aria-hidden="true"
+      />
+    </RowButton>
   );
 }
 
