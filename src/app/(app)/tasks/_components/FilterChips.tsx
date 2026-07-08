@@ -20,7 +20,6 @@ const CHIPS: { id: TaskFilter; label: string }[] = [
   { id: 'mine', label: 'Owned by me' },
   { id: 'urgent', label: 'Urgent' },
   { id: 'js_priority', label: 'JS Priority' },
-  { id: 'milestone', label: 'Milestones' },
   { id: 'completed', label: 'Completed' },
 ];
 

@@ -36,7 +36,6 @@ export type ImportPreviewRow = {
     dueDate?: string;
     priority: 'low' | 'medium' | 'high' | 'urgent';
     visibility: 'division' | 'personal';
-    milestone: boolean;
     divisionId: string;
     divisionName: string;
     ownerId: string;
@@ -82,7 +81,6 @@ const REQUIRED_HEADERS = [
   'due_date',
   'priority',
   'visibility',
-  'milestone',
   'division_name',
   'owner_username',
   'tags',
@@ -114,11 +112,6 @@ const rowSchema = z.object({
       (s) => ['division', 'personal'].includes(s),
       'visibility must be division or personal',
     ),
-  milestone: z
-    .string()
-    .trim()
-    .optional()
-    .transform((s) => (s ? s.toLowerCase() === 'true' || s === '1' || s === 'yes' : false)),
   division_name: z.string().trim().min(1, 'division_name is required'),
   owner_username: z.string().trim().min(1, 'owner_username is required'),
   tags: z.string().trim().optional(),
@@ -238,7 +231,6 @@ export async function parseImportAction(
         dueDate: parsed.data.due_date || undefined,
         priority: parsed.data.priority as 'low' | 'medium' | 'high' | 'urgent',
         visibility: parsed.data.visibility as 'division' | 'personal',
-        milestone: parsed.data.milestone,
         divisionId: div.id,
         divisionName: div.name,
         ownerId: owner.id,
@@ -263,7 +255,6 @@ const commitPayloadSchema = z.object({
       dueDate: z.string().optional(),
       priority: z.enum(['low', 'medium', 'high', 'urgent']),
       visibility: z.enum(['division', 'personal']),
-      milestone: z.boolean(),
       divisionId: z.string().uuid(),
       ownerId: z.string().uuid(),
       tagNames: z.array(z.string()),
@@ -374,7 +365,6 @@ export async function commitImportAction(
             priority: row.priority,
             visibility: row.visibility,
             dueDate: row.dueDate ? parseDueDateInput(row.dueDate) : null,
-            milestone: row.milestone,
             createdById: guard.userId,
           },
         });

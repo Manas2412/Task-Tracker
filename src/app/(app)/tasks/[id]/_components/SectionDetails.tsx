@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import Link from 'next/link';
 
-import { Avatar, Sheet, Switch } from '@/components/ui';
+import { Avatar, Sheet } from '@/components/ui';
 import {
   updateTaskFieldsAction,
   reassignTaskAction,
@@ -59,7 +59,6 @@ type SectionDetailsProps = {
   divisionName: string;
   visibility: 'division' | 'personal';
   recurrence: string | null;
-  milestone: boolean;
   reassignCandidates: ReassignCandidate[];
   pendingReassignment: PendingReassignment | null;
   canReassign: boolean;
@@ -73,7 +72,7 @@ type SectionDetailsProps = {
   subDivisionName: string | null;
   /** Sub-divisions of the task's division; the row hides when empty. */
   subDivisions: SubDivisionOption[];
-  /** Sub-division is a definition edit — same gate as due/milestone. */
+  /** Sub-division is a definition edit — same gate as the due date. */
   canChangeSubDivision: boolean;
   canViewProfiles: boolean;
 };
@@ -129,7 +128,6 @@ export function SectionDetails(props: SectionDetailsProps) {
 
         <VisibilityRow taskId={props.taskId} visibility={props.visibility} canEdit={props.canEditVisibility} />
 
-        <MilestoneRow taskId={props.taskId} milestone={props.milestone} canEdit={props.canEditFields} />
 
         <RecurrenceRow taskId={props.taskId} recurrence={props.recurrence} canEdit={props.canEditFields} />
       </div>
@@ -911,51 +909,6 @@ function VisibilityRow({
   );
 }
 
-// ------------------------------------------------------------
-// Milestone row — inline switch fires its own action
-// ------------------------------------------------------------
-
-function MilestoneRow({ taskId, milestone, canEdit }: { taskId: string; milestone: boolean; canEdit: boolean }) {
-  const [state, formAction] = useFormState<UpdateFieldsState, FormData>(
-    updateTaskFieldsAction,
-    INITIAL_FIELDS_STATE,
-  );
-  const formRef = useRef<HTMLFormElement>(null);
-  const [optimistic, setOptimistic] = useState(milestone);
-
-  useEffect(() => {
-    setOptimistic(milestone);
-  }, [milestone]);
-
-  if (!canEdit) {
-    return (
-      <Row icon="ti-flag-3" label="Milestone">
-        <span className={milestone ? 'text-accent' : 'text-ink-3 font-normal'}>{milestone ? 'Yes' : 'No'}</span>
-      </Row>
-    );
-  }
-
-  return (
-    <form action={formAction} ref={formRef} className="flex items-center gap-3 py-2.5">
-      <input type="hidden" name="taskId" value={taskId} />
-      <input type="hidden" name="milestone" value={optimistic ? 'on' : ''} />
-
-      <i className="ti ti-flag-3 text-[16px] text-accent shrink-0 w-[18px]" aria-hidden="true" />
-      <span className="text-[13px] text-ink-2 w-[100px] shrink-0">Milestone</span>
-      <span className="flex-1 text-right">
-        <Switch
-          checked={optimistic}
-          ariaLabel="Mark as milestone"
-          onChange={(next) => {
-            setOptimistic(next);
-            queueMicrotask(() => formRef.current?.requestSubmit());
-          }}
-        />
-      </span>
-      {state.error ? <span className="sr-only">{state.error}</span> : null}
-    </form>
-  );
-}
 
 function SaveBtn() {
   const { pending } = useFormStatus();

@@ -162,9 +162,9 @@ export default async function TaskDetailPage({ params }: PageProps) {
     (session.user.hierarchySlot === 'director' && session.user.divisionId === task.divisionId) ||
     isHeadOfTaskDivision;
 
-  // Redefining the task — name, due date, milestone, recurrence — is
-  // stricter: a normal owner (e.g. after a transfer) cannot. Mirrors
-  // canEditTaskDetails on the server. Own personal tasks stay fully editable.
+  // Redefining the task — name, due date, recurrence — is stricter: a normal
+  // owner (e.g. after a transfer) cannot. Mirrors canEditTaskDetails on the
+  // server. Own personal tasks stay fully editable.
   const canEditDetails =
     session.user.isSuperAdmin ||
     session.user.hierarchySlot === 'osd' ||
@@ -310,12 +310,8 @@ export default async function TaskDetailPage({ params }: PageProps) {
     canDelete: canEditAttachments || a.uploadedById === session.user.id,
   }));
 
-  // Tag editing: owner, creator, OSD, or Super Admin can manage tags.
-  const canEditTags =
-    task.ownerId === session.user.id ||
-    task.createdById === session.user.id ||
-    session.user.isSuperAdmin ||
-    session.user.hierarchySlot === 'osd';
+  // Tags are a Super Admin-only feature — only they see or manage tags.
+  const canEditTags = session.user.isSuperAdmin;
 
   const currentTagRows: TaskTagRow[] = task.tags.map((t) => ({
     id: t.tag.id,
@@ -488,7 +484,6 @@ export default async function TaskDetailPage({ params }: PageProps) {
               session.user.isSuperAdmin || session.user.hierarchySlot === 'osd'
             }
           />
-          {task.milestone ? <Pill variant="milestone" /> : null}
         </div>
 
         {task.refNumber ? (
@@ -539,7 +534,6 @@ export default async function TaskDetailPage({ params }: PageProps) {
         canChangeSubDivision={canEditDetails}
         visibility={task.visibility as 'division' | 'personal'}
         recurrence={task.recurrenceRule}
-        milestone={task.milestone}
         reassignCandidates={reassignCandidates}
         pendingReassignment={pendingReassignment}
         canReassign={canReassign}
@@ -576,12 +570,14 @@ export default async function TaskDetailPage({ params }: PageProps) {
         }
       />
 
-      <TagsSection
-        taskId={task.id}
-        current={currentTagRows}
-        available={availableTagRows}
-        canEdit={canEditTags}
-      />
+      {session.user.isSuperAdmin ? (
+        <TagsSection
+          taskId={task.id}
+          current={currentTagRows}
+          available={availableTagRows}
+          canEdit={canEditTags}
+        />
+      ) : null}
 
       <section className="px-4 md:px-6 py-5 border-b border-line-2">
         <h2 className="section-label mb-3">

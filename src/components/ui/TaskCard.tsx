@@ -41,7 +41,6 @@ export type TaskCardProps = {
   status: PillStatusTone;
   priority: PillPriorityTone;
   jsPriorityLane?: PillJsLane | null;
-  milestone?: boolean;
   due?: { label: string; tone: 'today' | 'overdue' | 'soon' | 'future' | 'none' };
   owner: { initials: string; colour: string; name: string };
   subtasks?: { done: number; total: number };
@@ -60,7 +59,6 @@ export function TaskCard({
   status,
   priority,
   jsPriorityLane,
-  milestone,
   due,
   owner,
   subtasks,
@@ -112,7 +110,6 @@ export function TaskCard({
         <div className="flex gap-1.5 flex-wrap">
           <Pill variant="status" tone={status} label={STATUS_LABEL[status]} />
           {jsPriorityLane ? <Pill variant="js" lane={jsPriorityLane} /> : null}
-          {milestone ? <Pill variant="milestone" /> : null}
           {primaryDivisionName ? (
             <span
               className="inline-flex items-center gap-1 px-2 py-[3px] text-[10px] font-medium rounded-pill tracking-pill bg-primary-soft text-primary border border-primary-line/40"

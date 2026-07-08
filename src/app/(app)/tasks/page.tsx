@@ -16,7 +16,7 @@ import { QuickCreatePrimary } from './_components/QuickCreate';
 
 import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/ui/Pill';
 
-const VALID_FILTERS: TaskFilter[] = ['all', 'today', 'overdue', 'mine', 'urgent', 'completed', 'js_priority', 'milestone'];
+const VALID_FILTERS: TaskFilter[] = ['all', 'today', 'overdue', 'mine', 'urgent', 'completed', 'js_priority'];
 
 type PageProps = {
   searchParams?: { filter?: string; division?: string; group?: string; sort?: string };
@@ -222,7 +222,6 @@ function TaskRow({
         status={t.status as PillStatusTone}
         priority={t.priority as PillPriorityTone}
         jsPriorityLane={t.jsPriorityLane as PillJsLane | null}
-        milestone={t.milestone}
         due={due}
         owner={{
           initials: initialsOf(t.owner.name),
@@ -351,7 +350,6 @@ function EmptyState({ filter }: { filter: TaskFilter }) {
     mine: 'No tasks owned by you in this view.',
     urgent: 'No urgent tasks right now.',
     js_priority: 'No JS Priority tasks.',
-    milestone: 'No milestone tasks.',
     completed: 'No completed tasks.',
   };
   return (

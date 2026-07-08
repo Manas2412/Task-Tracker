@@ -179,8 +179,8 @@ async function canEditTask(
 }
 
 /**
- * Editing a task's definition — its name, due date, milestone, or
- * recurrence — and deleting it are privileged actions. Unlike canEditTask,
+ * Editing a task's definition — its name, due date, or recurrence — and
+ * deleting it are privileged actions. Unlike canEditTask,
  * simply owning the task is NOT enough: a normal user who receives a task
  * (e.g. via transfer) can work it (status, subtasks) but cannot redefine
  * or delete it. Allowed for a Super Admin, OSD, JS, a director of the
@@ -236,10 +236,6 @@ const createTaskSchema = z.object({
     .refine((s) => !s || !Number.isNaN(Date.parse(s)), 'Due date is invalid'),
   priority: z.enum(PRIORITY).default('low'),
   visibility: z.enum(VISIBILITY).default('division'),
-  milestone: z
-    .string()
-    .optional()
-    .transform((s) => s === 'on'),
   divisionId: z.string().uuid().optional(),
   // Optional sub-division within the target division — a Division row of
   // kind 'sub_division' whose parent is the target. Categorisation only; it
@@ -284,7 +280,6 @@ export async function createTaskAction(
     dueDate: formData.get('dueDate'),
     priority: formData.get('priority') ?? 'low',
     visibility: formData.get('visibility') ?? 'division',
-    milestone: formData.get('milestone'),
     divisionId: formData.get('divisionId') || undefined,
     subDivisionId: formData.get('subDivisionId') || undefined,
     ownerId: formData.get('ownerId') || undefined,
@@ -411,7 +406,6 @@ export async function createTaskAction(
           priority: parsed.data.priority,
           visibility: parsed.data.visibility,
           dueDate: parsed.data.dueDate ? parseDueDateInput(parsed.data.dueDate) : null,
-          milestone: parsed.data.milestone ?? false,
           linkedTimelineFileId: parsed.data.linkedTimelineFileId ?? null,
           createdById: meRow.id,
         },
@@ -440,7 +434,7 @@ export async function createTaskAction(
           taskId: created.id,
           actorId: meRow.id,
           eventType: 'task_created',
-          payload: { name: created.name, priority: created.priority, milestone: created.milestone },
+          payload: { name: created.name, priority: created.priority },
         },
       });
 
@@ -700,7 +694,7 @@ export async function updateTaskPriorityAction(
 }
 
 // ============================================================
-// updateTaskFields — generic editor for description, due date, visibility, milestone
+// updateTaskFields — generic editor for description, due date, visibility, recurrence
 // ============================================================
 
 const updateFieldsSchema = z.object({
@@ -730,10 +724,6 @@ const updateFieldsSchema = z.object({
       'Due date is invalid',
     ),
   visibility: z.enum(VISIBILITY).optional(),
-  milestone: z
-    .string()
-    .optional()
-    .transform((s) => (s === undefined ? undefined : s === 'on')),
   recurrenceRule: z
     .union([
       z.literal(''),
@@ -769,7 +759,6 @@ export async function updateTaskFieldsAction(
     visibility: formData.has('visibility')
       ? (formData.get('visibility') as string)
       : undefined,
-    milestone: formData.has('milestone') ? (formData.get('milestone') as string) : undefined,
     recurrenceRule: formData.has('recurrenceRule')
       ? (formData.get('recurrenceRule') as string)
       : undefined,
@@ -793,19 +782,18 @@ export async function updateTaskFieldsAction(
     return fail('Only the task owner, creator, or head of division can edit this task.', epoch);
   }
 
-  // Name, due date, milestone, and recurrence redefine the task, so they
-  // need the stricter gate — a normal owner (e.g. after a transfer) may
-  // still change status/subtasks/description, but not these. Each editor
-  // posts only its own field, so presence is a reliable signal.
+  // Name, due date, and recurrence redefine the task, so they need the
+  // stricter gate — a normal owner (e.g. after a transfer) may still change
+  // status/subtasks/description, but not these. Each editor posts only its
+  // own field, so presence is a reliable signal.
   const editsDefinition =
     parsed.data.name !== undefined ||
     parsed.data.dueDate !== undefined ||
-    parsed.data.milestone !== undefined ||
     parsed.data.recurrenceRule !== undefined ||
     parsed.data.subDivisionId !== undefined;
   if (editsDefinition && !(await canEditTaskDetails(me.id, task))) {
     return fail(
-      'Only a division head, OSD, JS, or Super Admin can change the name, due date, milestone, recurrence, or sub-division.',
+      'Only a division head, OSD, JS, or Super Admin can change the name, due date, recurrence, or sub-division.',
       epoch,
     );
   }
@@ -855,13 +843,6 @@ export async function updateTaskFieldsAction(
     events.push({
       eventType: 'visibility_changed',
       payload: { from: task.visibility, to: parsed.data.visibility },
-    });
-  }
-  if (parsed.data.milestone !== undefined && parsed.data.milestone !== task.milestone) {
-    data.milestone = parsed.data.milestone;
-    events.push({
-      eventType: 'milestone_toggled',
-      payload: { milestone: parsed.data.milestone },
     });
   }
   if (

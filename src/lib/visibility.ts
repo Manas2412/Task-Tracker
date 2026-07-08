@@ -26,7 +26,7 @@ import {
  * including Super Admin and OSD.
  */
 
-export type TaskFilter = 'all' | 'today' | 'overdue' | 'mine' | 'urgent' | 'completed' | 'js_priority' | 'milestone';
+export type TaskFilter = 'all' | 'today' | 'overdue' | 'mine' | 'urgent' | 'completed' | 'js_priority';
 
 /**
  * List ordering. `default` is the smart order (JS Priority lane, then due
@@ -114,8 +114,6 @@ function buildFilterClause(filter: TaskFilter, callerId: string): Prisma.TaskWhe
       return { status: 'completed' };
     case 'js_priority':
       return { jsPriorityLane: { not: null }, status: { not: 'completed' } };
-    case 'milestone':
-      return { milestone: true, status: { not: 'completed' } };
     case 'all':
     default:
       return { status: { not: 'completed' } };

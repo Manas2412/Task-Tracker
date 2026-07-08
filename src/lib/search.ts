@@ -89,9 +89,9 @@ export type SearchTaskFilters = {
   dueFrom?: string;
   dueTo?: string;
   jsPriority?: boolean;
-  milestone?: boolean;
   /** Restrict to tasks carrying this exact tag (uuid). Set when the user
-   *  opens a tag from search results to see everything under it. */
+   *  opens a tag from search results to see everything under it.
+   *  Super Admin-only (tags are an admin feature). */
   tagId?: string;
 };
 
@@ -153,18 +153,21 @@ export async function searchTasksFor(
   if (!me) return { rows: [], total: 0 };
 
   const visibility = await buildVisibilityClauses(me);
+  const orClauses: Prisma.TaskWhereInput[] = [
+    { name: { contains: q, mode: 'insensitive' } },
+    { refNumber: { contains: q, mode: 'insensitive' } },
+    { description: { contains: q, mode: 'insensitive' } },
+    { owner: { name: { contains: q, mode: 'insensitive' } } },
+  ];
+  // Tags are a Super Admin-only feature — only their search matches a task by
+  // its tag names.
+  if (me.isSuperAdmin) {
+    orClauses.push({ tags: { some: { tag: { name: { contains: q, mode: 'insensitive' } } } } });
+  }
   const filter: Prisma.TaskWhereInput = {
     archivedAt: null,
     parentTaskId: null,
-    OR: [
-      { name: { contains: q, mode: 'insensitive' } },
-      { refNumber: { contains: q, mode: 'insensitive' } },
-      { description: { contains: q, mode: 'insensitive' } },
-      { owner: { name: { contains: q, mode: 'insensitive' } } },
-      // A task matches when any of its tags' names contain the query, so
-      // searching a tag surfaces every task under it.
-      { tags: { some: { tag: { name: { contains: q, mode: 'insensitive' } } } } },
-    ],
+    OR: orClauses,
   };
   const andClauses: Prisma.TaskWhereInput[] = [{ OR: visibility }, filter];
 
@@ -176,13 +179,13 @@ export async function searchTasksFor(
       andClauses.push({ priority: filters.priority as TaskPriority });
     }
     if (filters.divisionId) andClauses.push({ divisionId: filters.divisionId });
-    // Opening a tag from search results narrows to exactly its tasks. Guard
-    // the uuid shape so a hand-edited ?tag= can't throw at the Postgres cast.
-    if (filters.tagId && UUID_RE.test(filters.tagId)) {
+    // Opening a tag from search results narrows to exactly its tasks — a
+    // Super Admin-only path. Guard the uuid shape so a hand-edited ?tag=
+    // can't throw at the Postgres cast.
+    if (me.isSuperAdmin && filters.tagId && UUID_RE.test(filters.tagId)) {
       andClauses.push({ tags: { some: { tagId: filters.tagId } } });
     }
     if (filters.jsPriority) andClauses.push({ jsPriorityLane: { not: null } });
-    if (filters.milestone) andClauses.push({ milestone: true });
     if (filters.dueFrom || filters.dueTo) {
       const dueDateClause: Prisma.DateTimeNullableFilter = {};
       if (filters.dueFrom) dueDateClause.gte = new Date(filters.dueFrom);
@@ -334,11 +337,19 @@ export async function searchUsersFor(
 }
 
 export async function searchTagsFor(
+  callerId: string,
   query: string,
   take: number,
 ): Promise<{ rows: SearchTagResult[]; total: number }> {
   const q = normaliseQuery(query);
   if (!isQuerySearchable(q)) return { rows: [], total: 0 };
+
+  // Tags are a Super Admin-only feature — no one else searches or sees them.
+  const me = await prisma.user.findUnique({
+    where: { id: callerId },
+    select: { isSuperAdmin: true },
+  });
+  if (!me?.isSuperAdmin) return { rows: [], total: 0 };
 
   const where: Prisma.TagWhereInput = {
     name: { contains: q, mode: 'insensitive' },
@@ -382,7 +393,7 @@ export async function searchPreview(
     searchTasksFor(callerId, query, PREVIEW_PER_GROUP),
     searchTimelineFilesFor(callerId, query, PREVIEW_PER_GROUP),
     searchUsersFor(query, PREVIEW_PER_GROUP),
-    searchTagsFor(query, PREVIEW_PER_GROUP),
+    searchTagsFor(callerId, query, PREVIEW_PER_GROUP),
   ]);
   return {
     query,
@@ -423,7 +434,7 @@ export async function searchFull(
       ? searchUsersFor(query, FULL_PER_GROUP)
       : Promise.resolve({ rows: [], total: 0 }),
     include.tags
-      ? searchTagsFor(query, FULL_PER_GROUP)
+      ? searchTagsFor(callerId, query, FULL_PER_GROUP)
       : Promise.resolve({ rows: [], total: 0 }),
   ]);
 

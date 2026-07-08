@@ -32,7 +32,6 @@ export function SearchAdvancedFilters({ divisions }: { divisions: Division[] }) 
   const dueFrom = sp.get('dueFrom') ?? '';
   const dueTo = sp.get('dueTo') ?? '';
   const jsP = sp.get('jsP') === '1';
-  const milestone = sp.get('milestone') === '1';
 
   const navigate = (updates: Record<string, string>) => {
     const next = new URLSearchParams(sp.toString());
@@ -43,7 +42,7 @@ export function SearchAdvancedFilters({ divisions }: { divisions: Division[] }) 
     router.push(`/search?${next.toString()}`, { scroll: false });
   };
 
-  const hasFilters = status || priority || divisionId || dueFrom || dueTo || jsP || milestone;
+  const hasFilters = status || priority || divisionId || dueFrom || dueTo || jsP;
 
   return (
     <div className="mb-4 space-y-2.5">
@@ -107,22 +106,10 @@ export function SearchAdvancedFilters({ divisions }: { divisions: Division[] }) 
           JS Priority
         </button>
 
-        {/* Milestone toggle */}
-        <button
-          type="button"
-          onClick={() => navigate({ milestone: milestone ? '' : '1' })}
-          className={cn(
-            'text-[12px] px-2.5 py-1.5 rounded-lg border transition-colors font-medium',
-            milestone ? 'bg-ink text-white border-ink' : 'bg-panel text-ink-2 border-line hover:border-ink-4',
-          )}
-        >
-          Milestone
-        </button>
-
         {hasFilters ? (
           <button
             type="button"
-            onClick={() => navigate({ status: '', priority: '', division: '', dueFrom: '', dueTo: '', jsP: '', milestone: '' })}
+            onClick={() => navigate({ status: '', priority: '', division: '', dueFrom: '', dueTo: '', jsP: '' })}
             className="text-[11px] text-ink-3 hover:text-ink-2 transition-colors underline underline-offset-2"
           >
             Clear filters

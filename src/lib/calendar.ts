@@ -40,8 +40,6 @@ export type CalendarEvent = {
   priority?: string;
   /** IST clock time for engagements, e.g. "2:30 pm". */
   time?: string;
-  /** Task milestone flag — shown with a small marker. */
-  milestone?: boolean;
 };
 
 export type CalendarFilters = {
@@ -151,7 +149,6 @@ export async function fetchCalendarEvents(opts: {
       href: `/tasks/${t.id}`,
       sub: `${t.division.name} · ${t.owner.name}`,
       priority: t.priority,
-      milestone: t.milestone,
     });
   }
 

@@ -63,7 +63,6 @@ export default async function PriorityBoardPage() {
       jsPriorityLane: lane,
       divisionName: t.division.name,
       due: t.dueDate,
-      milestone: t.milestone,
       owner: {
         name: t.owner.name,
         initials: initialsOf(t.owner.name),
