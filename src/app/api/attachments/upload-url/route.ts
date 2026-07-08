@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { logError } from '@/lib/utils/log';
 
 import {
-  canEditTaskAttachments,
+  canAddTaskAttachments,
   canEditTfAttachments,
 } from '@/app/actions/attachments';
 import { auth } from '@/lib/auth';
@@ -77,10 +77,10 @@ export async function POST(request: Request) {
     );
   }
 
-  // Permission gate
+  // Permission gate — collaborators may add task documents.
   const allowed =
     parsed.data.scope === 'task'
-      ? await canEditTaskAttachments(session.user.id, parsed.data.parentId)
+      ? await canAddTaskAttachments(session.user.id, parsed.data.parentId)
       : await canEditTfAttachments(session.user.id, parsed.data.parentId);
   if (!allowed) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

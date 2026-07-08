@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { isTaskCollaborator } from '@/lib/task-participants';
 import {
   deleteObject as deleteS3Object,
   isS3Configured,
@@ -27,7 +28,11 @@ import {
  * Drive-link path bypasses S3 entirely.
  *
  * Permissions:
- *   - Task attachments: owner / creator / OSD / Super Admin
+ *   - Task attachments — add: owner / creator / OSD / Super Admin / head, or
+ *                        any collaborator (contribute right).
+ *   - Task attachments — manage (rename / delete another's): owner / creator /
+ *                        OSD / Super Admin. A collaborator may still remove a
+ *                        file they uploaded themselves (uploader check).
  *   - TF source docs:   OSD / Super Admin / Director of any marked-to division
  *   - TF action doc:    same as TF source
  */
@@ -85,6 +90,19 @@ export async function canEditTaskAttachments(
     task.ownerId === callerId ||
     task.createdById === callerId
   );
+}
+
+/**
+ * Who may ADD a document to a task: everyone with manage rights
+ * (`canEditTaskAttachments`) plus any explicit collaborator. Collaborators
+ * can contribute files but not rename or delete another user's uploads.
+ */
+export async function canAddTaskAttachments(
+  callerId: string,
+  taskId: string,
+): Promise<boolean> {
+  if (await canEditTaskAttachments(callerId, taskId)) return true;
+  return isTaskCollaborator(callerId, taskId);
 }
 
 export async function canEditTfAttachments(
@@ -155,10 +173,10 @@ export async function registerAttachmentAction(
       keyMatchesScope(parsed.data.key, { kind: 'tf_action', tfId: parsed.data.parentId }));
   if (!matches) return fail('Key does not match the declared parent.', epoch);
 
-  // Permission check
+  // Permission check — adding a task document is open to collaborators too.
   const allowed =
     parsed.data.scope === 'task'
-      ? await canEditTaskAttachments(me.id, parsed.data.parentId)
+      ? await canAddTaskAttachments(me.id, parsed.data.parentId)
       : await canEditTfAttachments(me.id, parsed.data.parentId);
   if (!allowed) return fail('You do not have permission.', epoch);
 
@@ -214,7 +232,7 @@ export async function addDriveLinkAttachmentAction(
 
   const allowed =
     parsed.data.scope === 'task'
-      ? await canEditTaskAttachments(me.id, parsed.data.parentId)
+      ? await canAddTaskAttachments(me.id, parsed.data.parentId)
       : await canEditTfAttachments(me.id, parsed.data.parentId);
   if (!allowed) return fail('You do not have permission.', epoch);
 

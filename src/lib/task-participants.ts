@@ -74,3 +74,21 @@ export async function isTaskParticipant(
   const count = await prisma.user.count({ where: { AND: [{ id: userId }, where] } });
   return count > 0;
 }
+
+/**
+ * Whether a user is an explicit collaborator on a task — any collaborator
+ * row (collaborator / division_lead / co_owner). Collaborators may
+ * *contribute* to a task they can see (add documents, edit its context,
+ * create subtasks) without owning or being able to redefine it. The
+ * server-side guards for those contribute actions share this helper.
+ */
+export async function isTaskCollaborator(
+  userId: string,
+  taskId: string,
+): Promise<boolean> {
+  const row = await prisma.taskCollaborator.findFirst({
+    where: { taskId, userId },
+    select: { id: true },
+  });
+  return row !== null;
+}

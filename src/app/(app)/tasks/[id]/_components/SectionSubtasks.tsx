@@ -28,12 +28,26 @@ type AssigneeOption = {
 type SectionSubtasksProps = {
   taskId: string;
   subtasks: Subtask[];
+  /** Manage existing subtasks — reassign, change deadline, toggle done. */
   canEdit: boolean;
+  /**
+   * Add new subtasks. Defaults to `canEdit`; passed separately so
+   * collaborators can create subtasks without gaining edit rights over the
+   * ones already there.
+   */
+  canAdd?: boolean;
   assignees: AssigneeOption[];
   parentDueDate: Date | null;
 };
 
-export function SectionSubtasks({ taskId, subtasks, canEdit, assignees, parentDueDate }: SectionSubtasksProps) {
+export function SectionSubtasks({
+  taskId,
+  subtasks,
+  canEdit,
+  canAdd = canEdit,
+  assignees,
+  parentDueDate,
+}: SectionSubtasksProps) {
   const [showAdd, setShowAdd] = useState(false);
   const total = subtasks.length;
   const done = subtasks.filter((s) => s.status === 'completed').length;
@@ -50,7 +64,7 @@ export function SectionSubtasks({ taskId, subtasks, canEdit, assignees, parentDu
             </span>
           ) : null}
         </h2>
-        {canEdit && !showAdd ? (
+        {canAdd && !showAdd ? (
           <button
             type="button"
             onClick={() => setShowAdd(true)}
