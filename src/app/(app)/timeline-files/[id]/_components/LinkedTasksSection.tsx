@@ -65,7 +65,7 @@ export function LinkedTasksSection({
           aria-label="Linked task completion"
         >
           <div
-            className="h-full bg-ink transition-[width] duration-300"
+            className="h-full bg-primary transition-[width] duration-[var(--dur-slow)] ease-[var(--ease-emphasis)] motion-reduce:transition-none"
             style={{ width: `${percent}%` }}
           />
         </div>

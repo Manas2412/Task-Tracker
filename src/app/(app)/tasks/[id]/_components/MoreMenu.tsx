@@ -66,8 +66,8 @@ export function MoreMenu({ taskId, canArchive, canDelete, reasonNoDelete }: More
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-medium text-ink-2 hover:text-ink hover:bg-line-2 transition-colors"
       >
-        <i className="ti ti-pencil text-[14px]" aria-hidden="true" />
-        Edit
+        <i className="ti ti-dots-vertical text-[14px]" aria-hidden="true" />
+        More
       </button>
 
       <div

@@ -337,7 +337,7 @@ function Stat({
   return (
     <div
       className="p-4 rounded-xl border border-line"
-      style={{ background: 'linear-gradient(180deg, #fafaf7 0%, #f5f4f0 100%)' }}
+      style={{ background: 'linear-gradient(180deg, var(--canvas) 0%, var(--bg) 100%)' }}
     >
       <div className={cn('font-serif text-[22px] md:text-[26px] leading-none font-medium', tone)}>
         {value}

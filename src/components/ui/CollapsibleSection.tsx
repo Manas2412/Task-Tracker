@@ -58,14 +58,14 @@ export function CollapsibleSection({
           aria-controls={panelId}
           className={cn(
             'group flex w-full items-center gap-3 px-4 md:px-6 py-3.5 text-left transition-colors',
-            open ? 'bg-bg/50' : 'hover:bg-bg/60',
+            open ? 'bg-primary-soft/50' : 'hover:bg-bg/60',
           )}
         >
           <span
             className={cn(
               'grid h-9 w-9 shrink-0 place-items-center rounded-xl border transition-colors',
               open
-                ? 'border-ink bg-ink text-white'
+                ? 'border-primary-line bg-primary-soft text-primary'
                 : 'border-line bg-panel text-ink-2 group-hover:border-ink-4',
             )}
           >

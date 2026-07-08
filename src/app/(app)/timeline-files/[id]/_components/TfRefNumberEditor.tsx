@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
+import { TF_REF_CHIP } from '@/components/ui';
 import { updateTimelineFileRefNumberAction } from '@/app/actions/timeline-files';
 
 type TfRefNumberEditorProps = {
@@ -96,9 +97,7 @@ export function TfRefNumberEditor({
 
   return (
     <span className="inline-flex items-center gap-1">
-      <span className="font-mono text-[11px] font-medium text-primary bg-panel border border-primary-line/60 px-2 py-0.5 rounded-md">
-        {refNo}
-      </span>
+      <span className={TF_REF_CHIP}>{refNo}</span>
       {canEdit ? (
         <button
           type="button"

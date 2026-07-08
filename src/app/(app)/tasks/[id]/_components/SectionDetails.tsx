@@ -721,7 +721,7 @@ function SubDivisionRow({
 
   return (
     <>
-      <Row icon="ti-sitemap" label="Subdivision" onClick={() => setOpen(true)}>
+      <Row icon="ti-sitemap" label="Sub-division" onClick={() => setOpen(true)}>
         <span className={cn(!subDivisionName && 'text-ink-3 font-normal')}>
           {subDivisionName ?? 'Whole division'}
         </span>

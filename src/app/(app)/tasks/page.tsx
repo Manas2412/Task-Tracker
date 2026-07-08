@@ -127,7 +127,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
                         className="w-2 h-2 rounded-full flex-shrink-0"
                         style={{ backgroundColor: group.colour }}
                       />
-                      <h3 className="text-[12px] font-medium text-ink-2 uppercase tracking-[0.06em]">
+                      <h3 className="section-label">
                         {group.divisionName}
                       </h3>
                       <span className="text-[11px] text-ink-3">
@@ -154,7 +154,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
                       className={`ti ${segment.icon} text-[14px] text-ink-3`}
                       aria-hidden="true"
                     />
-                    <h3 className="text-[12px] font-medium text-ink-2 uppercase tracking-[0.06em]">
+                    <h3 className="section-label">
                       {segment.label}
                     </h3>
                     <span className="text-[11px] text-ink-3">
