@@ -126,6 +126,7 @@ The role switcher in the top bar is the only entry point. OSD and Super Admin ar
 - The task appears in every participating division's list with a **"Primary: [Division Name]"** badge.
 - All division leads notified at creation and at every status change.
 - Division leads may comment and edit the task as collaborators; they cannot change ownership.
+- **Participant scope (`src/lib/task-participants.ts`)**: collaborators, subtask assignees, and @mentions are drawn from — and validated against — the task's **participants**: active members of the task's division (or, for a PMU task, its team), that division's **head**, and the oversight roles **OSD + Super Admin**. The seeded **Office of JS** division is the exception — its tasks may involve any active user. Because only oversight roles and the head cross division boundaries, adding a division lead from an *unrelated* division is no longer possible for ordinary users; cross-division reach is limited to OSD / Super Admin / the head. Every task user-picker and its server-side guard (`addCollaboratorAction`, `addSubtaskAction`, `updateSubtaskAction`, `resolveMentions`) call the same helper, so they never diverge. The task **owner** is deliberately stricter (same division only — set at creation).
 
 ### 5.4 OSD unrestricted access
 
@@ -168,7 +169,7 @@ Archived items remain in the database and surface via the audit trail. The Super
 
 ### 5.9 @mention reach
 
-- A user can `@`-mention only people they can see (mention picker is scoped by visibility).
+- A user can `@`-mention only the task's **participants** (§5.3) — the division's members/head plus OSD/Super Admin (any user for Office of JS). The mention picker and the server-side `resolveMentions` both apply this rule, so an `@`-name outside the set silently does not resolve (no notification, no access grant).
 - Mentioning a user automatically grants them read access to **this specific task** only, even if they would not otherwise see it. They appear as an implicit collaborator until removed.
 
 ### 5.10 Bootstrap account
