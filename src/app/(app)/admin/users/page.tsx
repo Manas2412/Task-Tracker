@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { orderUsersByDivision } from '@/lib/admin-users-order';
 import { cn } from '@/lib/utils';
 
 import { CreateUserDialog } from './_components/CreateUserDialog';
@@ -17,7 +18,24 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'super_admin', label: 'Super Admin' },
 ];
 
-type PageProps = { searchParams?: { filter?: string } };
+/** List ordering: 'default' (active first, then name) or 'division'. */
+type Sort = 'default' | 'division';
+
+const SORTS: { id: Sort; label: string }[] = [
+  { id: 'default', label: 'Default' },
+  { id: 'division', label: 'By division' },
+];
+
+type PageProps = { searchParams?: { filter?: string; sort?: string } };
+
+/** Build a users-list URL, omitting params left at their default. */
+function buildHref(params: { filter: Filter; sort: Sort }): string {
+  const sp = new URLSearchParams();
+  if (params.filter !== 'all') sp.set('filter', params.filter);
+  if (params.sort !== 'default') sp.set('sort', params.sort);
+  const qs = sp.toString();
+  return qs ? `/admin/users?${qs}` : '/admin/users';
+}
 
 export default async function AdminUsersPage({ searchParams }: PageProps) {
   const session = await auth();
@@ -28,6 +46,8 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     if (v === 'active' || v === 'disabled' || v === 'super_admin') return v;
     return 'all';
   })();
+
+  const sort: Sort = searchParams?.sort === 'division' ? 'division' : 'default';
 
   const whereFilter =
     filter === 'active'
@@ -65,7 +85,25 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     .filter((u) => u.isActive)
     .map((u) => ({ id: u.id, name: u.name, designation: u.designation }));
 
-  const rows: UserRow[] = users.map((u) => ({
+  // "By division" reorders the rows only — the supervisor picker above keeps
+  // its alphabetical order. divisionsRaw carries kind / parent / PMU-parent /
+  // display order needed to resolve each user's top-level division and tier.
+  const orderedUsers =
+    sort === 'division'
+      ? orderUsersByDivision(
+          users,
+          divisionsRaw.map((d) => ({
+            id: d.id,
+            name: d.name,
+            kind: d.kind as 'division' | 'sub_division' | 'section' | 'pmu',
+            parentId: d.parentId,
+            pmuParentDivisionId: d.pmuParentDivisionId,
+            displayOrder: d.displayOrder,
+          })),
+        )
+      : users;
+
+  const rows: UserRow[] = orderedUsers.map((u) => ({
     id: u.id,
     name: u.name,
     username: u.username,
@@ -108,7 +146,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
       >
         {FILTERS.map((f) => {
           const active = f.id === filter;
-          const href = f.id === 'all' ? '/admin/users' : `/admin/users?filter=${f.id}`;
+          const href = buildHref({ filter: f.id, sort });
           return (
             <Link
               key={f.id}
@@ -127,6 +165,34 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
           );
         })}
       </nav>
+
+      {/* Sort control */}
+      <div
+        className="flex items-center gap-1.5 flex-wrap mb-4"
+        role="group"
+        aria-label="Sort users"
+      >
+        <span className="text-[11px] font-medium text-ink-3">Sort</span>
+        {SORTS.map((s) => {
+          const active = s.id === sort;
+          return (
+            <Link
+              key={s.id}
+              href={buildHref({ filter, sort: s.id })}
+              scroll={false}
+              aria-current={active ? 'true' : undefined}
+              className={cn(
+                'whitespace-nowrap px-3 py-1.5 rounded-[14px] text-[12px] font-medium border transition-colors',
+                active
+                  ? 'bg-ink text-white border-ink'
+                  : 'bg-panel text-ink-2 border-line hover:border-ink-4',
+              )}
+            >
+              {s.label}
+            </Link>
+          );
+        })}
+      </div>
 
       <UsersList
         users={rows}
