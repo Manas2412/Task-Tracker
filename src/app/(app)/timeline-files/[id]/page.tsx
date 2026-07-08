@@ -6,6 +6,7 @@ import {
   AttachmentList,
   type AttachmentRow,
   BackButton,
+  CollapsibleSection,
   Pill,
 } from '@/components/ui';
 import { canEditTfAttachments } from '@/app/actions/attachments';
@@ -355,47 +356,6 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         />
       </section>
 
-      {/* Details */}
-      <section className="px-4 md:px-6 py-5 border-b border-line-2">
-        <h2 className="section-label mb-3">Details</h2>
-        <dl className="flex flex-col gap-2.5">
-          <Row icon="ti-mail-forward" label="From">
-            {tf.fromWhom}
-          </Row>
-          <Row icon="ti-calendar-event" label="Received">
-            {format(tf.receivedDate, 'd LLL yyyy')}
-          </Row>
-          <TfDeadlineEditor
-            tfId={tf.id}
-            deadlineDate={tf.deadlineDate}
-            canEdit={canEditFields}
-          />
-          <Row icon="ti-building" label="Marked to">
-            <MarkedToEditor
-              tfId={tf.id}
-              current={tf.markedTo.map((m) => m.division)}
-              allDivisions={allDivisions}
-              canEdit={canEditFields}
-            />
-          </Row>
-          <Row icon="ti-user" label="Created by">
-            <span className="inline-flex items-center gap-1.5">
-              <span
-                className="w-5 h-5 rounded-full text-white text-[9px] font-medium grid place-items-center"
-                style={{ backgroundColor: tf.createdBy.division.avatarColour }}
-                aria-hidden="true"
-              >
-                {initialsOf(tf.createdBy.name)}
-              </span>
-              {tf.createdBy.name}
-              <span className="text-ink-3 text-[11px] font-normal">
-                · {formatDistanceToNow(tf.createdAt, { addSuffix: true })}
-              </span>
-            </span>
-          </Row>
-        </dl>
-      </section>
-
       <Discussion
         entityField="id"
         entityId={tf.id}
@@ -410,12 +370,60 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         canViewProfiles={me.isSuperAdmin || me.hierarchySlot === 'osd'}
       />
 
-      <TfActivitySection
-        activity={tf.activity.map((a) => ({
-          ...a,
-          payload: (a.payload ?? {}) as Record<string, unknown>,
-        }))}
-      />
+      {/* Details and the activity log live together in one collapsible panel
+          at the bottom — consistent with the task / subtask pages. */}
+      <CollapsibleSection
+        title="File details"
+        subtitle="From, received, deadline, marked to and activity"
+        icon="ti-list-details"
+      >
+        <section className="px-4 md:px-6 py-5 border-b border-line-2">
+          <h2 className="section-label mb-3">Details</h2>
+          <dl className="flex flex-col gap-2.5">
+            <Row icon="ti-mail-forward" label="From">
+              {tf.fromWhom}
+            </Row>
+            <Row icon="ti-calendar-event" label="Received">
+              {format(tf.receivedDate, 'd LLL yyyy')}
+            </Row>
+            <TfDeadlineEditor
+              tfId={tf.id}
+              deadlineDate={tf.deadlineDate}
+              canEdit={canEditFields}
+            />
+            <Row icon="ti-building" label="Marked to">
+              <MarkedToEditor
+                tfId={tf.id}
+                current={tf.markedTo.map((m) => m.division)}
+                allDivisions={allDivisions}
+                canEdit={canEditFields}
+              />
+            </Row>
+            <Row icon="ti-user" label="Created by">
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className="w-5 h-5 rounded-full text-white text-[9px] font-medium grid place-items-center"
+                  style={{ backgroundColor: tf.createdBy.division.avatarColour }}
+                  aria-hidden="true"
+                >
+                  {initialsOf(tf.createdBy.name)}
+                </span>
+                {tf.createdBy.name}
+                <span className="text-ink-3 text-[11px] font-normal">
+                  · {formatDistanceToNow(tf.createdAt, { addSuffix: true })}
+                </span>
+              </span>
+            </Row>
+          </dl>
+        </section>
+
+        <TfActivitySection
+          activity={tf.activity.map((a) => ({
+            ...a,
+            payload: (a.payload ?? {}) as Record<string, unknown>,
+          }))}
+        />
+      </CollapsibleSection>
     </div>
   );
 }
