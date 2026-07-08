@@ -48,6 +48,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
     include: {
       owner: { select: USER_SUMMARY_SELECT },
       division: true,
+      subDivision: { select: { id: true, name: true } },
       collaborators: {
         include: { user: { select: USER_SUMMARY_SELECT } },
       },
@@ -338,7 +339,14 @@ export default async function TaskDetailPage({ params }: PageProps) {
   const reassignAnywhere =
     session.user.isSuperAdmin || session.user.hierarchySlot === 'osd';
 
-  const [reassignCandidateRows, pendingReassignmentRow, allDivisions, headedByUser, subordinateIds] =
+  const [
+    reassignCandidateRows,
+    pendingReassignmentRow,
+    allDivisions,
+    headedByUser,
+    subordinateIds,
+    subDivisionOptions,
+  ] =
     await Promise.all([
       canReassign
         ? prisma.user.findMany({
@@ -373,6 +381,14 @@ export default async function TaskDetailPage({ params }: PageProps) {
         : Promise.resolve([]),
       canReassign && !reassignAnywhere ? getHeadedDivisionsByUser() : Promise.resolve(new Map<string, string[]>()),
       canReassign && !reassignAnywhere ? getSubordinateIds(session.user.id) : Promise.resolve(new Set<string>()),
+      // Sub-divisions of the task's division — drives the Subdivision row,
+      // which appears only when the division has any. Fetched regardless of
+      // edit rights so the row can also render read-only.
+      prisma.division.findMany({
+        where: { kind: 'sub_division', parentId: task.divisionId },
+        orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+        select: { id: true, name: true, avatarColour: true },
+      }),
     ]);
 
   const reassignCandidates = reassignCandidateRows
@@ -501,6 +517,10 @@ export default async function TaskDetailPage({ params }: PageProps) {
         due={task.dueDate}
         divisionId={task.divisionId}
         divisionName={task.division.name}
+        subDivisionId={task.subDivisionId}
+        subDivisionName={task.subDivision?.name ?? null}
+        subDivisions={subDivisionOptions}
+        canChangeSubDivision={canEditDetails}
         visibility={task.visibility as 'division' | 'personal'}
         recurrence={task.recurrenceRule}
         milestone={task.milestone}

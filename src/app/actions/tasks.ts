@@ -116,6 +116,7 @@ async function spawnRecurringTask(taskId: string, actorId: string): Promise<void
       description: true,
       ownerId: true,
       divisionId: true,
+      subDivisionId: true,
       priority: true,
       visibility: true,
       dueDate: true,
@@ -137,6 +138,7 @@ async function spawnRecurringTask(taskId: string, actorId: string): Promise<void
         description: task.description,
         ownerId: task.ownerId,
         divisionId: task.divisionId,
+        subDivisionId: task.subDivisionId,
         priority: task.priority,
         visibility: task.visibility,
         dueDate: nextDue,
@@ -238,6 +240,13 @@ const createTaskSchema = z.object({
     .optional()
     .transform((s) => s === 'on'),
   divisionId: z.string().uuid().optional(),
+  // Optional sub-division within the target division — a Division row of
+  // kind 'sub_division' whose parent is the target. Categorisation only; it
+  // does not affect ownership or visibility. Empty string → undefined.
+  subDivisionId: z
+    .union([z.literal(''), z.string().uuid()])
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
   // Optional initial owner, named by a head at creation (see below). Empty
   // string → undefined so "unassigned" stays the default.
   ownerId: z
@@ -276,6 +285,7 @@ export async function createTaskAction(
     visibility: formData.get('visibility') ?? 'division',
     milestone: formData.get('milestone'),
     divisionId: formData.get('divisionId') || undefined,
+    subDivisionId: formData.get('subDivisionId') || undefined,
     ownerId: formData.get('ownerId') || undefined,
     linkedTimelineFileId: formData.get('linkedTimelineFileId') || undefined,
     driveUrl: formData.get('driveUrl') || undefined,
@@ -285,7 +295,8 @@ export async function createTaskAction(
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) {
       const key = String(issue.path[0]);
-      if (key === 'name' || key === 'dueDate' || key === 'driveUrl') fieldErrors[key] = issue.message;
+      if (key === 'name' || key === 'dueDate' || key === 'driveUrl' || key === 'subDivisionId')
+        fieldErrors[key] = issue.message;
     }
     return { ok: false, fieldErrors, epoch };
   }
@@ -330,6 +341,10 @@ export async function createTaskAction(
   // the Structure & Hierarchy default: the PMU's team leader (falling back to
   // the creator when unset).
   let ownerId = meRow.id;
+  // A sub-division tag is only meaningful on a division task and must belong
+  // to the target division (a Division row of kind 'sub_division' whose
+  // parent is the target). Personal tasks never carry one.
+  let subDivisionId: string | null = null;
   if (parsed.data.visibility === 'division') {
     const targetDivision = await prisma.division.findUnique({
       where: { id: targetDivisionId },
@@ -338,6 +353,21 @@ export async function createTaskAction(
     // Office of JS tasks may be owned by any active user (same identifier as
     // getOfficeOfJsDivisionId — the seeded division name).
     const isOfficeOfJs = targetDivision?.name === 'Office of JS';
+
+    if (parsed.data.subDivisionId) {
+      const sub = await prisma.division.findUnique({
+        where: { id: parsed.data.subDivisionId },
+        select: { id: true, kind: true, parentId: true },
+      });
+      if (!sub || sub.kind !== 'sub_division' || sub.parentId !== targetDivisionId) {
+        return {
+          ok: false,
+          fieldErrors: { subDivisionId: 'Choose a sub-division of this division.' },
+          epoch,
+        };
+      }
+      subDivisionId = sub.id;
+    }
 
     if (parsed.data.ownerId) {
       const chosen = await prisma.user.findUnique({
@@ -375,6 +405,7 @@ export async function createTaskAction(
           description: parsed.data.description ?? null,
           ownerId,
           divisionId: targetDivisionId,
+          subDivisionId,
           status: 'not_started',
           priority: parsed.data.priority,
           visibility: parsed.data.visibility,
@@ -710,6 +741,12 @@ const updateFieldsSchema = z.object({
     .optional()
     .transform((v) => (v === undefined ? undefined : v === '' ? null : v)),
   divisionId: z.string().uuid().optional(),
+  // Empty string is an explicit clear (null — "no sub-division"); absent is
+  // "leave alone" (undefined), the same distinction the recurrence field draws.
+  subDivisionId: z
+    .union([z.literal(''), z.string().uuid()])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === '' ? null : v)),
 });
 
 type UpdateFieldsState = ActionState;
@@ -736,6 +773,9 @@ export async function updateTaskFieldsAction(
       ? (formData.get('recurrenceRule') as string)
       : undefined,
     divisionId: formData.has('divisionId') ? (formData.get('divisionId') as string) : undefined,
+    subDivisionId: formData.has('subDivisionId')
+      ? (formData.get('subDivisionId') as string)
+      : undefined,
   });
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
@@ -760,10 +800,11 @@ export async function updateTaskFieldsAction(
     parsed.data.name !== undefined ||
     parsed.data.dueDate !== undefined ||
     parsed.data.milestone !== undefined ||
-    parsed.data.recurrenceRule !== undefined;
+    parsed.data.recurrenceRule !== undefined ||
+    parsed.data.subDivisionId !== undefined;
   if (editsDefinition && !(await canEditTaskDetails(me.id, task))) {
     return fail(
-      'Only a division head, OSD, JS, or Super Admin can change the name, due date, milestone, or recurrence.',
+      'Only a division head, OSD, JS, or Super Admin can change the name, due date, milestone, recurrence, or sub-division.',
       epoch,
     );
   }
@@ -832,6 +873,40 @@ export async function updateTaskFieldsAction(
       payload: { from: task.recurrenceRule, to: parsed.data.recurrenceRule },
     });
   }
+  if (
+    parsed.data.subDivisionId !== undefined &&
+    parsed.data.subDivisionId !== task.subDivisionId
+  ) {
+    // A sub-division must belong to the task's current division. Changing the
+    // division is a separate action that clears the sub-division below, so
+    // here we validate against task.divisionId. null clears the tag.
+    let toName: string | null = null;
+    if (parsed.data.subDivisionId !== null) {
+      const sub = await prisma.division.findUnique({
+        where: { id: parsed.data.subDivisionId },
+        select: { id: true, name: true, kind: true, parentId: true },
+      });
+      if (!sub || sub.kind !== 'sub_division' || sub.parentId !== task.divisionId) {
+        return fail('Choose a sub-division of this division.', epoch, {
+          subDivisionId: 'Choose a sub-division of this division.',
+        });
+      }
+      toName = sub.name;
+    }
+    const fromName = task.subDivisionId
+      ? (
+          await prisma.division.findUnique({
+            where: { id: task.subDivisionId },
+            select: { name: true },
+          })
+        )?.name ?? null
+      : null;
+    data.subDivisionId = parsed.data.subDivisionId;
+    events.push({
+      eventType: 'subdivision_changed',
+      payload: { from: fromName, to: toName },
+    });
+  }
   if (parsed.data.divisionId !== undefined && parsed.data.divisionId !== task.divisionId) {
     const meRow = await prisma.user.findUnique({
       where: { id: me.id },
@@ -841,6 +916,9 @@ export async function updateTaskFieldsAction(
       return fail('Only OSD or Super Admin can change the division.', epoch);
     }
     data.divisionId = parsed.data.divisionId;
+    // The current sub-division belongs to the old division's subtree, so it
+    // no longer applies — clear it as part of the move.
+    if (task.subDivisionId) data.subDivisionId = null;
     const oldDiv = await prisma.division.findUnique({ where: { id: task.divisionId }, select: { name: true } });
     const newDiv = await prisma.division.findUnique({ where: { id: parsed.data.divisionId }, select: { name: true } });
     events.push({
@@ -945,6 +1023,7 @@ export async function addSubtaskAction(
     select: {
       id: true,
       divisionId: true,
+      subDivisionId: true,
       visibility: true,
       ownerId: true,
       createdById: true,
@@ -996,6 +1075,7 @@ export async function addSubtaskAction(
           name: parsed.data.name,
           ownerId: assigneeId,
           divisionId: parent.divisionId,
+          subDivisionId: parent.subDivisionId,
           status: 'not_started',
           priority: 'low',
           visibility: parent.visibility,

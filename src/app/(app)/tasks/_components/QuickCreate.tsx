@@ -56,6 +56,8 @@ export type DivisionTarget = {
   /** The division head, or a PMU's team leader — offered as a one-click pill. */
   autoOwnerId: string | null;
   autoOwnerName: string | null;
+  /** Sub-divisions of this division; empty when it has none (or it's a PMU). */
+  subDivisions: { id: string; name: string }[];
 };
 
 /** An active member of a create target, offered as an optional initial owner. */
@@ -213,6 +215,10 @@ function QuickCreateForm({
   // Cleared whenever the target/visibility changes so a stale cross-division
   // pick can't be submitted.
   const [ownerId, setOwnerId] = useState('');
+  // Optional sub-division within the chosen division. Empty = whole division.
+  // Reset alongside ownerId so a sub-division from a previously-chosen
+  // division can't be submitted against a different one.
+  const [subDivisionId, setSubDivisionId] = useState('');
 
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
@@ -349,6 +355,11 @@ function QuickCreateForm({
         name="divisionId"
         value={visibility === 'division' ? divisionId : defaultDivisionId}
       />
+      <input
+        type="hidden"
+        name="subDivisionId"
+        value={visibility === 'division' ? subDivisionId : ''}
+      />
       <input type="hidden" name="priority" value={priority} />
       <input type="hidden" name="visibility" value={visibility} />
 
@@ -459,6 +470,7 @@ function QuickCreateForm({
                       onClick={() => {
                         setVisibility(v.value);
                         setOwnerId('');
+                        setSubDivisionId('');
                       }}
                       className={cn(
                         'py-2 text-[12px] font-medium rounded-md transition-colors inline-flex items-center justify-center gap-1.5',
@@ -492,6 +504,7 @@ function QuickCreateForm({
                 onChange={(e) => {
                   setDivisionId(e.target.value);
                   setOwnerId('');
+                  setSubDivisionId('');
                 }}
                 className="w-full px-3 py-2.5 rounded-lg border border-line bg-panel text-[14px] text-ink outline-none focus:border-ink appearance-none"
               >
@@ -505,6 +518,29 @@ function QuickCreateForm({
               <p className="mt-1 text-[11px] text-ink-3">
                 Leave the owner below blank and a division task starts unassigned — any member can pull it to take ownership; a PMU task goes to its team leader.
               </p>
+            </Field>
+          ) : null}
+
+          {/* Sub-division (optional) — shown only when the chosen division has
+              sub-divisions. Categorisation only: it does not change who can own
+              or see the task. Blank means the whole division. */}
+          {canCreateDivisionTasks &&
+          visibility === 'division' &&
+          selectedTarget &&
+          selectedTarget.subDivisions.length > 0 ? (
+            <Field label="Sub-division" error={state.fieldErrors?.subDivisionId}>
+              <select
+                value={subDivisionId}
+                onChange={(e) => setSubDivisionId(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border border-line bg-panel text-[14px] text-ink outline-none focus:border-ink appearance-none"
+              >
+                <option value="">Whole division</option>
+                {selectedTarget.subDivisions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
             </Field>
           ) : null}
 

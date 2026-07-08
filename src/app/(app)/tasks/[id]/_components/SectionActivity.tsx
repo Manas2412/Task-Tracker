@@ -116,6 +116,10 @@ function describeEvent(type: string, payload: Record<string, unknown> | null): s
         : 'cleared the due date';
     case 'visibility_changed':
       return `set visibility to ${String(payload.to)}`;
+    case 'subdivision_changed':
+      return payload.to
+        ? `moved this task to the ${String(payload.to)} sub-division`
+        : 'removed this task from its sub-division';
     case 'milestone_toggled':
       return payload.milestone ? 'marked as milestone' : 'unmarked as milestone';
     case 'subtask_added':
