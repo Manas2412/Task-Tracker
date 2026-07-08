@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { buildVisibilityClauses } from '@/lib/visibility';
 
 /**
  * View-only profile card shown when a person is opened from global search.
@@ -13,6 +14,7 @@ export type UserProfileCard = {
   name: string;
   username: string;
   designation: string;
+  divisionId: string;
   divisionName: string;
   divisionColour: string;
   phone: string | null;
@@ -23,6 +25,39 @@ export type UserProfileCard = {
   isActive: boolean;
   isSuperAdmin: boolean;
 };
+
+/** A division-visibility task allotted to (owned by) the profiled user. */
+export type AllottedTaskRow = {
+  id: string;
+  name: string;
+  status: string;
+  dueDate: string | null;
+  href: string;
+};
+
+type ViewerContext = {
+  divisionId: string;
+  isSuperAdmin: boolean;
+  hierarchySlot: string;
+};
+
+/**
+ * Who may see a person's "tasks allotted" list: a colleague in the **same
+ * division** (a division-based user), or the oversight roles OSD / Super
+ * Admin. Users of other divisions do not see the control at all. The task
+ * query is additionally visibility-scoped to the viewer, so the list can
+ * never leak a task they could not already see.
+ */
+export function canViewAllottedTasks(
+  viewer: ViewerContext,
+  profileDivisionId: string,
+): boolean {
+  return (
+    viewer.isSuperAdmin ||
+    viewer.hierarchySlot === 'osd' ||
+    viewer.divisionId === profileDivisionId
+  );
+}
 
 export async function getUserProfileCard(id: string): Promise<UserProfileCard | null> {
   const u = await prisma.user.findUnique({
@@ -37,6 +72,7 @@ export async function getUserProfileCard(id: string): Promise<UserProfileCard | 
       workActivities: true,
       isActive: true,
       isSuperAdmin: true,
+      divisionId: true,
       division: { select: { name: true, avatarColour: true } },
       supervisor: { select: { name: true, designation: true } },
     },
@@ -48,6 +84,7 @@ export async function getUserProfileCard(id: string): Promise<UserProfileCard | 
     name: u.name,
     username: u.username,
     designation: u.designation,
+    divisionId: u.divisionId,
     divisionName: u.division.name,
     divisionColour: u.division.avatarColour,
     phone: u.phone,
@@ -58,4 +95,48 @@ export async function getUserProfileCard(id: string): Promise<UserProfileCard | 
     isActive: u.isActive,
     isSuperAdmin: u.isSuperAdmin,
   };
+}
+
+/**
+ * Division-visibility tasks allotted to `ownerId`, scoped to what `callerId`
+ * is actually allowed to see (`buildVisibilityClauses`). Top-level tasks
+ * only. Callers must still gate the surface with `canViewAllottedTasks`.
+ */
+export async function getAllottedDivisionTasksFor(
+  callerId: string,
+  ownerId: string,
+): Promise<AllottedTaskRow[]> {
+  const me = await prisma.user.findUnique({
+    where: { id: callerId },
+    select: {
+      id: true,
+      hierarchySlot: true,
+      isSuperAdmin: true,
+      divisionId: true,
+      isPmu: true,
+      pmuId: true,
+    },
+  });
+  if (!me) return [];
+
+  const visibility = await buildVisibilityClauses(me);
+  const rows = await prisma.task.findMany({
+    where: {
+      AND: [
+        { ownerId, visibility: 'division', archivedAt: null, parentTaskId: null },
+        { OR: visibility },
+      ],
+    },
+    select: { id: true, name: true, status: true, dueDate: true },
+    orderBy: [{ updatedAt: 'desc' }],
+    take: 50,
+  });
+
+  return rows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    status: t.status,
+    dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+    href: `/tasks/${t.id}`,
+  }));
 }

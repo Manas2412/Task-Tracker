@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
 import { rateLimit } from '@/lib/rate-limit';
-import { getUserProfileCard } from '@/lib/user-profile';
+import { canViewAllottedTasks, getUserProfileCard } from '@/lib/user-profile';
 
 /**
  * GET /api/users/[id]/profile
@@ -36,5 +36,16 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  return NextResponse.json(profile);
+  // The "tasks allotted" control shows only to same-division colleagues and
+  // the oversight roles — never to users of another division.
+  const canSeeAllotted = canViewAllottedTasks(
+    {
+      divisionId: session.user.divisionId,
+      isSuperAdmin: session.user.isSuperAdmin,
+      hierarchySlot: session.user.hierarchySlot,
+    },
+    profile.divisionId,
+  );
+
+  return NextResponse.json({ ...profile, canViewAllottedTasks: canSeeAllotted });
 }
