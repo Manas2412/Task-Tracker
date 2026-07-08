@@ -57,15 +57,41 @@ export async function getPmuTeammateIds(userId: string): Promise<string[]> {
 }
 
 /**
+ * The user id of the head of a PMU's home (parent) ministry division, or
+ * null when the PMU or its parent has no head. A PMU (`kind = 'pmu'`) never
+ * carries its own `head_user_id`; its head is the head of the division named
+ * by `pmu_parent_division_id` (falling back to `parent_id` for legacy rows).
+ * This is the "Division head" excluded from a whole-PMU-team share.
+ */
+export async function getPmuParentDivisionHeadId(pmuId: string): Promise<string | null> {
+  const pmu = await prisma.division.findUnique({
+    where: { id: pmuId },
+    select: { pmuParentDivisionId: true, parentId: true },
+  });
+  const parentId = pmu?.pmuParentDivisionId ?? pmu?.parentId ?? null;
+  if (!parentId) return null;
+  const parent = await prisma.division.findUnique({
+    where: { id: parentId },
+    select: { headUserId: true },
+  });
+  return parent?.headUserId ?? null;
+}
+
+/**
  * Build the OR-of-visibility-clauses for a caller.
  * Returns clauses that are then composed with the filter clause in the page.
  */
 export async function buildVisibilityClauses(me: CallerSummary): Promise<Prisma.TaskWhereInput[]> {
-  const [headedDivisionIds, pmuMemberIds] = await Promise.all([
+  const [headedDivisionIds, pmuMemberIds, pmuParentHeadId] = await Promise.all([
     getHeadedDivisionIds(me.id),
     me.isPmu ? getPmuTeammateIds(me.id) : Promise.resolve<string[]>([]),
+    me.isPmu && me.pmuId
+      ? getPmuParentDivisionHeadId(me.pmuId)
+      : Promise.resolve<string | null>(null),
   ]);
-  return buildVisibilityClausesFrom(me, headedDivisionIds, pmuMemberIds);
+  return buildVisibilityClausesFrom(me, headedDivisionIds, pmuMemberIds, {
+    isPmuParentDivisionHead: pmuParentHeadId !== null && pmuParentHeadId === me.id,
+  });
 }
 
 /**
@@ -122,6 +148,7 @@ export async function fetchVisibleTasks(opts: {
       isSuperAdmin: true,
       divisionId: true,
       isPmu: true,
+      pmuId: true,
     },
   });
   if (!me) return { tasks: [], total: 0, capped: false };
@@ -210,6 +237,7 @@ export async function fetchTaskCounts(callerId: string): Promise<{
       isSuperAdmin: true,
       divisionId: true,
       isPmu: true,
+      pmuId: true,
     },
   });
   if (!me) return { open: 0, dueToday: 0, overdue: 0 };

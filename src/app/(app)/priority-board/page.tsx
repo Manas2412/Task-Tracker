@@ -19,7 +19,7 @@ export default async function PriorityBoardPage() {
   // Caller's role — only OSD / Super Admin can curate (drag-drop)
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, hierarchySlot: true, isSuperAdmin: true, divisionId: true, isPmu: true },
+    select: { id: true, hierarchySlot: true, isSuperAdmin: true, divisionId: true, isPmu: true, pmuId: true },
   });
   if (!me) redirect('/login');
   const canCurate = me.isSuperAdmin || me.hierarchySlot === 'osd';

@@ -120,6 +120,10 @@ function describeEvent(type: string, payload: Record<string, unknown> | null): s
       return payload.to
         ? `moved this task to the ${String(payload.to)} sub-division`
         : 'removed this task from its sub-division';
+    case 'pmu_team_shared':
+      return 'shared this task with the entire PMU team';
+    case 'pmu_team_unshared':
+      return 'stopped sharing this task with the PMU team';
     case 'milestone_toggled':
       return payload.milestone ? 'marked as milestone' : 'unmarked as milestone';
     case 'subtask_added':
