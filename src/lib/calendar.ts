@@ -76,6 +76,7 @@ export async function fetchCalendarEvents(opts: {
       isSuperAdmin: true,
       divisionId: true,
       isPmu: true,
+      pmuId: true,
     },
   });
   if (!me) return [];

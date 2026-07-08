@@ -6,7 +6,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { formatDue, initialsOf } from '@/lib/format';
 import { getHeadedDivisionIds } from '@/lib/rbac';
-import { fetchTaskCounts, fetchVisibleTasks, type TaskFilter, type TaskSort } from '@/lib/visibility';
+import { fetchTaskCounts, fetchVisibleTasks, getPmuParentDivisionHeadId, type TaskFilter, type TaskSort } from '@/lib/visibility';
 
 import { DivisionControls } from './_components/DivisionControls';
 import { FilterChips } from './_components/FilterChips';
@@ -44,11 +44,12 @@ export default async function TasksPage({ searchParams }: PageProps) {
       isSuperAdmin: true,
       hierarchySlot: true,
       isPmu: true,
+      pmuId: true,
     },
   });
   if (!me) redirect('/login');
 
-  const [taskResult, counts, divisions, headedDivisionIds] = await Promise.all([
+  const [taskResult, counts, divisions, headedDivisionIds, pmuParentHeadId] = await Promise.all([
     fetchVisibleTasks({ callerId: me.id, filter, divisionId: divisionFilter || undefined, sort }),
     fetchTaskCounts(me.id),
     prisma.division.findMany({
@@ -58,7 +59,15 @@ export default async function TasksPage({ searchParams }: PageProps) {
       orderBy: [{ kind: 'asc' }, { displayOrder: 'asc' }, { name: 'asc' }],
     }),
     getHeadedDivisionIds(me.id),
+    me.isPmu && me.pmuId
+      ? getPmuParentDivisionHeadId(me.pmuId)
+      : Promise.resolve<string | null>(null),
   ]);
+
+  // The PMU's home-division head is not treated as a whole-team share
+  // recipient, so a task shared with the PMU team is not lifted into their
+  // "assigned" segment (they still see it under "other tasks").
+  const isExcludedPmuHead = pmuParentHeadId !== null && pmuParentHeadId === me.id;
 
   // Archive is a head power: Super Admin, or the head/active delegate of the
   // task's division. (A user can still archive their own personal task.)
@@ -67,7 +76,9 @@ export default async function TasksPage({ searchParams }: PageProps) {
   const { tasks, total, capped } = taskResult;
 
   const grouped = groupByDivision ? groupTasksByDivision(tasks) : null;
-  const segments = groupByDivision ? null : segmentTasksByRelation(tasks, me.id, me.isPmu);
+  const segments = groupByDivision
+    ? null
+    : segmentTasksByRelation(tasks, me.id, me.isPmu, me.pmuId, isExcludedPmuHead);
 
   return (
       <PullToRefresh>
@@ -257,10 +268,27 @@ function segmentTasksByRelation(
   tasks: VisibleTask[],
   meId: string,
   isPmu: boolean,
+  myPmuId: string | null,
+  isExcludedPmuHead: boolean,
 ): RelationSegment[] {
+  // A task the PMU team leader shared with the whole team counts as
+  // "assigned to me" for every PMU member of that team — except the PMU's
+  // home-division head, for whom it stays an "other" task.
+  const isSharedToMyPmuTeam = (t: VisibleTask) =>
+    isPmu &&
+    !isExcludedPmuHead &&
+    myPmuId !== null &&
+    t.visibility === 'division' &&
+    t.sharedWithPmuTeam &&
+    t.divisionId === myPmuId;
+
   const personal = tasks.filter((t) => t.visibility === 'personal');
-  const assigned = tasks.filter((t) => t.visibility === 'division' && t.ownerId === meId);
-  const others = tasks.filter((t) => t.visibility === 'division' && t.ownerId !== meId);
+  const assigned = tasks.filter(
+    (t) => t.visibility === 'division' && (t.ownerId === meId || isSharedToMyPmuTeam(t)),
+  );
+  const others = tasks.filter(
+    (t) => t.visibility === 'division' && t.ownerId !== meId && !isSharedToMyPmuTeam(t),
+  );
 
   return [
     {

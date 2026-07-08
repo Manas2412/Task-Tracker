@@ -147,6 +147,7 @@ export async function searchTasksFor(
       isSuperAdmin: true,
       divisionId: true,
       isPmu: true,
+      pmuId: true,
     },
   });
   if (!me) return { rows: [], total: 0 };

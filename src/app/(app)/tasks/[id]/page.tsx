@@ -82,7 +82,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
   // Visibility guard — reuses the same scoper as the tasks list page.
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, hierarchySlot: true, isSuperAdmin: true, divisionId: true, isPmu: true },
+    select: { id: true, hierarchySlot: true, isSuperAdmin: true, divisionId: true, isPmu: true, pmuId: true, pmuRole: true },
   });
   if (!me) redirect('/login');
 
@@ -178,6 +178,18 @@ export default async function TaskDetailPage({ params }: PageProps) {
     task.createdById === session.user.id ||
     session.user.isSuperAdmin ||
     session.user.hierarchySlot === 'osd';
+
+  // PMU team share — a PMU team leader can share their own PMU task with the
+  // whole team, surfacing it in every teammate's assigned list (except the
+  // PMU's home-division head). OSD / Super Admin may manage it on any PMU task.
+  const isPmuTask = task.division.kind === 'pmu';
+  const canSharePmuTeam =
+    isPmuTask &&
+    ((task.ownerId === me.id &&
+      me.pmuRole === 'pmu_team_leader' &&
+      me.pmuId === task.divisionId) ||
+      me.isSuperAdmin ||
+      me.hierarchySlot === 'osd');
 
   // Candidate users: active users excluding the owner.
   const candidateRows = canEditCollaborators
@@ -553,6 +565,11 @@ export default async function TaskDetailPage({ params }: PageProps) {
         canEdit={canEditCollaborators}
         canViewProfiles={canChangeDivision}
         subtasks={!task.parentTaskId ? subtaskScopes : undefined}
+        pmuTeamShare={
+          isPmuTask
+            ? { canManage: canSharePmuTeam, shared: task.sharedWithPmuTeam }
+            : undefined
+        }
       />
 
       <TagsSection

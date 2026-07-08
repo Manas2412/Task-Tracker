@@ -16,6 +16,7 @@ function caller(overrides: Partial<CallerSummary> = {}): CallerSummary {
     isSuperAdmin: false,
     divisionId: KI,
     isPmu: false,
+    pmuId: null,
     ...overrides,
   };
 }
@@ -131,5 +132,56 @@ describe('buildVisibilityClausesFrom — roles', () => {
     expect(divisionClause(clauses)?.divisionId?.in).toEqual([NSDF]);
     // …alongside the PMU-team owner clause.
     expect(clauses).toContainEqual({ visibility: 'division', ownerId: { in: ['me'] } });
+  });
+});
+
+describe('buildVisibilityClausesFrom — PMU team share', () => {
+  const PMU = 'div-pmu';
+
+  it('a PMU member sees tasks shared with their PMU team', () => {
+    const clauses = buildVisibilityClausesFrom(
+      caller({ isPmu: true, pmuId: PMU }),
+      [],
+      ['me'],
+    );
+    expect(clauses).toContainEqual({
+      visibility: 'division',
+      sharedWithPmuTeam: true,
+      divisionId: PMU,
+    });
+  });
+
+  it("the PMU's home-division head is excluded from the team-share clause", () => {
+    const clauses = buildVisibilityClausesFrom(
+      caller({ isPmu: true, pmuId: PMU }),
+      [],
+      ['me'],
+      { isPmuParentDivisionHead: true },
+    );
+    // The head still sees the task via the owner-scoped PMU clause, but it is
+    // never surfaced to them as a whole-team share.
+    expect(clauses.some((c) => 'sharedWithPmuTeam' in c)).toBe(false);
+    expect(clauses).toContainEqual({ visibility: 'division', ownerId: { in: ['me'] } });
+  });
+
+  it('emits no team-share clause when the PMU id is unknown', () => {
+    const clauses = buildVisibilityClausesFrom(
+      caller({ isPmu: true, pmuId: null }),
+      [],
+      ['me'],
+    );
+    expect(clauses.some((c) => 'sharedWithPmuTeam' in c)).toBe(false);
+  });
+
+  it('never emits a team-share clause for non-PMU users', () => {
+    for (const me of [
+      caller({ hierarchySlot: 'aso', pmuId: PMU }),
+      caller({ isSuperAdmin: true, pmuId: PMU }),
+      caller({ hierarchySlot: 'osd', pmuId: PMU }),
+      caller({ hierarchySlot: 'js', pmuId: PMU }),
+    ]) {
+      const clauses = buildVisibilityClausesFrom(me, []);
+      expect(clauses.some((c) => 'sharedWithPmuTeam' in c)).toBe(false);
+    }
   });
 });

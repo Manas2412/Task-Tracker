@@ -68,6 +68,7 @@ export async function GET(
       isSuperAdmin: true,
       divisionId: true,
       isPmu: true,
+      pmuId: true,
     },
   });
   if (!me) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

@@ -18,7 +18,7 @@ import {
   getRbacTarget,
   resolveDivisionOwner,
 } from '@/lib/rbac';
-import { buildVisibilityClauses } from '@/lib/visibility';
+import { buildVisibilityClauses, getPmuParentDivisionHeadId } from '@/lib/visibility';
 
 async function nextTaskRefNumber(
   divisionId: string,
@@ -206,7 +206,7 @@ async function canEditTaskDetails(
 async function canViewTask(callerId: string, taskId: string): Promise<boolean> {
   const me = await prisma.user.findUnique({
     where: { id: callerId },
-    select: { id: true, hierarchySlot: true, isSuperAdmin: true, divisionId: true, isPmu: true },
+    select: { id: true, hierarchySlot: true, isSuperAdmin: true, divisionId: true, isPmu: true, pmuId: true },
   });
   if (!me) return false;
   const visibilityClauses = await buildVisibilityClauses(me);
@@ -919,6 +919,9 @@ export async function updateTaskFieldsAction(
     // The current sub-division belongs to the old division's subtree, so it
     // no longer applies — clear it as part of the move.
     if (task.subDivisionId) data.subDivisionId = null;
+    // A PMU-team share is scoped to the old PMU; drop it on any move so it
+    // can't linger against a division that isn't that PMU.
+    if (task.sharedWithPmuTeam) data.sharedWithPmuTeam = false;
     const oldDiv = await prisma.division.findUnique({ where: { id: task.divisionId }, select: { name: true } });
     const newDiv = await prisma.division.findUnique({ where: { id: parsed.data.divisionId }, select: { name: true } });
     events.push({
@@ -2031,6 +2034,123 @@ export async function removeCollaboratorAction(
   }
 
   revalidateTask(parsed.data.taskId);
+  return ok(epoch);
+}
+
+// ============================================================
+// PMU team share — a PMU team leader shares their owned task with the
+// whole PMU team (every member except the PMU's home-division head)
+// ============================================================
+
+const setPmuTeamShareSchema = z.object({
+  taskId: z.string().uuid(),
+  shared: z.union([z.literal('on'), z.literal('')]).transform((v) => v === 'on'),
+});
+
+export async function setPmuTeamShareAction(
+  prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  const epoch = bump(prev);
+  const me = await requireSession();
+  if (!me) return fail('You are signed out.', epoch);
+
+  const parsed = setPmuTeamShareSchema.safeParse({
+    taskId: formData.get('taskId'),
+    shared: formData.get('shared') ?? '',
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const task = await prisma.task.findUnique({
+    where: { id: parsed.data.taskId },
+    select: {
+      id: true,
+      name: true,
+      ownerId: true,
+      divisionId: true,
+      archivedAt: true,
+      sharedWithPmuTeam: true,
+      dueDate: true,
+      division: { select: { kind: true } },
+    },
+  });
+  if (!task || task.archivedAt) return fail('Task not found.', epoch);
+
+  if (task.division.kind !== 'pmu') {
+    return fail('Only a PMU task can be shared with a PMU team.', epoch);
+  }
+
+  const meRow = await prisma.user.findUnique({
+    where: { id: me.id },
+    select: { id: true, isSuperAdmin: true, hierarchySlot: true, pmuId: true, pmuRole: true },
+  });
+  if (!meRow) return fail('Your account could not be found.', epoch);
+
+  // The PMU team leader who owns the task may share it with their team; OSD
+  // and Super Admin may also manage the share on any PMU task.
+  const isPmuLeaderOwner =
+    task.ownerId === me.id &&
+    meRow.pmuRole === 'pmu_team_leader' &&
+    meRow.pmuId === task.divisionId;
+  const isAdmin = meRow.isSuperAdmin || meRow.hierarchySlot === 'osd';
+  if (!isPmuLeaderOwner && !isAdmin) {
+    return fail('Only the PMU team leader who owns this task can share it with the team.', epoch);
+  }
+
+  if (task.sharedWithPmuTeam === parsed.data.shared) return ok(epoch);
+
+  try {
+    await prisma.$transaction([
+      prisma.task.update({
+        where: { id: task.id },
+        data: { sharedWithPmuTeam: parsed.data.shared },
+      }),
+      prisma.taskActivity.create({
+        data: {
+          taskId: task.id,
+          actorId: me.id,
+          eventType: parsed.data.shared ? 'pmu_team_shared' : 'pmu_team_unshared',
+          payload: {},
+        },
+      }),
+    ]);
+  } catch (err) {
+    logError('setPmuTeamShareAction failed', err);
+    return fail('Could not update PMU team sharing.', epoch);
+  }
+
+  // Best-effort notifications AFTER the committed share — on enabling, notify
+  // each PMU member so the task surfaces in their assigned list, excluding the
+  // actor, the owner, and the PMU's home-division head (not a share recipient).
+  // A notify failure must not report the already-applied share as failed.
+  if (parsed.data.shared) {
+    try {
+      const headId = await getPmuParentDivisionHeadId(task.divisionId);
+      const excluded = [me.id, task.ownerId, ...(headId ? [headId] : [])];
+      const members = await prisma.user.findMany({
+        where: { pmuId: task.divisionId, isActive: true, id: { notIn: excluded } },
+        select: { id: true },
+      });
+      if (members.length > 0) {
+        const notifs: Prisma.NotificationCreateManyInput[] = members.map((u) => ({
+          userId: u.id,
+          type: 'task_assigned',
+          payload: {
+            taskId: task.id,
+            taskName: task.name,
+            assignedById: me.id,
+            assignedByName: me.name ?? null,
+            dueDate: task.dueDate?.toISOString() ?? null,
+          },
+        }));
+        await prisma.notification.createMany({ data: notifs });
+      }
+    } catch (err) {
+      logError('setPmuTeamShareAction notify failed', err);
+    }
+  }
+
+  revalidateTask(task.id);
   return ok(epoch);
 }
 

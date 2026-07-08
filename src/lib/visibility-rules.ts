@@ -13,6 +13,19 @@ export type CallerSummary = {
   isSuperAdmin: boolean;
   divisionId: string;
   isPmu: boolean;
+  /** The caller's PMU id (users.pmu_id), or null when not a PMU member. */
+  pmuId: string | null;
+};
+
+/** Extra caller facts resolved from the DB, injected into the pure builder. */
+export type VisibilityOptions = {
+  /**
+   * True when the caller is the head of their PMU's home (parent) division.
+   * That head is excluded from the "shared with the PMU team" clause — they
+   * still see such a task via the owner-scoped PMU clause, but it is not
+   * surfaced to them as a whole-team share.
+   */
+  isPmuParentDivisionHead?: boolean;
 };
 
 /**
@@ -30,6 +43,7 @@ export function buildVisibilityClausesFrom(
   me: CallerSummary,
   headedDivisionIds: string[],
   pmuMemberIds: string[] = [],
+  opts: VisibilityOptions = {},
 ): Prisma.TaskWhereInput[] {
   const clauses: Prisma.TaskWhereInput[] = [
     // Always: tasks I own.
@@ -72,6 +86,17 @@ export function buildVisibilityClausesFrom(
     // over the delegated division.
     if (pmuMemberIds.length > 0) {
       clauses.push({ visibility: 'division', ownerId: { in: pmuMemberIds } });
+    }
+    // Tasks a PMU team leader explicitly shared with the whole PMU team.
+    // Live: matches any current member of the caller's PMU at read time.
+    // The PMU's home-division head is excluded (they already see it via the
+    // owner-scoped clause; it is just not treated as a whole-team share).
+    if (me.pmuId && !opts.isPmuParentDivisionHead) {
+      clauses.push({
+        visibility: 'division',
+        sharedWithPmuTeam: true,
+        divisionId: me.pmuId,
+      });
     }
     if (divisionIds.size > 0) {
       clauses.push({ visibility: 'division', divisionId: { in: [...divisionIds] } });
