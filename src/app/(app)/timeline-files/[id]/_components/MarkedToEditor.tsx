@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 
+import { MarkedToChip } from '@/components/ui';
 import { addMarkedToAction, removeMarkedToAction } from '@/app/actions/timeline-files';
 import { cn } from '@/lib/utils';
 
@@ -78,19 +79,12 @@ export function MarkedToEditor({
   return (
     <div className="inline-flex flex-wrap gap-1.5 justify-end items-center">
       {current.map((d) => (
-        <span
+        <MarkedToChip
           key={d.id}
-          className={cn(
-            'inline-flex items-center gap-1 text-[11px] font-medium text-ink-2 bg-bg border border-line px-2 py-0.5 rounded-md',
-            pendingId === d.id && 'opacity-60',
-          )}
+          name={d.name}
+          colour={d.avatarColour}
+          className={cn(pendingId === d.id && 'opacity-60')}
         >
-          <span
-            className="w-1.5 h-1.5 rounded-full"
-            style={{ backgroundColor: d.avatarColour }}
-            aria-hidden="true"
-          />
-          {d.name}
           {canEdit && current.length > 1 ? (
             <button
               type="button"
@@ -102,7 +96,7 @@ export function MarkedToEditor({
               <i className="ti ti-x text-[10px]" aria-hidden="true" />
             </button>
           ) : null}
-        </span>
+        </MarkedToChip>
       ))}
 
       {canEdit && addable.length > 0 ? (

@@ -1,10 +1,18 @@
 import Link from 'next/link';
 
+import { MarkedToChip } from '@/components/ui/MarkedToChip';
 import { Pill } from '@/components/ui/Pill';
 import { TASK_PRIORITY_LABEL } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 
 import type { PillPriorityTone, PillStatusTone } from '@/components/ui/Pill';
+
+/**
+ * Canonical indigo Timeline-File ref-number chip — shared by the card and the
+ * detail-page editor so the TF identity token can never drift.
+ */
+export const TF_REF_CHIP =
+  'font-mono text-[11px] font-medium text-primary bg-primary-soft border border-primary-line/40 px-2 py-0.5 rounded-md';
 
 /**
  * TimelineFileCard — per docs/COMPONENTS.md §4.
@@ -76,17 +84,18 @@ function Full(p: FullProps) {
     <Link
       href={p.href}
       className={cn(
-        'block bg-panel border border-line rounded-xl p-4 transition-colors',
-        'hover:border-ink-4 focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2',
+        'block bg-panel border border-line rounded-xl p-4 shadow-card',
+        'transition-[color,border-color,box-shadow,transform] duration-[var(--dur-base)] ease-[var(--ease-standard)]',
+        'hover:border-ink-4 hover:-translate-y-px hover:shadow-card-hover active:translate-y-0 active:scale-[0.99]',
+        'motion-reduce:transition-none motion-reduce:transform-none',
+        'focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2',
         isClosed && 'opacity-75',
         p.className,
       )}
     >
       {/* Header — ref no + priority + status + deadline */}
       <header className="flex items-start gap-2 flex-wrap mb-2.5">
-        <span className="font-mono text-[11px] font-medium text-primary bg-primary-soft border border-primary-line/40 px-2 py-0.5 rounded-md">
-          {p.refNo}
-        </span>
+        <span className={TF_REF_CHIP}>{p.refNo}</span>
         <Pill
           variant="priority"
           tone={(p.priority as PillPriorityTone) ?? 'medium'}
@@ -124,17 +133,7 @@ function Full(p: FullProps) {
       {p.markedTo.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {p.markedTo.map((d) => (
-            <span
-              key={d.id}
-              className="inline-flex items-center gap-1.5 text-[10px] font-medium text-ink-2 bg-bg border border-line px-1.5 py-0.5 rounded-md"
-            >
-              <span
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ backgroundColor: d.avatarColour }}
-                aria-hidden="true"
-              />
-              {d.name}
-            </span>
+            <MarkedToChip key={d.id} name={d.name} colour={d.avatarColour} />
           ))}
         </div>
       ) : null}

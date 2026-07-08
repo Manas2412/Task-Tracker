@@ -48,11 +48,16 @@ type DeadlinePillProps = CommonProps & {
   overdue?: boolean;
 };
 
+type MilestonePillProps = CommonProps & {
+  variant: 'milestone';
+};
+
 export type PillProps =
   | StatusPillProps
   | PriorityPillProps
   | JsPillProps
-  | DeadlinePillProps;
+  | DeadlinePillProps
+  | MilestonePillProps;
 
 const STATUS_ICON: Record<PillStatusTone, string> = {
   not_started: 'ti-circle-dashed',
@@ -79,7 +84,8 @@ const STATUS_CLASSES: Record<PillStatusTone, string> = {
 const PRIORITY_ICON: Record<PillPriorityTone, string> = {
   low: 'ti-circle',
   medium: 'ti-arrow-up',
-  high: 'ti-flame',
+  // Flame is reserved for Urgent so the strongest signal stays unique.
+  high: 'ti-chevron-up',
   urgent: 'ti-flame',
 };
 
@@ -130,6 +136,22 @@ export function Pill(props: PillProps) {
       >
         <i className="ti ti-bookmark-filled text-[9px]" aria-hidden="true" />
         {JS_LABEL[props.lane]}
+      </span>
+    );
+  }
+
+  if (props.variant === 'milestone') {
+    // Indigo, in its sanctioned "structure" role — the documented Milestone pill.
+    return (
+      <span
+        className={cn(
+          PILL_BASE,
+          'bg-primary-soft text-primary border-primary-line/40',
+          props.className,
+        )}
+      >
+        <i className="ti ti-flag-3 text-[9px]" aria-hidden="true" />
+        Milestone
       </span>
     );
   }

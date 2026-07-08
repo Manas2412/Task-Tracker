@@ -33,6 +33,7 @@
   --accent:        #b45309;   /* amber */
   --accent-soft:   #fef3c7;   /* amber background — JS Priority badges, deadline warnings */
   --accent-line:   #f0c674;   /* amber border */
+  --accent-tint:   #fffdf7;   /* amber card tint — JS-priority card top-stop */
 
   /* ----------------------------------------------------------
      §1.3  Status colours
@@ -93,4 +94,23 @@
   --slot-section-officer:  #6366f1;
   --slot-aso:              #7c7be0;
   --slot-contract:         #b45309;   /* amber; overrides the slot tone */
+
+  /* ----------------------------------------------------------
+     §1.5  Motion
+     Shared durations + easings so hovers, presses and progress
+     fills feel cohesive across the app.
+     ---------------------------------------------------------- */
+  --dur-fast:      0.13s;   /* tap / press feedback */
+  --dur-base:      0.2s;    /* default hover / lift */
+  --dur-slow:      0.25s;   /* emphasis: progress fills, sheets */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasis: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ----------------------------------------------------------
+     §1.6  Elevation
+     Tokenised card elevation scale (neutral rgba, not a brand
+     colour) — resting + hover rungs shared by surface cards.
+     ---------------------------------------------------------- */
+  --shadow-1: 0 1px 2px rgba(26, 26, 26, 0.04), 0 1px 3px rgba(26, 26, 26, 0.06);
+  --shadow-2: 0 2px 6px rgba(26, 26, 26, 0.08);
 }

@@ -11,7 +11,7 @@ export function StatsStrip({ counts }: StatsStripProps) {
     <div
       className="mt-4 p-4 md:p-5 grid grid-cols-3 gap-3 md:gap-6 rounded-xl border border-line"
       style={{
-        background: 'linear-gradient(180deg, #fafaf7 0%, #f5f4f0 100%)',
+        background: 'linear-gradient(180deg, var(--canvas) 0%, var(--bg) 100%)',
       }}
     >
       <Stat label="Open tasks" value={counts.open} />

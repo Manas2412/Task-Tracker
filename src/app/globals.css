@@ -138,4 +138,19 @@ body.sortable-dragging .drop-node:hover {
   from { opacity: 0; transform: translateY(3px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ============================================================
+   Accessibility — honour the user's reduced-motion preference.
+   Every transition/animation in the app inherits this floor.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 .hover-pop { animation: hoverPop 0.13s ease-out; transform-origin: top left; }

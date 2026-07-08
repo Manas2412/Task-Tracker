@@ -37,6 +37,7 @@ const config: Config = {
           DEFAULT: 'var(--accent)',
           soft: 'var(--accent-soft)',
           line: 'var(--accent-line)',
+          tint: 'var(--accent-tint)',
         },
         urgent: { DEFAULT: 'var(--urgent)', soft: 'var(--urgent-soft)' },
         high: { DEFAULT: 'var(--high)', soft: 'var(--high-soft)' },
@@ -64,6 +65,8 @@ const config: Config = {
       boxShadow: {
         'fab': '0 10px 20px -5px rgba(0,0,0,0.3), 0 4px 8px -2px rgba(0,0,0,0.15)',
         'sheet': '0 -6px 16px -8px rgba(0,0,0,0.1)',
+        'card': 'var(--shadow-1)',
+        'card-hover': 'var(--shadow-2)',
       },
     },
   },

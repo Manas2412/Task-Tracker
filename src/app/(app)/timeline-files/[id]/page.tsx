@@ -270,7 +270,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         className="px-4 md:px-6 py-5 border-b border-line-2"
         style={{ background: 'linear-gradient(180deg, var(--primary-soft) 0%, var(--panel) 100%)' }}
       >
-        <div className="flex items-center gap-2 flex-wrap mb-2.5">
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
           <TfRefNumberEditor
             tfId={tf.id}
             refNo={tf.refNo}

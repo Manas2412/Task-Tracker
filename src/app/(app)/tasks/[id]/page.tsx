@@ -2,12 +2,13 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 
-import { AttachmentList, type AttachmentRow, BackButton, CollapsibleSection, Pill, TimelineFileCard } from '@/components/ui';
+import { AttachmentList, type AttachmentRow, Avatar, BackButton, CollapsibleSection, DetailSection, Pill, TimelineFileCard } from '@/components/ui';
 import { canEditTaskAttachments } from '@/app/actions/attachments';
 import { isS3Configured } from '@/lib/s3';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { initialsOf } from '@/lib/format';
+import { formatDue, initialsOf } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import {
   canTransferTaskTo,
   fetchTransferTargets,
@@ -127,6 +128,9 @@ export default async function TaskDetailPage({ params }: PageProps) {
   // assigned, so neither shows the unassigned label.
   const ownerUnassigned =
     isUnassigned && task.visibility !== 'personal' && !task.parentTaskId;
+  // Due-date display for the above-the-fold hero strip (same tone grammar as
+  // the task cards).
+  const heroDue = formatDue(task.dueDate);
   const canPull =
     isUnassigned &&
     !isOwner &&
@@ -474,10 +478,12 @@ export default async function TaskDetailPage({ params }: PageProps) {
         </div>
       </header>
 
-      {/* Title block */}
+      {/* Title block — a restrained NEUTRAL wash anchors the top of the page
+          (deliberately not indigo, so it never reads as a Timeline File). */}
       <section
         aria-labelledby="task-title"
         className="px-4 md:px-6 py-5 border-b border-line-2"
+        style={{ background: 'linear-gradient(180deg, var(--canvas) 0%, var(--panel) 100%)' }}
       >
         {task.parentTaskId ? (
           <p className="text-[11px] text-ink-3 mb-2 inline-flex items-center gap-1">
@@ -499,12 +505,56 @@ export default async function TaskDetailPage({ params }: PageProps) {
               session.user.isSuperAdmin || session.user.hierarchySlot === 'osd'
             }
           />
+          {task.milestone ? <Pill variant="milestone" /> : null}
         </div>
 
         {task.refNumber ? (
           <span className="font-mono text-[11px] text-ink-3 tracking-wide">{task.refNumber}</span>
         ) : null}
         <TaskTitleEditor taskId={task.id} name={task.name} canEdit={canEditDetails} />
+
+        {/* Above-the-fold metadata — owner / due / division at a glance, so the
+            hero has real hierarchy without expanding the details panel. */}
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-ink-2">
+          {ownerUnassigned ? (
+            <span className="inline-flex items-center gap-1.5 text-ink-3">
+              <i className="ti ti-user text-[13px]" aria-hidden="true" />
+              Unassigned
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              <Avatar
+                size="xs"
+                initials={initialsOf(task.owner.name)}
+                colour={task.owner.division.avatarColour}
+                ariaLabel={`Owner ${task.owner.name}`}
+              />
+              <span className="text-ink font-medium">{task.owner.name}</span>
+            </span>
+          )}
+
+          {heroDue.tone !== 'none' ? (
+            <>
+              <span className="text-ink-4" aria-hidden="true">·</span>
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1',
+                  heroDue.tone === 'overdue' && 'text-urgent font-medium',
+                  heroDue.tone === 'today' && 'text-accent font-medium',
+                )}
+              >
+                <i className="ti ti-calendar-event text-[13px]" aria-hidden="true" />
+                {heroDue.label}
+              </span>
+            </>
+          ) : null}
+
+          <span className="text-ink-4" aria-hidden="true">·</span>
+          <span className="inline-flex items-center gap-1">
+            <i className="ti ti-building text-[13px]" aria-hidden="true" />
+            {task.division.name}
+          </span>
+        </div>
 
         <p className="mt-2 text-[11px] text-ink-3 inline-flex items-center gap-1.5">
           <i className="ti ti-edit text-[12px]" aria-hidden="true" />
@@ -528,8 +578,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
       />
 
       {task.linkedTimelineFile ? (
-        <section className="px-4 md:px-6 py-5 border-b border-line-2">
-          <h2 className="section-label mb-2.5">Linked timeline file</h2>
+        <DetailSection title="Linked timeline file">
           <TimelineFileCard
             variant="compact"
             refNo={task.linkedTimelineFile.refNo}
@@ -538,7 +587,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
             deadlineDate={task.linkedTimelineFile.deadlineDate}
             href={`/timeline-files/${task.linkedTimelineFile.id}`}
           />
-        </section>
+        </DetailSection>
       ) : null}
 
       {/* Subtasks are transferable too — the current owner (subtask assignee)
@@ -569,16 +618,11 @@ export default async function TaskDetailPage({ params }: PageProps) {
         }
       />
 
-      <section className="px-4 md:px-6 py-5 border-b border-line-2">
-        <h2 className="section-label mb-3">
-          Attachments
-          {taskAttachments.length > 0 ? (
-            <span className="ml-2 text-ink-3 text-[11px] tracking-normal normal-case font-normal">
-              {taskAttachments.length}{' '}
-              {taskAttachments.length === 1 ? 'file' : 'files'}
-            </span>
-          ) : null}
-        </h2>
+      <DetailSection
+        title="Attachments"
+        count={taskAttachments.length}
+        countLabel={taskAttachments.length === 1 ? 'file' : 'files'}
+      >
         <AttachmentList
           scope="task"
           parentId={task.id}
@@ -587,7 +631,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
           canAdd={canEditAttachments || isCollaborator}
           s3Configured={s3Ready}
         />
-      </section>
+      </DetailSection>
 
       <SectionComments
         taskId={task.id}
