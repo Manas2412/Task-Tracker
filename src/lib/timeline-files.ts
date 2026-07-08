@@ -15,6 +15,13 @@ import { prisma } from '@/lib/db';
 
 export type TfFilter = 'all' | 'pending_action' | 'in_progress' | 'awaiting_reply' | 'on_hold' | 'closed';
 
+/**
+ * List ordering:
+ *   - 'default' — open files first, then soonest deadline, then newest.
+ *   - 'latest'  — most recently added files first (createdAt desc).
+ */
+export type TfSort = 'default' | 'latest';
+
 type CallerSummary = {
   id: string;
   hierarchySlot: string;
@@ -46,6 +53,7 @@ export type VisibleTimelineFile = TimelineFile & {
 export async function fetchVisibleTimelineFiles(opts: {
   callerId: string;
   filter: TfFilter;
+  sort?: TfSort;
 }): Promise<VisibleTimelineFile[]> {
   const me = await prisma.user.findUnique({
     where: { id: opts.callerId },
@@ -62,6 +70,23 @@ export async function fetchVisibleTimelineFiles(opts: {
   const statusFilter: Prisma.TimelineFileWhereInput =
     opts.filter !== 'all' ? { status: opts.filter } : {};
 
+  const orderBy: Prisma.TimelineFileOrderByWithRelationInput[] =
+    opts.sort === 'latest'
+      ? [
+          // Most recently added correspondence first.
+          { createdAt: 'desc' },
+          // Stable tiebreaker for same-instant rows.
+          { receivedDate: 'desc' },
+        ]
+      : [
+          // Open files first; closed last.
+          { status: 'asc' },
+          // Then by deadline (closest first), nulls last.
+          { deadlineDate: { sort: 'asc', nulls: 'last' } },
+          // Stable tiebreaker.
+          { receivedDate: 'desc' },
+        ];
+
   return prisma.timelineFile.findMany({
     where: {
       archivedAt: null,
@@ -74,14 +99,7 @@ export async function fetchVisibleTimelineFiles(opts: {
       },
       _count: { select: { taskLinks: true } },
     },
-    orderBy: [
-      // Open files first; closed last.
-      { status: 'asc' },
-      // Then by deadline (closest first), nulls last.
-      { deadlineDate: { sort: 'asc', nulls: 'last' } },
-      // Stable tiebreaker.
-      { receivedDate: 'desc' },
-    ],
+    orderBy,
   });
 }
 

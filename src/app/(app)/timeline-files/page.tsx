@@ -10,6 +10,8 @@ import {
   fetchVisibleTimelineFiles,
   suggestNextRefSeq,
   type TfFilter,
+  type TfSort,
+  type VisibleTimelineFile,
 } from '@/lib/timeline-files';
 import { cn } from '@/lib/utils';
 
@@ -33,9 +35,69 @@ const FILTER_LABELS: Record<TfFilter, string> = {
   closed: 'Closed',
 };
 
-type PageProps = {
-  searchParams?: { filter?: string };
+const VALID_SORTS: TfSort[] = ['default', 'latest'];
+
+const SORT_LABELS: Record<TfSort, string> = {
+  default: 'Default',
+  latest: 'Latest',
 };
+
+/** How the list is grouped. 'none' = a single flat list. */
+type TfGroup = 'none' | 'division';
+const VALID_GROUPS: TfGroup[] = ['none', 'division'];
+
+type PageProps = {
+  searchParams?: { filter?: string; sort?: string; group?: string };
+};
+
+/** Build a list URL, omitting params left at their default. */
+function buildHref(params: { filter: TfFilter; sort: TfSort; group: TfGroup }): string {
+  const sp = new URLSearchParams();
+  if (params.filter !== 'all') sp.set('filter', params.filter);
+  if (params.sort !== 'default') sp.set('sort', params.sort);
+  if (params.group !== 'none') sp.set('group', params.group);
+  const qs = sp.toString();
+  return qs ? `/timeline-files?${qs}` : '/timeline-files';
+}
+
+/**
+ * Group visible files by the divisions each is marked to. A file marked to
+ * several divisions appears under each. Groups are ordered by division name;
+ * files with no marked-to division fall into a trailing "No division" group.
+ * Within a group the incoming (already sorted) order is preserved.
+ */
+function groupByDivision(tfs: VisibleTimelineFile[]): Array<{
+  id: string;
+  name: string;
+  colour: string | null;
+  tfs: VisibleTimelineFile[];
+}> {
+  const groups = new Map<string, { id: string; name: string; colour: string | null; tfs: VisibleTimelineFile[] }>();
+  const NO_DIVISION = '__none__';
+
+  for (const tf of tfs) {
+    if (tf.markedTo.length === 0) {
+      const g = groups.get(NO_DIVISION) ?? { id: NO_DIVISION, name: 'No division', colour: null, tfs: [] };
+      g.tfs.push(tf);
+      groups.set(NO_DIVISION, g);
+      continue;
+    }
+    for (const { division } of tf.markedTo) {
+      const g =
+        groups.get(division.id) ??
+        { id: division.id, name: division.name, colour: division.avatarColour, tfs: [] };
+      g.tfs.push(tf);
+      groups.set(division.id, g);
+    }
+  }
+
+  return Array.from(groups.values()).sort((a, b) => {
+    // "No division" always sinks to the bottom.
+    if (a.id === NO_DIVISION) return 1;
+    if (b.id === NO_DIVISION) return -1;
+    return a.name.localeCompare(b.name);
+  });
+}
 
 export default async function TimelineFilesPage({ searchParams }: PageProps) {
   const session = await auth();
@@ -47,11 +109,19 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
     ? ((searchParams?.filter as TfFilter) ?? 'all')
     : 'all';
 
+  const sort: TfSort = VALID_SORTS.includes((searchParams?.sort as TfSort) ?? 'default')
+    ? ((searchParams?.sort as TfSort) ?? 'default')
+    : 'default';
+
+  const group: TfGroup = VALID_GROUPS.includes((searchParams?.group as TfGroup) ?? 'none')
+    ? ((searchParams?.group as TfGroup) ?? 'none')
+    : 'none';
+
   const canCreate =
     session.user.isSuperAdmin || session.user.hierarchySlot === 'osd';
 
   const [tfs, counts, divisions, suggestedFileNumber] = await Promise.all([
-    fetchVisibleTimelineFiles({ callerId: session.user.id, filter }),
+    fetchVisibleTimelineFiles({ callerId: session.user.id, filter, sort }),
     fetchTfCounts(session.user.id),
     canCreate
       ? prisma.division.findMany({
@@ -115,7 +185,7 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
       >
         {VALID_FILTERS.map((f) => {
           const active = f === filter;
-          const href = f === 'all' ? '/timeline-files' : `/timeline-files?filter=${f}`;
+          const href = buildHref({ filter: f, sort, group });
           return (
             <Link
               key={f}
@@ -135,6 +205,50 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
         })}
       </nav>
 
+      {/* Sort + group controls */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4">
+        <div className="flex items-center gap-1.5" role="group" aria-label="Sort files">
+          <span className="text-[11px] font-medium text-ink-3">Sort</span>
+          {VALID_SORTS.map((s) => {
+            const active = s === sort;
+            return (
+              <Link
+                key={s}
+                href={buildHref({ filter, sort: s, group })}
+                scroll={false}
+                aria-current={active ? 'true' : undefined}
+                className={cn(
+                  'whitespace-nowrap px-[11px] py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
+                  active
+                    ? 'bg-ink text-white border-ink'
+                    : 'bg-panel text-ink-2 border-line hover:border-ink-4',
+                )}
+              >
+                {SORT_LABELS[s]}
+              </Link>
+            );
+          })}
+        </div>
+
+        <Link
+          href={buildHref({ filter, sort, group: group === 'division' ? 'none' : 'division' })}
+          scroll={false}
+          aria-pressed={group === 'division'}
+          className={cn(
+            'inline-flex items-center gap-1.5 whitespace-nowrap px-[11px] py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
+            group === 'division'
+              ? 'bg-ink text-white border-ink'
+              : 'bg-panel text-ink-2 border-line hover:border-ink-4',
+          )}
+        >
+          <i
+            className={cn('text-[13px]', group === 'division' ? 'ti ti-check' : 'ti ti-layout-list')}
+            aria-hidden="true"
+          />
+          Group by division
+        </Link>
+      </div>
+
       {/* List */}
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -146,28 +260,57 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
 
         {tfs.length === 0 ? (
           <EmptyState filter={filter} canCreate={canCreate} />
-        ) : (
-          <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {tfs.map((tf) => (
-              <li key={tf.id}>
-                <TimelineFileCard
-                  refNo={tf.refNo}
-                  subject={tf.subject}
-                  fromWhom={tf.fromWhom}
-                  receivedDate={tf.receivedDate}
-                  deadlineDate={tf.deadlineDate}
-                  status={tf.status}
-                  priority={tf.priority}
-                  markedTo={tf.markedTo.map((m) => m.division)}
-                  taskLinkCount={tf._count.taskLinks}
-                  href={`/timeline-files/${tf.id}`}
-                />
-              </li>
+        ) : group === 'division' ? (
+          <div className="flex flex-col gap-6">
+            {groupByDivision(tfs).map((g) => (
+              <section key={g.id} aria-label={g.name}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={g.colour ? { background: g.colour } : undefined}
+                    aria-hidden="true"
+                  />
+                  <h3 className="text-[13px] font-medium text-ink">{g.name}</h3>
+                  <span className="text-[11px] text-ink-3">
+                    {g.tfs.length} {g.tfs.length === 1 ? 'item' : 'items'}
+                  </span>
+                </div>
+                <TfGrid items={g.tfs} />
+              </section>
             ))}
-          </ul>
+          </div>
+        ) : (
+          <TfGrid items={tfs} />
         )}
       </div>
     </div>
+  );
+}
+
+// ------------------------------------------------------------
+// Card grid — shared by the flat list and each division group
+// ------------------------------------------------------------
+
+function TfGrid({ items }: { items: VisibleTimelineFile[] }) {
+  return (
+    <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {items.map((tf) => (
+        <li key={tf.id}>
+          <TimelineFileCard
+            refNo={tf.refNo}
+            subject={tf.subject}
+            fromWhom={tf.fromWhom}
+            receivedDate={tf.receivedDate}
+            deadlineDate={tf.deadlineDate}
+            status={tf.status}
+            priority={tf.priority}
+            markedTo={tf.markedTo.map((m) => m.division)}
+            taskLinkCount={tf._count.taskLinks}
+            href={`/timeline-files/${tf.id}`}
+          />
+        </li>
+      ))}
+    </ul>
   );
 }
 
