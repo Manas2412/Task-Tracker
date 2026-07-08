@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 
-import { AttachmentList, type AttachmentRow, BackButton, Pill, TimelineFileCard } from '@/components/ui';
+import { AttachmentList, type AttachmentRow, BackButton, CollapsibleSection, Pill, TimelineFileCard } from '@/components/ui';
 import { canEditTaskAttachments } from '@/app/actions/attachments';
 import { isS3Configured } from '@/lib/s3';
 import { auth } from '@/lib/auth';
@@ -541,29 +541,6 @@ export default async function TaskDetailPage({ params }: PageProps) {
         </section>
       ) : null}
 
-      <SectionDetails
-        taskId={task.id}
-        owner={task.owner}
-        isUnassigned={ownerUnassigned}
-        due={task.dueDate}
-        divisionId={task.divisionId}
-        divisionName={task.division.name}
-        subDivisionId={task.subDivisionId}
-        subDivisionName={task.subDivision?.name ?? null}
-        subDivisions={subDivisionOptions}
-        canChangeSubDivision={canEditDetails}
-        visibility={task.visibility as 'division' | 'personal'}
-        recurrence={task.recurrenceRule}
-        reassignCandidates={reassignCandidates}
-        pendingReassignment={pendingReassignment}
-        canReassign={canReassign}
-        canEditFields={canEditDetails}
-        canEditVisibility={canEditVisibility}
-        canChangeDivision={canChangeDivision}
-        divisions={allDivisions}
-        canViewProfiles={canChangeDivision}
-      />
-
       {/* Subtasks are transferable too — the current owner (subtask assignee)
           hands it to another user via the same division-scoped dropdown. */}
       {isOwner && transferCandidates.length > 0 ? (
@@ -591,15 +568,6 @@ export default async function TaskDetailPage({ params }: PageProps) {
             : undefined
         }
       />
-
-      {session.user.isSuperAdmin ? (
-        <TagsSection
-          taskId={task.id}
-          current={currentTagRows}
-          available={availableTagRows}
-          canEdit={canEditTags}
-        />
-      ) : null}
 
       <section className="px-4 md:px-6 py-5 border-b border-line-2">
         <h2 className="section-label mb-3">
@@ -629,12 +597,53 @@ export default async function TaskDetailPage({ params }: PageProps) {
         canViewProfiles={canChangeDivision}
       />
 
-      <SectionActivity
-        activity={task.activity.map((a) => ({
-          ...a,
-          payload: (a.payload ?? {}) as Record<string, unknown>,
-        }))}
-      />
+      {/* Details, tags (if any) and the activity log live together in one
+          collapsible panel at the bottom — consistent across tasks, subtasks
+          and timeline files. */}
+      <CollapsibleSection
+        title="Task details"
+        subtitle="Owner, division, visibility, recurrence, tags and activity"
+        icon="ti-list-details"
+      >
+        <SectionDetails
+          taskId={task.id}
+          owner={task.owner}
+          isUnassigned={ownerUnassigned}
+          due={task.dueDate}
+          divisionId={task.divisionId}
+          divisionName={task.division.name}
+          subDivisionId={task.subDivisionId}
+          subDivisionName={task.subDivision?.name ?? null}
+          subDivisions={subDivisionOptions}
+          canChangeSubDivision={canEditDetails}
+          visibility={task.visibility as 'division' | 'personal'}
+          recurrence={task.recurrenceRule}
+          reassignCandidates={reassignCandidates}
+          pendingReassignment={pendingReassignment}
+          canReassign={canReassign}
+          canEditFields={canEditDetails}
+          canEditVisibility={canEditVisibility}
+          canChangeDivision={canChangeDivision}
+          divisions={allDivisions}
+          canViewProfiles={canChangeDivision}
+        />
+
+        {session.user.isSuperAdmin ? (
+          <TagsSection
+            taskId={task.id}
+            current={currentTagRows}
+            available={availableTagRows}
+            canEdit={canEditTags}
+          />
+        ) : null}
+
+        <SectionActivity
+          activity={task.activity.map((a) => ({
+            ...a,
+            payload: (a.payload ?? {}) as Record<string, unknown>,
+          }))}
+        />
+      </CollapsibleSection>
     </div>
   );
 }

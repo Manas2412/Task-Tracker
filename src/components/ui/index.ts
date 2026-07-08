@@ -17,6 +17,7 @@ export { TimelineFileCard } from './TimelineFileCard';
 export type { TimelineFileCardProps } from './TimelineFileCard';
 
 export { Sheet } from './Sheet';
+export { CollapsibleSection } from './CollapsibleSection';
 export { Switch } from './Switch';
 export { BackButton } from './BackButton';
 export { QuoteCard, type QuoteCardTone } from './QuoteCard';
