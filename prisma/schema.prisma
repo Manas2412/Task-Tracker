@@ -281,7 +281,8 @@ model Division {
   usersInSubDivision       User[]        @relation("UserSubDivision")
   usersInSection           User[]        @relation("UserSection")
   usersInPmu               User[]        @relation("UserPmu")
-  tasks                    Task[]
+  tasks                    Task[]        @relation("TaskDivision")
+  tasksInSubDivision       Task[]        @relation("TaskSubDivision")
   markedTimelineFiles      TimelineFileMarkedTo[]
   accessDelegations        DivisionAccessDelegation[]
   engagements              JsEngagement[] @relation("EngagementDivision")
@@ -335,6 +336,7 @@ model Task {
 
   ownerId                  String          @map("owner_id") @db.Uuid
   divisionId               String          @map("division_id") @db.Uuid
+  subDivisionId            String?         @map("sub_division_id") @db.Uuid
 
   status                   TaskStatus      @default(not_started)
   priority                 TaskPriority    @default(low)
@@ -358,7 +360,8 @@ model Task {
   archivedById             String?         @map("archived_by") @db.Uuid
 
   owner                    User            @relation("TaskOwner", fields: [ownerId], references: [id])
-  division                 Division        @relation(fields: [divisionId], references: [id])
+  division                 Division        @relation("TaskDivision", fields: [divisionId], references: [id])
+  subDivision              Division?       @relation("TaskSubDivision", fields: [subDivisionId], references: [id])
   createdBy                User            @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   archivedBy               User?           @relation("TaskArchivedBy", fields: [archivedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
@@ -376,6 +379,7 @@ model Task {
 
   @@index([ownerId])
   @@index([divisionId])
+  @@index([subDivisionId])
   @@index([status])
   @@index([jsPriorityLane])
   @@index([dueDate])

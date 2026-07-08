@@ -43,6 +43,12 @@ type DivisionOption = {
   kind: string;
 };
 
+type SubDivisionOption = {
+  id: string;
+  name: string;
+  avatarColour: string;
+};
+
 type SectionDetailsProps = {
   taskId: string;
   owner: { id: string; name: string; division: { avatarColour: string } };
@@ -62,6 +68,13 @@ type SectionDetailsProps = {
   canEditVisibility: boolean;
   canChangeDivision: boolean;
   divisions: DivisionOption[];
+  /** Current sub-division id, or null when the task is tagged to none. */
+  subDivisionId: string | null;
+  subDivisionName: string | null;
+  /** Sub-divisions of the task's division; the row hides when empty. */
+  subDivisions: SubDivisionOption[];
+  /** Sub-division is a definition edit — same gate as due/milestone. */
+  canChangeSubDivision: boolean;
   canViewProfiles: boolean;
 };
 
@@ -103,6 +116,16 @@ export function SectionDetails(props: SectionDetailsProps) {
           canChange={props.canChangeDivision}
           divisions={props.divisions}
         />
+
+        {props.subDivisions.length > 0 ? (
+          <SubDivisionRow
+            taskId={props.taskId}
+            subDivisionId={props.subDivisionId}
+            subDivisionName={props.subDivisionName}
+            canChange={props.canChangeSubDivision}
+            subDivisions={props.subDivisions}
+          />
+        ) : null}
 
         <VisibilityRow taskId={props.taskId} visibility={props.visibility} canEdit={props.canEditVisibility} />
 
@@ -624,6 +647,131 @@ function DivisionRow({
                       PMU
                     </span>
                   ) : null}
+                  {active ? (
+                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-white shrink-0">
+                      <i className="ti ti-check text-[12px]" aria-hidden="true" />
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          {state.error ? <p className="text-[12px] text-urgent">{state.error}</p> : null}
+
+          <div className="flex gap-2 mt-1">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="flex-1 py-3 rounded-lg border border-line text-[14px] font-medium text-ink-2 hover:bg-line-2"
+            >
+              Cancel
+            </button>
+            <SaveBtn />
+          </div>
+        </form>
+      </Sheet>
+    </>
+  );
+}
+
+// ------------------------------------------------------------
+// Sub-division row — categorisation within the division. Editable
+// with the same gate as the definition fields; hidden entirely when
+// the division has no sub-divisions. "Whole division" clears the tag.
+// ------------------------------------------------------------
+
+function SubDivisionRow({
+  taskId,
+  subDivisionId,
+  subDivisionName,
+  canChange,
+  subDivisions,
+}: {
+  taskId: string;
+  subDivisionId: string | null;
+  subDivisionName: string | null;
+  canChange: boolean;
+  subDivisions: SubDivisionOption[];
+}) {
+  const [open, setOpen] = useState(false);
+  // '' represents "whole division" (no sub-division).
+  const [chosen, setChosen] = useState(subDivisionId ?? '');
+  const [state, formAction] = useFormState<UpdateFieldsState, FormData>(
+    updateTaskFieldsAction,
+    INITIAL_FIELDS_STATE,
+  );
+
+  useEffect(() => {
+    if (state.ok) setOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.ok, state.epoch]);
+
+  useEffect(() => {
+    if (open) setChosen(subDivisionId ?? '');
+  }, [open, subDivisionId]);
+
+  if (!canChange) {
+    return (
+      <Row icon="ti-sitemap" label="Sub-division">
+        <span className={cn(!subDivisionName && 'text-ink-3 font-normal')}>
+          {subDivisionName ?? 'Whole division'}
+        </span>
+      </Row>
+    );
+  }
+
+  return (
+    <>
+      <Row icon="ti-sitemap" label="Subdivision" onClick={() => setOpen(true)}>
+        <span className={cn(!subDivisionName && 'text-ink-3 font-normal')}>
+          {subDivisionName ?? 'Whole division'}
+        </span>
+      </Row>
+
+      <Sheet open={open} onClose={() => setOpen(false)} title="Set sub-division">
+        <form action={formAction} className="flex flex-col gap-3">
+          <input type="hidden" name="taskId" value={taskId} />
+          <input type="hidden" name="subDivisionId" value={chosen} />
+
+          <p className="text-[12px] text-ink-3">
+            A sub-division groups the task within its division. It does not change
+            who owns or can see the task.
+          </p>
+
+          <div className="flex flex-col gap-1" role="radiogroup">
+            {[{ id: '', name: 'Whole division', avatarColour: '' }, ...subDivisions].map((s) => {
+              const active = chosen === s.id;
+              const isNone = s.id === '';
+              return (
+                <button
+                  key={s.id || 'none'}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setChosen(s.id)}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-colors',
+                    active ? 'bg-primary-soft' : 'hover:bg-bg',
+                  )}
+                >
+                  {isNone ? (
+                    <span className="w-2.5 h-2.5 shrink-0" aria-hidden="true" />
+                  ) : (
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: s.avatarColour }}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span
+                    className={cn(
+                      'flex-1 text-[14px] font-medium',
+                      isNone ? 'text-ink-2' : 'text-ink',
+                    )}
+                  >
+                    {s.name}
+                  </span>
                   {active ? (
                     <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-white shrink-0">
                       <i className="ti ti-check text-[12px]" aria-hidden="true" />

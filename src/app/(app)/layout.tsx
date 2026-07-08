@@ -68,7 +68,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 ],
               },
         orderBy: [{ kind: 'asc' }, { displayOrder: 'asc' }, { name: 'asc' }],
-        select: { id: true, name: true, kind: true, headUserId: true },
+        select: {
+          id: true,
+          name: true,
+          kind: true,
+          headUserId: true,
+          // Sub-divisions of this division (a task may be tagged with one).
+          // PMUs have none, so this is naturally empty for them.
+          children: {
+            where: { kind: 'sub_division' },
+            orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+            select: { id: true, name: true },
+          },
+        },
       })
     : [];
 
@@ -145,6 +157,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       isOfficeOfJs: t.id === officeOfJsDivisionId,
       autoOwnerId: auto?.id ?? null,
       autoOwnerName: auto?.name ?? null,
+      subDivisions: t.children.map((c) => ({ id: c.id, name: c.name })),
     };
   });
 
