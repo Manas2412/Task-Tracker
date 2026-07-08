@@ -72,7 +72,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         include: { actor: { select: ACTOR_SUMMARY_SELECT } },
         orderBy: { createdAt: 'desc' },
       },
-      parentTask: { select: { id: true, name: true } },
+      parentTask: { select: { id: true, name: true, ownerId: true } },
       linkedTimelineFile: true,
       tags: { include: { tag: { select: { id: true, name: true } } } },
     },
@@ -113,6 +113,13 @@ export default async function TaskDetailPage({ params }: PageProps) {
   }
 
   const isOwner = task.ownerId === session.user.id;
+  const isSubtask = task.parentTaskId !== null;
+  // Explicit collaborators (any role) may contribute to the task: add
+  // documents, edit its context, and create subtasks — mirrored server-side
+  // by isTaskCollaborator. It does not grant redefine/delete powers.
+  const isCollaborator = task.collaborators.some(
+    (c) => c.userId === session.user.id,
+  );
   const isUnassigned = task.ownerId === task.createdById;
   // The Owner row reads as "Unassigned" for a top-level division task still
   // owned by its creator — the state a division member can pull from. A
@@ -133,13 +140,18 @@ export default async function TaskDetailPage({ params }: PageProps) {
   const isHeadOfTaskDivision =
     actor !== null && actor.headedDivisionIds.includes(task.divisionId);
 
-  // Delete mirrors deleteTaskAction: a Super Admin or the head of the
-  // task's division — plus a user's own personal task. A normal user who
+  // Delete mirrors deleteTaskAction. For a subtask, the right belongs to the
+  // parent task's owner, the head of the division, or a Super Admin — never
+  // the subtask's own assignee. For a top-level task: a Super Admin or the
+  // head of the division, plus a user's own personal task. A normal user who
   // merely owns a division task (e.g. after a transfer) cannot delete it.
-  const canDelete =
-    session.user.isSuperAdmin ||
-    isHeadOfTaskDivision ||
-    (task.visibility === 'personal' && task.ownerId === session.user.id);
+  const canDelete = isSubtask
+    ? session.user.isSuperAdmin ||
+      isHeadOfTaskDivision ||
+      task.parentTask?.ownerId === session.user.id
+    : session.user.isSuperAdmin ||
+      isHeadOfTaskDivision ||
+      (task.visibility === 'personal' && task.ownerId === session.user.id);
 
   // Archive mirrors archiveTaskAction: a task assigned to an individual can
   // only be archived by the head of its division, a Super Admin, or a
@@ -264,7 +276,8 @@ export default async function TaskDetailPage({ params }: PageProps) {
   }));
 
   // Subtask assignee candidates: task participants (same set as above).
-  const subtaskAssigneeRows = canEditFields
+  // Collaborators can create subtasks too, so they need the picker options.
+  const subtaskAssigneeRows = canEditFields || isCollaborator
     ? await prisma.user.findMany({
         where: participantWhere,
         select: {
@@ -452,7 +465,9 @@ export default async function TaskDetailPage({ params }: PageProps) {
             canDelete={canDelete}
             reasonNoDelete={
               !canDelete
-                ? 'Only a division head or a Super Admin can delete this task.'
+                ? isSubtask
+                  ? 'Only the parent task owner, a division head, or a Super Admin can delete this subtask.'
+                  : 'Only a division head or a Super Admin can delete this task.'
                 : undefined
             }
           />
@@ -497,12 +512,17 @@ export default async function TaskDetailPage({ params }: PageProps) {
         </p>
       </section>
 
-      <SectionContext taskId={task.id} description={task.description} canEdit={canEditFields} />
+      <SectionContext
+        taskId={task.id}
+        description={task.description}
+        canEdit={canEditFields || isCollaborator}
+      />
 
       <SectionSubtasks
         taskId={task.id}
         subtasks={task.subtasks}
         canEdit={canEditFields}
+        canAdd={canEditFields || isCollaborator}
         assignees={subtaskAssignees}
         parentDueDate={task.dueDate}
       />
@@ -544,7 +564,9 @@ export default async function TaskDetailPage({ params }: PageProps) {
         canViewProfiles={canChangeDivision}
       />
 
-      {isOwner && !task.parentTaskId && transferCandidates.length > 0 ? (
+      {/* Subtasks are transferable too — the current owner (subtask assignee)
+          hands it to another user via the same division-scoped dropdown. */}
+      {isOwner && transferCandidates.length > 0 ? (
         <div className="px-4 md:px-6 py-4 border-b border-line-2">
           <TransferTaskButton taskId={task.id} candidates={transferCandidates} />
         </div>
@@ -594,6 +616,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
           parentId={task.id}
           attachments={taskAttachments}
           canEdit={canEditAttachments}
+          canAdd={canEditAttachments || isCollaborator}
           s3Configured={s3Ready}
         />
       </section>

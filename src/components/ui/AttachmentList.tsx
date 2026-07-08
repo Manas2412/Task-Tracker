@@ -31,6 +31,12 @@ type AttachmentListProps = {
   parentId: string;
   attachments: AttachmentRow[];
   canEdit: boolean;
+  /**
+   * Whether the viewer may add new documents. Defaults to `canEdit`; pass it
+   * separately to let contributors (e.g. task collaborators) upload without
+   * granting them rename/delete rights over others' files.
+   */
+  canAdd?: boolean;
   s3Configured: boolean;
   mode?: 'list-multi' | 'list-single';
   emptyHint?: string;
@@ -41,6 +47,7 @@ export function AttachmentList({
   parentId,
   attachments,
   canEdit,
+  canAdd = canEdit,
   s3Configured,
   mode = 'list-multi',
   emptyHint,
@@ -127,7 +134,7 @@ export function AttachmentList({
 
   return (
     <div>
-      {canEdit ? (
+      {canAdd ? (
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <button
             type="button"
@@ -185,7 +192,7 @@ export function AttachmentList({
       ) : null}
 
       {isEmpty ? (
-        <EmptyState mode={mode} canEdit={canEdit} hint={emptyHint} />
+        <EmptyState mode={mode} canEdit={canAdd} hint={emptyHint} />
       ) : (
         <ul className="flex flex-col gap-2">
           {visible.map((a) => (

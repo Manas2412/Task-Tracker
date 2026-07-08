@@ -19,7 +19,7 @@ import {
   resolveDivisionOwner,
 } from '@/lib/rbac';
 import { buildVisibilityClauses, getPmuParentDivisionHeadId } from '@/lib/visibility';
-import { buildTaskParticipantWhere, isTaskParticipant } from '@/lib/task-participants';
+import { buildTaskParticipantWhere, isTaskCollaborator, isTaskParticipant } from '@/lib/task-participants';
 
 async function nextTaskRefNumber(
   divisionId: string,
@@ -778,8 +778,25 @@ export async function updateTaskFieldsAction(
   const task = await prisma.task.findUnique({ where: { id: parsed.data.taskId } });
   if (!task) return fail('Task not found.', epoch);
 
-  if (!(await canEditTask(me.id, task))) {
-    return fail('Only the task owner, creator, or head of division can edit this task.', epoch);
+  const baseEditor = await canEditTask(me.id, task);
+  // A collaborator who is not otherwise an editor may contribute the task's
+  // context (description) — but nothing else. Any attempt to touch another
+  // field on the same submission is rejected below.
+  const collaboratorOnly = !baseEditor && (await isTaskCollaborator(me.id, task.id));
+  if (!baseEditor && !collaboratorOnly) {
+    return fail('Only the task owner, creator, a collaborator, or a head of division can edit this task.', epoch);
+  }
+  if (collaboratorOnly) {
+    const editsBeyondDescription =
+      parsed.data.name !== undefined ||
+      parsed.data.dueDate !== undefined ||
+      parsed.data.visibility !== undefined ||
+      parsed.data.recurrenceRule !== undefined ||
+      parsed.data.divisionId !== undefined ||
+      parsed.data.subDivisionId !== undefined;
+    if (editsBeyondDescription) {
+      return fail('Collaborators can edit only the task context.', epoch);
+    }
   }
 
   // Name, due date, and recurrence redefine the task, so they need the
@@ -1019,13 +1036,13 @@ export async function addSubtaskAction(
   if (!parent) return fail('Parent task not found.', epoch);
 
   // A subtask inherits the parent's visibility, so adding one to a
-  // division task creates another division-level task. Gate it the same
-  // way as every other subtask mutation (updateSubtaskAction) — owner,
-  // creator, or a head/OSD/Super Admin of the parent's division — so a
-  // division user cannot mint division tasks by breaking down a task
-  // they merely collaborate on.
-  if (!(await canEditTask(me.id, parent))) {
-    return fail('Only the task owner, creator, or head of division can add subtasks.', epoch);
+  // division task creates another division-level task. Creating subtasks is
+  // a contribute right: the owner, creator, or a head/OSD/Super Admin of the
+  // parent's division, plus any explicit collaborator on the task (they are
+  // meant to help break the work down). A plain division member who merely
+  // *sees* the task still cannot add subtasks.
+  if (!(await canEditTask(me.id, parent)) && !(await isTaskCollaborator(me.id, parent.id))) {
+    return fail('Only the task owner, creator, a collaborator, or a head of division can add subtasks.', epoch);
   }
 
   if (parsed.data.dueDate && parent.dueDate) {
@@ -1629,23 +1646,45 @@ export async function deleteTaskAction(
       ownerId: true,
       divisionId: true,
       visibility: true,
+      parentTaskId: true,
     },
   });
   if (!task) return fail('Task not found.', epoch);
 
-  // Delete rights: a Super Admin (any task) or the head of the task's
-  // division (canActAsHeadOf covers both, plus active delegates), and a
-  // user for their own personal task. A normal user who merely owns a
-  // division task — e.g. after a transfer — can no longer delete it.
   const actor = await getRbacActor(me.id);
-  const allowed =
-    (task.visibility === 'personal' && task.ownerId === me.id) ||
-    (actor !== null && canActAsHeadOf(actor, task.divisionId));
-  if (!allowed) {
-    return fail(
-      'Only a division head or a Super Admin can delete this task.',
-      epoch,
-    );
+  let allowed: boolean;
+  if (task.parentTaskId) {
+    // Subtask deletion is a lifecycle action reserved for the parent task's
+    // owner, the head of the task's division, or a Super Admin — never the
+    // subtask's own assignee, who was merely allotted the work. (No personal
+    // self-delete path either: a subtask's owner does not own its lifecycle.)
+    const parent = await prisma.task.findUnique({
+      where: { id: task.parentTaskId },
+      select: { ownerId: true },
+    });
+    allowed =
+      (parent !== null && parent.ownerId === me.id) ||
+      (actor !== null && canActAsHeadOf(actor, task.divisionId));
+    if (!allowed) {
+      return fail(
+        'Only the parent task owner, a division head, or a Super Admin can delete this subtask.',
+        epoch,
+      );
+    }
+  } else {
+    // Delete rights: a Super Admin (any task) or the head of the task's
+    // division (canActAsHeadOf covers both, plus active delegates), and a
+    // user for their own personal task. A normal user who merely owns a
+    // division task — e.g. after a transfer — can no longer delete it.
+    allowed =
+      (task.visibility === 'personal' && task.ownerId === me.id) ||
+      (actor !== null && canActAsHeadOf(actor, task.divisionId));
+    if (!allowed) {
+      return fail(
+        'Only a division head or a Super Admin can delete this task.',
+        epoch,
+      );
+    }
   }
 
   try {
@@ -2502,7 +2541,7 @@ export async function transferTaskAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, ownerId: true, createdById: true, divisionId: true, visibility: true, dueDate: true },
+    select: { id: true, name: true, ownerId: true, createdById: true, divisionId: true, visibility: true, dueDate: true, parentTaskId: true },
   });
   if (!task) return fail('Task not found.', epoch);
 
@@ -2534,7 +2573,11 @@ export async function transferTaskAction(
   const updates: Parameters<typeof prisma.task.update>[0]['data'] = {
     ownerId: target.id,
   };
-  if (task.visibility === 'personal') {
+  // A top-level personal task auto-promotes to division on transfer so it
+  // does not vanish from the recipient's view (§5.6). Subtasks are exempt:
+  // a subtask inherits its parent's visibility and must never become more
+  // permissive than the parent (§5.1), so its visibility is left untouched.
+  if (task.visibility === 'personal' && !task.parentTaskId) {
     if (canCreateDivisionTask(actor, task.divisionId)) {
       updates.visibility = 'division';
     }
