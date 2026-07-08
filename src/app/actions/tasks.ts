@@ -19,6 +19,7 @@ import {
   resolveDivisionOwner,
 } from '@/lib/rbac';
 import { buildVisibilityClauses, getPmuParentDivisionHeadId } from '@/lib/visibility';
+import { buildTaskParticipantWhere, isTaskParticipant } from '@/lib/task-participants';
 
 async function nextTaskRefNumber(
   divisionId: string,
@@ -1031,6 +1032,7 @@ export async function addSubtaskAction(
       ownerId: true,
       createdById: true,
       dueDate: true,
+      division: { select: { kind: true, headUserId: true } },
     },
   });
   if (!parent) return fail('Parent task not found.', epoch);
@@ -1059,13 +1061,13 @@ export async function addSubtaskAction(
   if (assigneeId !== me.id) {
     const assignee = await prisma.user.findUnique({
       where: { id: assigneeId },
-      select: { id: true, isActive: true, divisionId: true },
+      select: { id: true, isActive: true },
     });
     if (!assignee || !assignee.isActive) {
       return fail('Assignee not found or inactive.', epoch);
     }
-    if (assignee.divisionId !== parent.divisionId) {
-      return fail('Subtask assignee must be in the same division as the parent task.', epoch);
+    if (!(await isTaskParticipant(assigneeId, parent))) {
+      return fail('Subtask assignee must be from the task division.', epoch);
     }
   }
 
@@ -1221,7 +1223,14 @@ export async function updateSubtaskAction(
 
   const parent = await prisma.task.findUnique({
     where: { id: subtask.parentTaskId },
-    select: { id: true, ownerId: true, createdById: true, divisionId: true, dueDate: true },
+    select: {
+      id: true,
+      ownerId: true,
+      createdById: true,
+      divisionId: true,
+      dueDate: true,
+      division: { select: { kind: true, headUserId: true } },
+    },
   });
   if (!parent) return fail('Parent task not found.', epoch);
 
@@ -1249,6 +1258,9 @@ export async function updateSubtaskAction(
   } = {};
 
   if (parsed.data.assigneeId && parsed.data.assigneeId !== subtask.ownerId) {
+    if (!(await isTaskParticipant(parsed.data.assigneeId, parent))) {
+      return fail('Subtask assignee must be from the task division.', epoch);
+    }
     updates.ownerId = parsed.data.assigneeId;
     activityChanges.push('reassigned');
     const [fromUser, toUser] = await Promise.all([
@@ -1342,13 +1354,22 @@ function extractMentionIds(_body: string): string[] {
   return [];
 }
 
-async function resolveMentions(body: string): Promise<string[]> {
+async function resolveMentions(body: string, taskId: string): Promise<string[]> {
   const handles = Array.from(body.matchAll(/@([a-z0-9][a-z0-9._-]{1,40})/gi)).map(
     (m) => m[1].toLowerCase(),
   );
   if (handles.length === 0) return [];
+  // A mention only resolves (and grants access + notifies) if the target may
+  // take part in this task — same rule as the collaborator / assignee pickers,
+  // so you cannot pull in someone outside the task's division by @-name.
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { divisionId: true, division: { select: { kind: true, headUserId: true } } },
+  });
+  if (!task) return [];
+  const participantWhere = await buildTaskParticipantWhere(task);
   const users = await prisma.user.findMany({
-    where: { username: { in: handles } },
+    where: { AND: [{ username: { in: handles } }, participantWhere] },
     select: { id: true },
   });
   return users.map((u) => u.id);
@@ -1385,7 +1406,7 @@ export async function postCommentAction(
     return fail('Task not found.', epoch);
   }
 
-  const mentions = await resolveMentions(parsed.data.body);
+  const mentions = await resolveMentions(parsed.data.body, task.id);
 
   try {
     const comment = await prisma.taskComment.create({
@@ -1465,7 +1486,7 @@ export async function editCommentAction(
     return fail('Comments can only be edited within 5 minutes of posting.', epoch);
   }
 
-  const mentions = await resolveMentions(parsed.data.body);
+  const mentions = await resolveMentions(parsed.data.body, comment.taskId);
 
   try {
     await prisma.taskComment.update({
@@ -1889,7 +1910,16 @@ export async function addCollaboratorAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, ownerId: true, createdById: true, divisionId: true, archivedAt: true, dueDate: true },
+    select: {
+      id: true,
+      name: true,
+      ownerId: true,
+      createdById: true,
+      divisionId: true,
+      archivedAt: true,
+      dueDate: true,
+      division: { select: { kind: true, headUserId: true } },
+    },
   });
   if (!task || task.archivedAt) return fail('Task not found.', epoch);
 
@@ -1906,6 +1936,12 @@ export async function addCollaboratorAction(
     select: { id: true, name: true, isActive: true },
   });
   if (!target || !target.isActive) return fail('User not found or disabled.', epoch);
+
+  // Collaborators are drawn from the task's division (plus its head and the
+  // oversight roles) — the same rule as the picker, enforced server-side.
+  if (!(await isTaskParticipant(target.id, task))) {
+    return fail('Collaborators must be from the task division.', epoch);
+  }
 
   // Co-owner cap: max 3 per task.
   if (parsed.data.role === 'co_owner') {
@@ -2512,7 +2548,7 @@ export async function transferTaskAction(
   }
 
   const comment = parsed.data.comment;
-  const mentions = await resolveMentions(comment);
+  const mentions = await resolveMentions(comment, task.id);
 
   const updates: Parameters<typeof prisma.task.update>[0]['data'] = {
     ownerId: target.id,

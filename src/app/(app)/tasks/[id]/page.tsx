@@ -17,6 +17,7 @@ import {
 } from '@/lib/rbac';
 import { ACTOR_SUMMARY_SELECT, USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { buildVisibilityClauses } from '@/lib/visibility';
+import { buildTaskParticipantWhere } from '@/lib/task-participants';
 import { CollaboratorsSection, type Candidate, type CollaboratorRow, type SubtaskScope } from './_components/CollaboratorsSection';
 import { JsLanePicker } from './_components/JsLanePicker';
 import { TagsSection, type TaskTagRow } from './_components/TagsSection';
@@ -191,13 +192,16 @@ export default async function TaskDetailPage({ params }: PageProps) {
       me.isSuperAdmin ||
       me.hierarchySlot === 'osd');
 
-  // Candidate users: active users excluding the owner.
+  // Every task user-picker (collaborators, subtask assignees, @mentions)
+  // draws from the same set: the task division's members (or PMU team), its
+  // head, and the oversight roles (OSD + Super Admin) — Office of JS being
+  // the any-user exception. Centralised in buildTaskParticipantWhere.
+  const participantWhere = await buildTaskParticipantWhere(task);
+
+  // Candidate collaborators: task participants, excluding the current owner.
   const candidateRows = canEditCollaborators
     ? await prisma.user.findMany({
-        where: {
-          isActive: true,
-          id: { not: task.ownerId },
-        },
+        where: { AND: [participantWhere, { id: { not: task.ownerId } }] },
         select: {
           id: true,
           name: true,
@@ -216,10 +220,10 @@ export default async function TaskDetailPage({ params }: PageProps) {
     divisionColour: u.division.avatarColour,
   }));
 
-  // Mentionables: every active user (including the owner). Cap at 200 for
+  // Mentionables: task participants (including the owner). Cap at 200 for
   // the in-memory typeahead — the picker filters client-side.
   const mentionableRows = await prisma.user.findMany({
-    where: { isActive: true },
+    where: participantWhere,
     select: {
       id: true,
       name: true,
@@ -259,10 +263,10 @@ export default async function TaskDetailPage({ params }: PageProps) {
     name: s.name,
   }));
 
-  // Subtask assignee candidates: all active users.
+  // Subtask assignee candidates: task participants (same set as above).
   const subtaskAssigneeRows = canEditFields
     ? await prisma.user.findMany({
-        where: { isActive: true },
+        where: participantWhere,
         select: {
           id: true,
           name: true,
