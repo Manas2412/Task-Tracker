@@ -173,6 +173,26 @@ body.sortable-dragging .pb-accordion-body {
   }
 }
 
+/* ============================================================
+   Division accordion — collapsible groups on the tasks and
+   timeline-files lists (Group by division). Smooth height via the
+   grid-template-rows 0fr→1fr trick. Unlike the priority-board
+   variant it collapses at every breakpoint. Reduced-motion is
+   honoured by the floor below.
+   ============================================================ */
+.accordion-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-slow) var(--ease-emphasis);
+}
+.accordion-body.is-open {
+  grid-template-rows: 1fr;
+}
+.accordion-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* Task hover-preview card — subtle fade-in on appear. */
 @keyframes hoverPop {
   from { opacity: 0; transform: translateY(3px); }

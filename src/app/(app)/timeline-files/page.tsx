@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { TimelineFileCard } from '@/components/ui';
+import { DivisionAccordion } from '@/components/DivisionAccordion';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { isS3Configured } from '@/lib/s3';
@@ -183,22 +184,17 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
             divisionActive={Boolean(divisionFilter)}
           />
         ) : group === 'division' ? (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
             {groupByDivision(tfs, divisionFilter).map((g) => (
-              <section key={g.id} aria-label={g.name}>
-                <div className="flex items-center gap-2 mb-2">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={g.colour ? { background: g.colour } : undefined}
-                    aria-hidden="true"
-                  />
-                  <h3 className="text-[13px] font-medium text-ink">{g.name}</h3>
-                  <span className="text-[11px] text-ink-3">
-                    {g.tfs.length} {g.tfs.length === 1 ? 'item' : 'items'}
-                  </span>
-                </div>
+              <DivisionAccordion
+                key={g.id}
+                name={g.name}
+                colour={g.colour}
+                count={g.tfs.length}
+                unit="file"
+              >
                 <TfGrid items={g.tfs} />
-              </section>
+              </DivisionAccordion>
             ))}
           </div>
         ) : (

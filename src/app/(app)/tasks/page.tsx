@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 
 import { PullToRefresh } from '@/components/ui';
+import { DivisionAccordion } from '@/components/DivisionAccordion';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { formatDue, initialsOf } from '@/lib/format';
@@ -113,27 +114,21 @@ export default async function TasksPage({ searchParams }: PageProps) {
             grouped.length === 0 ? (
               <EmptyState filter={filter} />
             ) : (
-              <div className="space-y-6">
+              <div className="flex flex-col gap-3">
                 {grouped.map((group) => (
-                  <section key={group.divisionId}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: group.colour }}
-                      />
-                      <h3 className="section-label">
-                        {group.divisionName}
-                      </h3>
-                      <span className="text-[11px] text-ink-3">
-                        {group.tasks.length}
-                      </span>
-                    </div>
+                  <DivisionAccordion
+                    key={group.divisionId}
+                    name={group.divisionName}
+                    colour={group.colour}
+                    count={group.tasks.length}
+                    unit="task"
+                  >
                     <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
                       {group.tasks.map((t) => (
                         <TaskRow key={t.id} task={t} />
                       ))}
                     </ul>
-                  </section>
+                  </DivisionAccordion>
                 ))}
               </div>
             )
