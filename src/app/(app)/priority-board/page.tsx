@@ -8,6 +8,7 @@ import { buildVisibilityClauses } from '@/lib/visibility';
 
 import { Board, BoardSearch, type BoardTask } from './_components/Board';
 import { RemoveModeProvider, RemoveToggle } from './_components/RemoveMode';
+import { AccordionProvider } from './_components/AccordionState';
 
 import type { PillJsLane } from '@/components/ui/Pill';
 
@@ -78,6 +79,7 @@ export default async function PriorityBoardPage() {
 
   return (
     <RemoveModeProvider>
+    <AccordionProvider>
     <div className="px-4 md:px-6 lg:px-8 pt-4 md:pt-6 pb-10 max-w-7xl mx-auto">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
@@ -116,6 +118,7 @@ export default async function PriorityBoardPage() {
         <Board tasksByLane={tasksByLane} canCurate={canCurate} />
       )}
     </div>
+    </AccordionProvider>
     </RemoveModeProvider>
   );
 }

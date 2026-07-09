@@ -12,6 +12,7 @@ import { TASK_STATUS_LABEL } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 
 import { useRemoveMode } from './RemoveMode';
+import { useAccordion } from './AccordionState';
 
 import type { PillJsLane, PillStatusTone } from '@/components/ui/Pill';
 
@@ -119,6 +120,16 @@ const TOUCH_OPTS = {
   touchStartThreshold: 4,
 } as const;
 
+/** Auto-scroll while dragging. With `forceFallback` the built-in auto-scroll
+ *  only kicks in when `forceAutoScrollFallback` is set — needed so the tall
+ *  vertical mobile board scrolls the window as a card nears a viewport edge. */
+const SCROLL_OPTS = {
+  scroll: true,
+  forceAutoScrollFallback: true,
+  scrollSensitivity: 80,
+  scrollSpeed: 14,
+} as const;
+
 /**
  * Persist a move: optionally change the task's lane, then (when an order
  * snapshot is provided) persist the lane's order. Returns an error message
@@ -165,11 +176,24 @@ function snapshotLaneOrder(laneEl: HTMLElement): string[] {
 export function Board({ tasksByLane, canCurate }: BoardProps) {
   const router = useRouter();
   const { removeMode } = useRemoveMode();
+  const { collapsed, toggle, expand } = useAccordion();
   const [pending, startTransition] = useTransition();
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  // Past the md breakpoint every lane is shown (no accordion). Tracked in
+  // state so the header's aria-expanded and tap-to-toggle reflect reality
+  // rather than the collapse flag CSS ignores on desktop.
+  const [isDesktop, setIsDesktop] = useState(false);
 
   const listRefs = useRef<Record<string, HTMLUListElement | null>>({});
   const sortablesRef = useRef<Sortable[]>([]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   /** Take a task off the board — unset its JS Priority lane (lane = ''). */
   const handleRemove = (taskId: string) => {
@@ -203,6 +227,7 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
         forceFallback: true,
         fallbackOnBody: true,
         emptyInsertThreshold: 32,
+        ...SCROLL_OPTS,
         // Neither the "Drop tasks here" placeholder nor the remove-mode X may
         // start a drag — clicking the X must fire its own handler instead.
         filter: '.lane-empty, .lane-remove-btn',
@@ -220,6 +245,8 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
           const toLane = (evt.to as HTMLElement).dataset.laneId as PillJsLane | undefined;
           const fromLane = (evt.from as HTMLElement).dataset.laneId as PillJsLane | undefined;
           if (!taskId || !toLane) return;
+          // Keep the lane that received the drop open once the drag ends.
+          expand(toLane);
           if (toLane === fromLane && evt.newIndex === evt.oldIndex) return;
 
           // Snapshot the target order at the drop position BEFORE reverting.
@@ -247,7 +274,7 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
       sortablesRef.current.forEach((s) => s.destroy());
       sortablesRef.current = [];
     };
-  }, [canCurate, tasksByLane, router]);
+  }, [canCurate, tasksByLane, router, expand]);
 
   return (
     <div>
@@ -265,10 +292,10 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
 
       <div
         className={cn(
-          'grid gap-4 overflow-x-auto pb-3 overscroll-x-contain',
-          // Horizontal swipe (snap) on mobile, 2-col tablet, 4-col laptop+
-          'snap-x snap-proximity md:snap-none',
-          'grid-cols-[repeat(4,minmax(272px,1fr))] md:grid-cols-2 lg:grid-cols-4',
+          'grid gap-3 md:gap-4',
+          // Mobile: a single vertical column of collapsible accordion panels.
+          // Tablet: 2 columns; laptop+: the classic 4-column board.
+          'grid-cols-1 md:grid-cols-2 lg:grid-cols-4',
         )}
       >
         {LANES.map((lane) => (
@@ -280,6 +307,9 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
             canCurate={canCurate}
             removeMode={canCurate && removeMode}
             onRemove={handleRemove}
+            collapsed={collapsed[lane.id]}
+            onToggle={toggle}
+            isDesktop={isDesktop}
           />
         ))}
       </div>
@@ -297,6 +327,7 @@ const SEARCH_MIN_LENGTH = 2;
 
 export function BoardSearch() {
   const router = useRouter();
+  const { expand } = useAccordion();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -304,6 +335,10 @@ export function BoardSearch() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  // While a result is being dragged, hide the results popover so it doesn't
+  // cover the board — the drag ghost floats on <body>, so the list can stay
+  // mounted (kept as-is for Sortable) while being visually hidden.
+  const [draggingHidden, setDraggingHidden] = useState(false);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -330,6 +365,11 @@ export function BoardSearch() {
         return (await r.json()) as { tasks: TrayTask[] };
       })
       .then((data) => {
+        // Never swap the results out from under an in-flight drag: doing so
+        // would unmount the dragged chip's list, and Sortable.destroy() fires
+        // no `end` event — stranding the global drag state (every lane would
+        // stay force-expanded). Let the drop finish; results refresh after.
+        if (document.body.classList.contains('sortable-dragging')) return;
         setResults(data.tasks);
         setLoading(false);
       })
@@ -398,12 +438,19 @@ export function BoardSearch() {
       fallbackOnBody: true,
       ghostClass: 'sortable-ghost',
       dragClass: 'sortable-drag',
+      ...SCROLL_OPTS,
       filter: 'button, a',
       preventOnFilter: false,
       ...TOUCH_OPTS,
-      onStart: () => document.body.classList.add('sortable-dragging'),
+      onStart: () => {
+        document.body.classList.add('sortable-dragging');
+        // Grabbing a result hides the popover, freeing the full screen so the
+        // task can be dropped into any (now force-expanded) lane.
+        setDraggingHidden(true);
+      },
       onEnd: (evt) => {
         document.body.classList.remove('sortable-dragging');
+        setDraggingHidden(false);
         const to = evt.to as HTMLElement;
         const toLane = to.dataset.laneId as PillJsLane | undefined;
         if (!toLane) return; // dropped back on the list — Sortable reverts
@@ -424,6 +471,9 @@ export function BoardSearch() {
 
         if (!taskId) return;
 
+        // Keep the destination lane open so the dropped task is visible.
+        expand(toLane);
+
         // Successful drop onto a lane — instantly close the results popover
         // and clear the typed query, rather than leaving stale results open.
         setQuery('');
@@ -433,7 +483,15 @@ export function BoardSearch() {
         apply(taskId, toLane, orderedIds);
       },
     });
-    return () => s.destroy();
+    return () => {
+      s.destroy();
+      // Defensive: if this list unmounts mid-drag (Escape, or results emptied
+      // by an in-flight fetch), destroy() dispatches no `end` event — so clear
+      // the global drag state here, otherwise every lane stays force-expanded
+      // and the popover can't be dismissed.
+      document.body.classList.remove('sortable-dragging');
+      setDraggingHidden(false);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasResults]);
 
@@ -471,7 +529,11 @@ export function BoardSearch() {
       {open ? (
         <div
           id="board-search-results"
-          className="glass-card absolute right-0 top-full mt-2 z-30 w-full md:w-[min(420px,calc(100vw-2rem))] rounded-xl p-2"
+          className={cn(
+            'glass-card absolute right-0 top-full mt-2 z-30 w-full md:w-[min(420px,calc(100vw-2rem))] rounded-xl p-2',
+            // Hidden (but still mounted) while a result is being dragged.
+            draggingHidden && 'invisible pointer-events-none',
+          )}
         >
           <p className="px-2 pt-1 pb-1.5 text-[10px] uppercase tracking-[0.06em] font-medium text-ink-3">
             {loading && !hasResults
@@ -586,6 +648,9 @@ function Lane({
   canCurate,
   removeMode,
   onRemove,
+  collapsed,
+  onToggle,
+  isDesktop,
 }: {
   lane: { id: PillJsLane; label: string; sub: string };
   tasks: BoardTask[];
@@ -593,71 +658,108 @@ function Lane({
   canCurate: boolean;
   removeMode: boolean;
   onRemove: (taskId: string) => void;
+  collapsed: boolean;
+  onToggle: (lane: PillJsLane) => void;
+  isDesktop: boolean;
 }) {
   const isGlass = lane.id === 'watchlist';
+  const bodyId = `lane-body-${lane.id}`;
+  // Desktop shows every lane regardless of the collapse flag, so the header
+  // reflects "expanded" there; mobile mirrors the actual collapse state.
+  const expanded = isDesktop || !collapsed;
   return (
     <section
       aria-labelledby={`lane-${lane.id}`}
       style={LANE_TINT[lane.id]}
       className={cn(
-        'rounded-xl p-3 flex flex-col min-h-[420px] snap-start',
+        'rounded-2xl overflow-hidden md:flex md:flex-col md:min-h-[420px]',
         LANE_BORDER[lane.id],
         isGlass && 'glass-card',
       )}
     >
-      <header className="flex items-center justify-between pb-2.5 border-b border-line mb-2.5">
-        <div>
-          <h2
-            id={`lane-${lane.id}`}
-            className="font-serif text-[17px] text-ink leading-none"
-          >
-            {lane.label}
-          </h2>
-          <p className="text-[10px] text-ink-3 mt-0.5">{lane.sub}</p>
-        </div>
-        <span
-          className={cn(
-            'text-[11px] font-medium px-2 py-0.5 rounded-pill border',
-            tasks.length > 0
-              ? 'bg-accent-soft text-accent border-accent-line'
-              : 'bg-bg text-ink-3 border-line',
-          )}
-        >
-          {tasks.length}
-        </span>
-      </header>
-
-      <ul
-        ref={registerRef}
-        data-lane-id={lane.id}
+      {/* Header — a full-width accordion toggle on mobile, a plain lane header
+          on desktop (the tap-to-collapse is a no-op past the md breakpoint). */}
+      <button
+        type="button"
+        onClick={() => {
+          // Desktop always shows every lane; only toggle on mobile widths.
+          if (isDesktop) return;
+          onToggle(lane.id);
+        }}
+        aria-expanded={expanded}
+        aria-controls={bodyId}
+        aria-label={`${lane.label}, ${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'}`}
         className={cn(
-          'flex flex-col gap-2 flex-1 min-h-[200px] rounded-lg p-1',
-          canCurate && 'sortable-target',
+          'w-full flex items-center justify-between gap-2 text-left p-3 select-none',
+          'cursor-pointer md:cursor-default transition-colors active:bg-ink/5 md:active:bg-transparent',
+          !collapsed && 'border-b border-line/60',
+          'md:border-b md:border-line/60',
         )}
       >
-        {tasks.length === 0 ? (
-          <li
-            className="lane-empty text-center text-[11px] text-ink-3 italic rounded-lg border border-dashed border-line py-8"
-            aria-hidden="true"
+        <div className="min-w-0">
+          <h2 id={`lane-${lane.id}`} className="font-serif text-[17px] text-ink leading-none">
+            {lane.label}
+          </h2>
+          <p className="text-[10px] text-ink-3 mt-1">{lane.sub}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span
+            className={cn(
+              'text-[11px] font-medium px-2 py-0.5 rounded-pill border',
+              tasks.length > 0
+                ? 'bg-accent-soft text-accent border-accent-line'
+                : 'bg-bg text-ink-3 border-line',
+            )}
           >
-            <i className="ti ti-inbox text-[22px] block mb-1 opacity-40" />
-            {canCurate ? 'Drop tasks here' : 'Empty'}
-          </li>
-        ) : (
-          tasks.map((t) => (
-            // data-task-id on the <li> — it is the Sortable draggable item,
-            // so evt.item.dataset.taskId resolves in the drag handler.
-            <li key={t.id} data-task-id={t.id}>
-              <LaneCard
-                task={t}
-                canCurate={canCurate}
-                removeMode={removeMode}
-                onRemove={onRemove}
-              />
-            </li>
-          ))
-        )}
-      </ul>
+            {tasks.length}
+          </span>
+          <i
+            className={cn(
+              'ti ti-chevron-down text-[16px] text-ink-3 transition-transform duration-[var(--dur-base)] md:hidden',
+              collapsed ? '-rotate-90' : 'rotate-0',
+            )}
+            aria-hidden="true"
+          />
+        </div>
+      </button>
+
+      {/* Collapsible body. Open state animates via grid-template-rows (see
+          globals.css); desktop and in-drag force it open. */}
+      <div id={bodyId} className={cn('pb-accordion-body', !collapsed && 'is-open')}>
+        <div className="pb-accordion-inner">
+          <ul
+            ref={registerRef}
+            data-lane-id={lane.id}
+            className={cn(
+              'flex flex-col gap-2 px-3 pb-3 min-h-[140px] md:flex-1 md:min-h-[200px] rounded-lg',
+              canCurate && 'sortable-target',
+            )}
+          >
+            {tasks.length === 0 ? (
+              <li
+                className="lane-empty text-center text-[11px] text-ink-3 italic rounded-lg border border-dashed border-line py-8"
+                aria-hidden="true"
+              >
+                <i className="ti ti-inbox text-[22px] block mb-1 opacity-40" />
+                {canCurate ? 'Drop tasks here' : 'Empty'}
+              </li>
+            ) : (
+              tasks.map((t) => (
+                // data-task-id on the <li> — it is the Sortable draggable item,
+                // so evt.item.dataset.taskId resolves in the drag handler.
+                <li key={t.id} data-task-id={t.id}>
+                  <LaneCard
+                    task={t}
+                    canCurate={canCurate}
+                    removeMode={removeMode}
+                    onRemove={onRemove}
+                  />
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      </div>
     </section>
   );
 }

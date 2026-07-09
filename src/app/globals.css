@@ -133,6 +133,46 @@ body.sortable-dragging .drop-node:hover {
 /* The drag fallback clone must never intercept the drop hit-test. */
 .sortable-fallback { pointer-events: none !important; }
 
+/* ============================================================
+   Priority Board — mobile accordion sections
+   Each lane is a collapsible panel on mobile. It is always open on
+   desktop, and forced open on every viewport while a drag is in
+   progress — so a collapsed lane still works as a drop target.
+   The grid-template-rows 0fr→1fr trick animates height smoothly
+   without hard-coding a max-height. Reduced-motion is honoured by
+   the global floor above.
+   ============================================================ */
+.pb-accordion-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-slow) var(--ease-emphasis);
+}
+.pb-accordion-body.is-open {
+  grid-template-rows: 1fr;
+}
+.pb-accordion-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+/* A board drag forces every section open so any lane accepts the drop. */
+body.sortable-dragging .pb-accordion-body {
+  grid-template-rows: 1fr;
+}
+/* Desktop keeps the classic multi-column board — no collapsing; the body
+   flex-fills its lane exactly as before the accordion was introduced. */
+@media (min-width: 768px) {
+  .pb-accordion-body {
+    display: flex;
+    grid-template-rows: none;
+    flex: 1 1 auto;
+  }
+  .pb-accordion-inner {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+}
+
 /* Task hover-preview card — subtle fade-in on appear. */
 @keyframes hoverPop {
   from { opacity: 0; transform: translateY(3px); }
