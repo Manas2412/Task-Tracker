@@ -79,37 +79,50 @@ export function SectionComments({
 
   return (
     <section aria-labelledby="sec-comments" className="px-4 md:px-6 py-5 border-b border-line-2">
-      <h2 id="sec-comments" className="section-label mb-3">
-        Discussion{' '}
-        <span className="ml-2 text-ink-3 text-[11px] tracking-normal normal-case font-normal">
-          {totalCount} {totalCount === 1 ? 'comment' : 'comments'}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="grid place-items-center w-7 h-7 rounded-xl bg-primary-soft text-primary shrink-0">
+          <i className="ti ti-messages text-[15px]" aria-hidden="true" />
         </span>
-      </h2>
+        <h2 id="sec-comments" className="section-label">
+          Discussion
+        </h2>
+        <span className="text-[11px] font-medium leading-none text-primary bg-primary-soft border border-primary-line/40 px-2 py-[3px] rounded-pill">
+          {totalCount}
+        </span>
+      </div>
 
-      {comments.length === 0 ? (
-        <p className="text-[13px] text-ink-3 italic mb-4">
-          No comments yet. Type a name to mention someone and start a discussion.
-        </p>
-      ) : (
-        <ul className="flex flex-col">
-          {comments.map((c) => (
-            <CommentThread
-              key={c.id}
-              comment={c}
-              replyTo={replyTo}
-              onReply={setReplyTo}
-              taskId={taskId}
-              mentionables={mentionables}
-              currentUserId={currentUserId}
-              canViewProfiles={canViewProfiles}
-            />
-          ))}
-        </ul>
-      )}
+      <div className="discussion-surface rounded-2xl p-3 md:p-4">
+        {comments.length === 0 ? (
+          <div className="text-center py-6">
+            <span className="mx-auto grid place-items-center w-11 h-11 rounded-2xl bg-primary-soft text-primary mb-2.5">
+              <i className="ti ti-message-2 text-[20px]" aria-hidden="true" />
+            </span>
+            <p className="text-[13px] font-medium text-ink-2">No comments yet</p>
+            <p className="text-[12px] text-ink-3 mt-0.5">
+              Type a name to mention someone and start the discussion.
+            </p>
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {comments.map((c) => (
+              <CommentThread
+                key={c.id}
+                comment={c}
+                replyTo={replyTo}
+                onReply={setReplyTo}
+                taskId={taskId}
+                mentionables={mentionables}
+                currentUserId={currentUserId}
+                canViewProfiles={canViewProfiles}
+              />
+            ))}
+          </ul>
+        )}
 
-      {replyTo === null ? (
-        <Composer taskId={taskId} mentionables={mentionables} />
-      ) : null}
+        {replyTo === null ? (
+          <Composer taskId={taskId} mentionables={mentionables} />
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -137,10 +150,10 @@ function CommentThread({
   const visibleReplies = showAllReplies ? comment.replies : comment.replies.slice(-2);
 
   return (
-    <li className="py-3 border-b border-line-2 last:border-b-0">
+    <li>
       <CommentRow comment={comment} currentUserId={currentUserId} mentionables={mentionables} taskId={taskId} canViewProfiles={canViewProfiles} />
 
-      <div className="ml-9 mt-1.5 flex items-center gap-3">
+      <div className="ml-9 mt-1 flex items-center gap-3">
         <button
           type="button"
           onClick={() => onReply(replyTo === comment.id ? null : comment.id)}
@@ -157,19 +170,19 @@ function CommentThread({
       </div>
 
       {hasReplies ? (
-        <div className="ml-9 mt-2 pl-3 border-l-2 border-line-2">
+        <div className="ml-9 mt-2 pl-3 discussion-thread-line flex flex-col gap-2">
           {!showAllReplies && hiddenCount > 0 ? (
             <button
               type="button"
               onClick={() => setShowAllReplies(true)}
-              className="text-[11px] text-primary font-medium mb-2 hover:underline"
+              className="self-start text-[11px] text-primary font-medium hover:underline"
             >
               Show {hiddenCount} earlier {hiddenCount === 1 ? 'reply' : 'replies'}
             </button>
           ) : null}
-          <ul className="flex flex-col">
+          <ul className="flex flex-col gap-2">
             {visibleReplies.map((r) => (
-              <li key={r.id} className="py-2 border-b border-line-2 last:border-b-0">
+              <li key={r.id}>
                 <CommentRow comment={r} compact currentUserId={currentUserId} mentionables={mentionables} taskId={taskId} canViewProfiles={canViewProfiles} />
               </li>
             ))}
@@ -178,7 +191,7 @@ function CommentThread({
       ) : null}
 
       {replyTo === comment.id ? (
-        <div className="ml-9 mt-2 pl-3 border-l-2 border-primary-line">
+        <div className="ml-9 mt-2 pl-3 discussion-thread-line">
           <Composer
             taskId={taskId}
             mentionables={mentionables}
@@ -249,6 +262,11 @@ function CommentRow({
     );
   }
 
+  const bubbleClass = cn(
+    compact ? 'px-2.5 py-1.5' : 'px-3 py-2',
+    isOwn ? 'discussion-bubble-own' : compact ? 'discussion-bubble-reply' : 'discussion-bubble',
+  );
+
   return (
     <div className={cn('flex gap-2.5', compact && 'gap-2')}>
       <Avatar
@@ -258,49 +276,51 @@ function CommentRow({
         ariaLabel={comment.user.name}
       />
       <div className="flex-1 min-w-0">
-        <header className="flex items-baseline gap-1.5 mb-1 flex-wrap">
-          {canViewProfiles && comment.user.id ? (
-            <Link href={`/users/${comment.user.id}`} className={cn('font-medium text-ink hover:underline', compact ? 'text-[11px]' : 'text-[12px]')}>
-              {comment.user.name}
-            </Link>
-          ) : (
-            <span className={cn('font-medium text-ink', compact ? 'text-[11px]' : 'text-[12px]')}>
-              {comment.user.name}
-            </span>
-          )}
-          {!compact ? (
-            <span className="text-[10px] text-ink-3">· {comment.user.designation}</span>
+        <div className={bubbleClass}>
+          <header className="flex items-baseline gap-1.5 mb-0.5 flex-wrap">
+            {canViewProfiles && comment.user.id ? (
+              <Link href={`/users/${comment.user.id}`} className={cn('font-medium text-ink hover:underline', compact ? 'text-[11px]' : 'text-[12px]')}>
+                {comment.user.name}
+              </Link>
+            ) : (
+              <span className={cn('font-medium text-ink', compact ? 'text-[11px]' : 'text-[12px]')}>
+                {comment.user.name}
+              </span>
+            )}
+            {!compact ? (
+              <span className="text-[10px] text-ink-3">· {comment.user.designation}</span>
+            ) : null}
+            {comment.editedAt ? (
+              <span className="text-[10px] text-ink-3 italic">edited</span>
+            ) : null}
+            <time
+              className="ml-auto text-[10px] text-ink-3"
+              dateTime={new Date(comment.createdAt).toISOString()}
+            >
+              {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
+            </time>
+          </header>
+          <p
+            className={cn(
+              'text-ink leading-relaxed whitespace-pre-wrap',
+              compact ? 'text-[12px]' : 'text-[13px]',
+            )}
+            dangerouslySetInnerHTML={{ __html: renderMentions(comment.body, mentionables) }}
+          />
+          {comment.statusTransition ? (
+            <div className="mt-1.5 inline-flex">
+              <Pill
+                variant="status"
+                tone={comment.statusTransition as PillStatusTone}
+                label={`Status: ${STATUS_LABEL[comment.statusTransition] ?? comment.statusTransition}`}
+              />
+            </div>
           ) : null}
-          {comment.editedAt ? (
-            <span className="text-[10px] text-ink-3 italic">edited</span>
-          ) : null}
-          <time
-            className="ml-auto text-[10px] text-ink-3"
-            dateTime={new Date(comment.createdAt).toISOString()}
-          >
-            {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
-          </time>
-        </header>
-        <p
-          className={cn(
-            'text-ink leading-relaxed whitespace-pre-wrap',
-            compact ? 'text-[12px]' : 'text-[13px]',
-          )}
-          dangerouslySetInnerHTML={{ __html: renderMentions(comment.body, mentionables) }}
-        />
-        {comment.statusTransition ? (
-          <div className="mt-1.5 inline-flex">
-            <Pill
-              variant="status"
-              tone={comment.statusTransition as PillStatusTone}
-              label={`Status: ${STATUS_LABEL[comment.statusTransition] ?? comment.statusTransition}`}
-            />
-          </div>
-        ) : null}
+        </div>
 
         {/* Inline edit/delete actions — visible text links, like Reply */}
         {windowOpen && !deleting ? (
-          <div className="flex items-center gap-3 mt-1">
+          <div className="flex items-center gap-3 mt-1 ml-0.5">
             <button
               type="button"
               onClick={() => setEditing(true)}
@@ -494,7 +514,7 @@ function EditComposer({
           }}
           onClick={checkMention}
           onBlur={() => { setTimeout(closePicker, 120); }}
-          className="w-full bg-bg border border-line rounded-lg px-3 py-2 text-[13px] text-ink outline-none resize-none focus:border-ink"
+          className="w-full bg-panel border border-line rounded-lg px-3 py-2 text-[13px] text-ink outline-none resize-none focus:border-primary"
           maxLength={4000}
         />
       </div>
@@ -750,17 +770,12 @@ function Composer({
           />
         ) : null}
 
-        <div
-          className={cn(
-            'flex items-end gap-1 bg-bg border border-line rounded-[22px] pl-1 pr-1.5 py-1.5',
-            'focus-within:border-ink',
-          )}
-        >
+        <div className="discussion-composer flex items-end gap-1 rounded-[22px] pl-1 pr-1.5 py-1.5">
           <button
             type="button"
             onClick={onMentionButton}
             aria-label="Mention someone"
-            className="w-7 h-7 grid place-items-center rounded-full text-ink-3 hover:bg-line-2 hover:text-ink"
+            className="w-7 h-7 grid place-items-center rounded-full text-ink-3 hover:bg-primary-soft hover:text-primary transition-colors"
           >
             <i className="ti ti-at text-[15px]" aria-hidden="true" />
           </button>
@@ -827,7 +842,7 @@ function SendButton() {
       type="submit"
       aria-label="Post comment"
       disabled={pending}
-      className="w-8 h-8 grid place-items-center rounded-full bg-ink text-white disabled:bg-ink-4 disabled:cursor-not-allowed"
+      className="w-8 h-8 grid place-items-center rounded-full bg-primary text-white shadow-sm transition-colors hover:bg-primary/90 disabled:bg-ink-4 disabled:cursor-not-allowed"
     >
       <i
         className={cn('ti', pending ? 'ti-loader-2 animate-spin' : 'ti-send-2', 'text-[15px]')}
