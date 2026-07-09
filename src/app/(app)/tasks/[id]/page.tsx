@@ -588,14 +588,6 @@ export default async function TaskDetailPage({ params }: PageProps) {
         </DetailSection>
       ) : null}
 
-      {/* Subtasks are transferable too — the current owner (subtask assignee)
-          hands it to another user via the same division-scoped dropdown. */}
-      {isOwner && transferCandidates.length > 0 ? (
-        <div className="px-4 md:px-6 py-4 border-b border-line-2">
-          <TransferTaskButton taskId={task.id} candidates={transferCandidates} />
-        </div>
-      ) : null}
-
       {canPull ? (
         <div className="px-4 md:px-6 py-4 border-b border-line-2">
           <PullTaskButton taskId={task.id} />
@@ -644,7 +636,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
           and timeline files. */}
       <CollapsibleSection
         title="Task details"
-        subtitle="Owner, division, visibility, recurrence, tags and activity"
+        subtitle="Owner, division, transfer, recurrence, tags and activity"
         icon="ti-list-details"
       >
         <SectionDetails
@@ -669,6 +661,14 @@ export default async function TaskDetailPage({ params }: PageProps) {
           divisions={allDivisions}
           canViewProfiles={canChangeDivision}
         />
+
+        {/* Transfer lives under Task details — the current owner hands the task
+            (or subtask) off via the same division-scoped dropdown. */}
+        {isOwner && transferCandidates.length > 0 ? (
+          <div className="px-4 md:px-6 py-4 border-b border-line-2">
+            <TransferTaskButton taskId={task.id} candidates={transferCandidates} />
+          </div>
+        ) : null}
 
         {session.user.isSuperAdmin ? (
           <TagsSection
