@@ -195,16 +195,32 @@ body.sortable-dragging .drop-node:hover {
   backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
 }
 
+/* A self-contained frosted card (no ambient behind it): a translucent
+   surface with soft indigo / amber corner tints so it reads as glass even
+   over a flat page. Used by the tasks-page stats panel. */
+.glass-card {
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  background:
+    radial-gradient(120% 130% at 0% 0%,   color-mix(in srgb, var(--primary) 9%, transparent), transparent 58%),
+    radial-gradient(120% 130% at 100% 100%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 58%),
+    var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+}
+
 /* No backdrop-filter support → fall back to a near-solid panel. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass-surface,
-  .glass-header { background: var(--glass-bg-solid); }
+  .glass-header,
+  .glass-card { background: var(--glass-bg-solid); }
 }
 
 /* Respect reduced-transparency / increased-contrast preferences. */
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .glass-surface,
-  .glass-header {
+  .glass-header,
+  .glass-card {
     background: var(--glass-bg-solid);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
