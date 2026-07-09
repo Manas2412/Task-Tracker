@@ -31,6 +31,8 @@ export default async function PriorityBoardPage() {
       archivedAt: null,
       parentTaskId: null,
       jsPriorityLane: { not: null },
+      // A completed task drops off the board automatically.
+      status: { not: 'completed' },
       OR: visibilityClauses,
     },
     include: {
@@ -43,6 +45,22 @@ export default async function PriorityBoardPage() {
       { dueDate: { sort: 'asc', nulls: 'last' } },
     ],
   });
+
+  // Attachment file names per task — surfaced only in the hover preview.
+  const taskIds = tasks.map((t) => t.id);
+  const namesByTask = new Map<string, string[]>();
+  if (taskIds.length > 0) {
+    const attachmentRows = await prisma.attachment.findMany({
+      where: { ownerType: 'task', ownerId: { in: taskIds } },
+      select: { ownerId: true, fileName: true },
+      orderBy: { uploadedAt: 'asc' },
+    });
+    for (const r of attachmentRows) {
+      const list = namesByTask.get(r.ownerId) ?? [];
+      list.push(r.fileName);
+      namesByTask.set(r.ownerId, list);
+    }
+  }
 
   const tasksByLane: Record<PillJsLane, BoardTask[]> = {
     today: [],
@@ -63,6 +81,8 @@ export default async function PriorityBoardPage() {
       jsPriorityLane: lane,
       divisionName: t.division.name,
       due: t.dueDate,
+      description: t.description,
+      attachmentNames: namesByTask.get(t.id) ?? [],
       owner: {
         name: t.owner.name,
         initials: initialsOf(t.owner.name),
