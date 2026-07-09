@@ -20,10 +20,15 @@ import type { PillJsLane, PillStatusTone } from '@/components/ui/Pill';
  * viewports (snap scrolling). Cards drag between lanes when the caller is
  * OSD or Super Admin; everyone else sees the board read-only.
  *
- * Curators also get a search tray: find any open division task and either
- * drag it straight onto a lane or tap a lane chip to add it — the tap path
- * keeps the flow easy on phones and tablets.
+ * Curators also get `BoardSearch` — a compact search box the page places in
+ * its header (top-right on desktop, full-width on mobile). Results open in
+ * an anchored popover; each result can be dragged straight onto a lane
+ * (same Sortable group) or added with a tap on a lane chip.
  */
+
+/** One Sortable group spans the lanes and the search popover, so a result
+ *  chip can be dropped onto any lane. */
+const BOARD_GROUP = 'js-priority-board';
 
 export type BoardTask = {
   id: string;
@@ -41,7 +46,7 @@ export type BoardTask = {
   };
 };
 
-/** A search-tray candidate (due arrives as an ISO string from the API). */
+/** A search-result candidate (due arrives as an ISO string from the API). */
 type TrayTask = Omit<BoardTask, 'jsPriorityLane' | 'due'> & {
   jsPriorityLane: PillJsLane | null;
   due: string | null;
@@ -102,6 +107,49 @@ const TOUCH_OPTS = {
   touchStartThreshold: 4,
 } as const;
 
+/**
+ * Persist a move: optionally change the task's lane, then (when an order
+ * snapshot is provided) persist the lane's order. Returns an error message
+ * or null. Shared by lane-to-lane drags, popover drops, and tap-to-add.
+ */
+async function persistLaneMove(
+  taskId: string,
+  toLane: PillJsLane,
+  orderedIds: string[] | null,
+  changeLane: boolean,
+): Promise<string | null> {
+  if (changeLane) {
+    const fd = new FormData();
+    fd.set('taskId', taskId);
+    fd.set('lane', toLane);
+    const laneResult = await setJsPriorityLaneAction(undefined, fd);
+    if (!laneResult.ok) return laneResult.error ?? 'Could not update JS Priority.';
+  }
+  if (orderedIds && orderedIds.length > 0) {
+    const reorderFd = new FormData();
+    reorderFd.set('payload', JSON.stringify({ lane: toLane, taskIds: orderedIds }));
+    const reorderResult = await reorderBoardAction(undefined, reorderFd);
+    if (!reorderResult.ok) return reorderResult.error ?? 'Could not save order.';
+  }
+  return null;
+}
+
+/** Snapshot a lane list's task ids at their current DOM order (deduped —
+ *  the task's existing card may already sit in the lane). */
+function snapshotLaneOrder(laneEl: HTMLElement): string[] {
+  return Array.from(
+    new Set(
+      Array.from(laneEl.querySelectorAll<HTMLElement>('[data-task-id]')).map(
+        (n) => n.dataset.taskId!,
+      ),
+    ),
+  );
+}
+
+// ------------------------------------------------------------
+// Board — the four lanes
+// ------------------------------------------------------------
+
 export function Board({ tasksByLane, canCurate }: BoardProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -109,48 +157,6 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
 
   const listRefs = useRef<Record<string, HTMLUListElement | null>>({});
   const sortablesRef = useRef<Sortable[]>([]);
-
-  const flashError = (message: string) => {
-    setErrorBanner(message);
-    setTimeout(() => setErrorBanner(null), 4000);
-  };
-
-  /**
-   * Persist a move: optionally change the task's lane, then (when an order
-   * snapshot is provided) persist the lane's order. Shared by lane-to-lane
-   * drags, tray drops, and the tray's tap-to-add chips.
-   */
-  const applyMove = (
-    taskId: string,
-    toLane: PillJsLane,
-    orderedIds: string[] | null,
-    changeLane: boolean,
-    onDone?: () => void,
-  ) => {
-    startTransition(async () => {
-      if (changeLane) {
-        const fd = new FormData();
-        fd.set('taskId', taskId);
-        fd.set('lane', toLane);
-        const laneResult = await setJsPriorityLaneAction(undefined, fd);
-        if (!laneResult.ok && laneResult.error) {
-          flashError(laneResult.error);
-          router.refresh();
-          return;
-        }
-      }
-      if (orderedIds && orderedIds.length > 0) {
-        const reorderFd = new FormData();
-        reorderFd.set('payload', JSON.stringify({ lane: toLane, taskIds: orderedIds }));
-        const reorderResult = await reorderBoardAction(undefined, reorderFd);
-        if (!reorderResult.ok && reorderResult.error) {
-          flashError(reorderResult.error);
-        }
-      }
-      onDone?.();
-      router.refresh();
-    });
-  };
 
   useEffect(() => {
     sortablesRef.current.forEach((s) => s.destroy());
@@ -161,7 +167,7 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
       const el = listRefs.current[lane.id];
       if (!el) return;
       const s = Sortable.create(el, {
-        group: 'js-priority-board',
+        group: BOARD_GROUP,
         animation: 200,
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
@@ -183,16 +189,16 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
           if (!taskId || !toLane) return;
           if (toLane === fromLane && evt.newIndex === evt.oldIndex) return;
 
-          const targetList = evt.to as HTMLElement;
-          const orderedIds = Array.from(
-            new Set(
-              Array.from(targetList.querySelectorAll<HTMLElement>('[data-task-id]')).map(
-                (el) => el.dataset.taskId!,
-              ),
-            ),
-          );
+          const orderedIds = snapshotLaneOrder(evt.to as HTMLElement);
 
-          applyMove(taskId, toLane, orderedIds, toLane !== fromLane);
+          startTransition(async () => {
+            const error = await persistLaneMove(taskId, toLane, orderedIds, toLane !== fromLane);
+            if (error) {
+              setErrorBanner(error);
+              setTimeout(() => setErrorBanner(null), 4000);
+            }
+            router.refresh();
+          });
         },
       });
       sortablesRef.current.push(s);
@@ -202,15 +208,10 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
       sortablesRef.current.forEach((s) => s.destroy());
       sortablesRef.current = [];
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canCurate, tasksByLane, router]);
 
   return (
     <div>
-      {canCurate ? (
-        <SearchTray pending={pending} applyMove={applyMove} />
-      ) : null}
-
       {pending ? (
         <p className="text-[11px] text-ink-3 mb-2" role="status">Saving…</p>
       ) : null}
@@ -246,38 +247,33 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
 }
 
 // ------------------------------------------------------------
-// Search tray — find a task, drag it onto a lane or tap to add
+// BoardSearch — compact header search with an anchored results
+// popover; rendered by the page in its top-right header slot.
 // ------------------------------------------------------------
 
-const TRAY_DEBOUNCE_MS = 250;
-const TRAY_MIN_LENGTH = 2;
+const SEARCH_DEBOUNCE_MS = 250;
+const SEARCH_MIN_LENGTH = 2;
 
-function SearchTray({
-  pending,
-  applyMove,
-}: {
-  pending: boolean;
-  applyMove: (
-    taskId: string,
-    toLane: PillJsLane,
-    orderedIds: string[] | null,
-    changeLane: boolean,
-    onDone?: () => void,
-  ) => void;
-}) {
+export function BoardSearch() {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [results, setResults] = useState<TrayTask[]>([]);
   const [loading, setLoading] = useState(false);
-  const trayRef = useRef<HTMLUListElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(query.trim()), TRAY_DEBOUNCE_MS);
+    const t = setTimeout(() => setDebounced(query.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [query]);
 
   useEffect(() => {
-    if (debounced.length < TRAY_MIN_LENGTH) {
+    if (debounced.length < SEARCH_MIN_LENGTH) {
       setResults([]);
       setLoading(false);
       return;
@@ -302,6 +298,29 @@ function SearchTray({
     return () => ctl.abort();
   }, [debounced]);
 
+  const open = !dismissed && debounced.length >= SEARCH_MIN_LENGTH;
+
+  // Close on Escape / outside mousedown — but never mid-drag (the drop lands
+  // outside the popover by design).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDismissed(true);
+    };
+    const onDown = (e: MouseEvent) => {
+      if (document.body.classList.contains('sortable-dragging')) return;
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setDismissed(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onDown);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onDown);
+    };
+  }, [open]);
+
   /** Optimistically stamp a result's lane badge once it lands on the board. */
   const markOnBoard = (taskId: string, lane: PillJsLane) => {
     setResults((prev) =>
@@ -309,16 +328,29 @@ function SearchTray({
     );
   };
 
-  // Drag OUT of the tray into any lane. `pull: 'clone'` keeps the tray
+  const apply = (taskId: string, toLane: PillJsLane, orderedIds: string[] | null) => {
+    startTransition(async () => {
+      const err = await persistLaneMove(taskId, toLane, orderedIds, true);
+      if (err) {
+        setError(err);
+        setTimeout(() => setError(null), 4000);
+      } else {
+        markOnBoard(taskId, toLane);
+      }
+      router.refresh();
+    });
+  };
+
+  // Drag OUT of the popover into any lane. `pull: 'clone'` keeps the list
   // intact; on drop we snapshot the target order, then put the DOM back
-  // exactly as React rendered it (clone trick) before persisting — so
-  // React's tree is never left mutated underneath it.
+  // exactly as React rendered it before persisting — so React's tree is
+  // never left mutated underneath it.
   const hasResults = results.length > 0;
   useEffect(() => {
-    const el = trayRef.current;
+    const el = listRef.current;
     if (!el) return;
     const s = Sortable.create(el, {
-      group: { name: 'js-priority-board', pull: 'clone', put: false },
+      group: { name: BOARD_GROUP, pull: 'clone', put: false },
       sort: false,
       animation: 200,
       forceFallback: true,
@@ -333,23 +365,14 @@ function SearchTray({
         document.body.classList.remove('sortable-dragging');
         const to = evt.to as HTMLElement;
         const toLane = to.dataset.laneId as PillJsLane | undefined;
-        if (!toLane) return; // dropped back on the tray — Sortable reverts
+        if (!toLane) return; // dropped back on the list — Sortable reverts
 
         const item = evt.item as HTMLElement;
         const taskId = item.dataset.taskId;
+        const orderedIds = snapshotLaneOrder(to);
 
-        // Snapshot the lane's order at the drop position (dedupe in case the
-        // task's existing card is already in this lane).
-        const orderedIds = Array.from(
-          new Set(
-            Array.from(to.querySelectorAll<HTMLElement>('[data-task-id]')).map(
-              (n) => n.dataset.taskId!,
-            ),
-          ),
-        );
-
-        // Restore the DOM for React: original chip back into the tray where
-        // the clone sits, clone removed.
+        // Restore the DOM for React: original chip back where the clone
+        // sits, clone removed.
         const clone = evt.clone as HTMLElement | undefined;
         if (clone && clone.parentNode) {
           clone.parentNode.insertBefore(item, clone);
@@ -359,17 +382,15 @@ function SearchTray({
         }
 
         if (!taskId) return;
-        applyMove(taskId, toLane, orderedIds, true, () => markOnBoard(taskId, toLane));
+        apply(taskId, toLane, orderedIds);
       },
     });
     return () => s.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasResults]);
 
-  const searching = debounced.length >= TRAY_MIN_LENGTH;
-
   return (
-    <section aria-label="Add tasks to the board" className="glass-card rounded-xl p-3 md:p-4 mb-4">
+    <div ref={wrapRef} className="relative w-full md:w-[340px] lg:w-[400px]">
       <div className="relative">
         <i
           className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-ink-3 pointer-events-none"
@@ -378,44 +399,64 @@ function SearchTray({
         <input
           type="search"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search tasks to add — drag onto a lane, or tap a lane chip…"
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setDismissed(false);
+          }}
+          onFocus={() => setDismissed(false)}
+          placeholder="Search tasks to add…"
           aria-label="Search tasks to add to the board"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls="board-search-results"
           autoComplete="off"
-          className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-line bg-panel text-[13px] text-ink placeholder:text-ink-3 outline-none focus:border-ink"
+          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-line bg-panel text-[13px] text-ink placeholder:text-ink-3 shadow-card outline-none transition-colors focus:border-ink"
         />
+        {pending ? (
+          <i
+            className="ti ti-loader-2 animate-spin absolute right-3 top-1/2 -translate-y-1/2 text-[14px] text-ink-3"
+            aria-hidden="true"
+          />
+        ) : null}
       </div>
 
-      {searching ? (
-        loading && !hasResults ? (
-          <p className="mt-3 text-[12px] text-ink-3">Searching…</p>
-        ) : hasResults ? (
-          <ul
-            ref={trayRef}
-            className="mt-3 flex gap-2 overflow-x-auto pb-1 snap-x snap-proximity [&::-webkit-scrollbar]:h-1.5"
-          >
-            {results.map((t) => (
-              <TrayCard
-                key={t.id}
-                task={t}
-                disabled={pending}
-                onAdd={(lane) =>
-                  applyMove(t.id, lane, null, true, () => markOnBoard(t.id, lane))
-                }
-              />
-            ))}
-          </ul>
-        ) : !loading ? (
-          <p className="mt-3 text-[12px] text-ink-3">
-            No open tasks match &ldquo;{debounced}&rdquo;.
+      {open ? (
+        <div
+          id="board-search-results"
+          className="glass-card absolute right-0 top-full mt-2 z-30 w-full md:w-[min(420px,calc(100vw-2rem))] rounded-xl p-2"
+        >
+          <p className="px-2 pt-1 pb-1.5 text-[10px] uppercase tracking-[0.06em] font-medium text-ink-3">
+            {loading && !hasResults
+              ? 'Searching…'
+              : hasResults
+                ? `${results.length} ${results.length === 1 ? 'match' : 'matches'} — drag onto a lane, or tap a lane chip`
+                : `No open tasks match "${debounced}"`}
           </p>
-        ) : null
-      ) : (
-        <p className="mt-2 text-[11px] text-ink-3">
-          Type at least two characters — search by task name, reference number, or owner.
-        </p>
-      )}
-    </section>
+
+          {error ? (
+            <p role="alert" className="mx-2 mb-1.5 text-[11px] text-urgent">
+              {error}
+            </p>
+          ) : null}
+
+          {hasResults ? (
+            <ul
+              ref={listRef}
+              className="flex flex-col gap-1.5 max-h-[min(46dvh,380px)] overflow-y-auto overscroll-contain p-0.5"
+            >
+              {results.map((t) => (
+                <TrayCard
+                  key={t.id}
+                  task={t}
+                  disabled={pending}
+                  onAdd={(lane) => apply(t.id, lane, null)}
+                />
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -431,7 +472,7 @@ function TrayCard({
   return (
     <li
       data-task-id={task.id}
-      className="snap-start shrink-0 w-[248px] rounded-xl border border-line bg-panel p-2.5 cursor-grab active:cursor-grabbing shadow-card"
+      className="rounded-xl border border-line bg-panel p-2.5 cursor-grab active:cursor-grabbing shadow-card"
     >
       <div className="flex items-start gap-1.5">
         <i className="ti ti-grip-vertical text-[13px] text-ink-3 mt-[2px] shrink-0" aria-hidden="true" />
