@@ -7,6 +7,7 @@ import {
   type AttachmentRow,
   BackButton,
   CollapsibleSection,
+  GlassDetailPanel,
   Pill,
 } from '@/components/ui';
 import { canEditTfAttachments } from '@/app/actions/attachments';
@@ -246,9 +247,9 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
   const secretarySignature = `Secretary, Sports · ${format(tf.receivedDate, 'd LLL')}`;
 
   return (
-    <div className="max-w-3xl xl:max-w-4xl mx-auto pb-16">
-      {/* App-bar */}
-      <header className="sticky top-14 md:top-16 z-10 bg-bg/90 backdrop-blur-sm border-b border-line-2">
+    <GlassDetailPanel>
+      {/* App-bar — glassy, rounded to the panel's top edge */}
+      <header className="sticky top-14 md:top-16 z-10 glass-header border-b border-line-2 rounded-t-[26px]">
         <div className="flex items-center justify-between gap-3 px-4 md:px-6 h-12">
           <BackButton
             fallbackHref="/timeline-files"
@@ -264,11 +265,12 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         </div>
       </header>
 
-      {/* Title block — indigo gradient + ref + status + deadline */}
+      {/* Title block — a soft indigo tint over the frosted glass keeps the
+          Timeline-File identity while letting the glass read through. */}
       <section
         aria-labelledby="tf-title"
         className="px-4 md:px-6 py-5 border-b border-line-2"
-        style={{ background: 'linear-gradient(180deg, var(--primary-soft) 0%, var(--panel) 100%)' }}
+        style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 70%, transparent) 0%, transparent 100%)' }}
       >
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
           <TfRefNumberEditor
@@ -424,7 +426,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
           }))}
         />
       </CollapsibleSection>
-    </div>
+    </GlassDetailPanel>
   );
 }
 

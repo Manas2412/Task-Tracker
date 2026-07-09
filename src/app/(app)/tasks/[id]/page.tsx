@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 
-import { AttachmentList, type AttachmentRow, Avatar, BackButton, CollapsibleSection, DetailSection, Pill, TimelineFileCard } from '@/components/ui';
+import { AttachmentList, type AttachmentRow, Avatar, BackButton, CollapsibleSection, DetailSection, GlassDetailPanel, Pill, TimelineFileCard } from '@/components/ui';
 import { canEditTaskAttachments } from '@/app/actions/attachments';
 import { isS3Configured } from '@/lib/s3';
 import { auth } from '@/lib/auth';
@@ -454,9 +454,9 @@ export default async function TaskDetailPage({ params }: PageProps) {
     : null;
 
   return (
-    <div className="max-w-3xl xl:max-w-4xl mx-auto pb-16">
-      {/* Header bar */}
-      <header className="sticky top-14 md:top-16 z-10 bg-bg/90 backdrop-blur-sm border-b border-line-2">
+    <GlassDetailPanel>
+      {/* Header bar — glassy, rounded to the panel's top edge */}
+      <header className="sticky top-14 md:top-16 z-10 glass-header border-b border-line-2 rounded-t-[26px]">
         <div className="flex items-center justify-between gap-3 px-4 md:px-6 h-12">
           <BackButton
             fallbackHref={task.parentTaskId ? `/tasks/${task.parentTaskId}` : '/tasks'}
@@ -478,12 +478,10 @@ export default async function TaskDetailPage({ params }: PageProps) {
         </div>
       </header>
 
-      {/* Title block — a restrained NEUTRAL wash anchors the top of the page
-          (deliberately not indigo, so it never reads as a Timeline File). */}
+      {/* Title block — sits directly on the frosted glass surface. */}
       <section
         aria-labelledby="task-title"
         className="px-4 md:px-6 py-5 border-b border-line-2"
-        style={{ background: 'linear-gradient(180deg, var(--canvas) 0%, var(--panel) 100%)' }}
       >
         {task.parentTaskId ? (
           <p className="text-[11px] text-ink-3 mb-2 inline-flex items-center gap-1">
@@ -688,7 +686,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
           }))}
         />
       </CollapsibleSection>
-    </div>
+    </GlassDetailPanel>
   );
 }
 

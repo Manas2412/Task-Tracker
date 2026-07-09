@@ -19,6 +19,7 @@ export type { TimelineFileCardProps } from './TimelineFileCard';
 export { Sheet } from './Sheet';
 export { CollapsibleSection } from './CollapsibleSection';
 export { DetailSection } from './DetailSection';
+export { GlassDetailPanel } from './GlassDetailPanel';
 export { MarkedToChip } from './MarkedToChip';
 export { Switch } from './Switch';
 export { BackButton } from './BackButton';

@@ -153,4 +153,62 @@ body.sortable-dragging .drop-node:hover {
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================
+   Glassmorphism — frosted task / timeline detail panels.
+
+   Layering: a soft, brand-tinted ambient backdrop (.glass-ambient)
+   sits behind a frosted surface (.glass-surface, translucent +
+   backdrop-blur) that the panel frame (.glass-panel) frames. The
+   surface is a separate absolute layer so the panel element itself
+   carries no filter — keeping the sticky sub-header rock-solid.
+
+   Tints are built from existing brand / division tokens via
+   color-mix (no new raw colours). Legibility is guaranteed by the
+   opaque -solid fallback under @supports + reduced-transparency /
+   more-contrast, so text never sits on a low-contrast wash.
+   ============================================================ */
+.glass-ambient {
+  background:
+    radial-gradient(42rem 34rem at 12% 2%,  color-mix(in srgb, var(--primary) 15%, transparent), transparent 62%),
+    radial-gradient(38rem 30rem at 94% 6%,  color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+    radial-gradient(46rem 38rem at 86% 98%, color-mix(in srgb, var(--division-khelo-india-division) 14%, transparent), transparent 64%),
+    radial-gradient(34rem 30rem at 4% 94%,  color-mix(in srgb, var(--division-media-and-it) 10%, transparent), transparent 62%);
+}
+
+.glass-panel {
+  border-radius: 26px;
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-surface {
+  border-radius: 26px;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+}
+
+.glass-header {
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+}
+
+/* No backdrop-filter support → fall back to a near-solid panel. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-surface,
+  .glass-header { background: var(--glass-bg-solid); }
+}
+
+/* Respect reduced-transparency / increased-contrast preferences. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .glass-surface,
+  .glass-header {
+    background: var(--glass-bg-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .glass-ambient { opacity: 0.5; }
+}
 .hover-pop { animation: hoverPop 0.13s ease-out; transform-origin: top left; }
