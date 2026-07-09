@@ -73,29 +73,39 @@ const LANE_SHORT: Record<PillJsLane, string> = {
 };
 
 /**
- * Lane surfaces. Today → This month fades from the strongest amber wash to
- * the lightest (the JS-priority accent in its own home); Watchlist stands
- * apart as a frosted glass panel (.glass-card).
+ * Lane surfaces. Today → This month fades from the strongest indigo wash to
+ * the lightest; Watchlist keeps its frosted glass panel (.glass-card) but
+ * with an amber wash in place of the neutral corner tint.
+ *
+ * This intentionally inverts CLAUDE.md's two-accent rule (indigo is
+ * otherwise Super Admin/Timeline File only, amber is otherwise the JS
+ * Priority signal) — requested explicitly for this board's lane
+ * backgrounds, 2026-07-09. Everything else amber (JS Priority badge,
+ * lane counts, left-stripe on JS-priority cards) is unchanged.
  */
 const LANE_TINT: Partial<Record<PillJsLane, React.CSSProperties>> = {
   today: {
     background:
-      'linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 95%, transparent) 0%, color-mix(in srgb, var(--accent-soft) 58%, transparent) 100%)',
+      'linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 95%, transparent) 0%, color-mix(in srgb, var(--primary-soft) 58%, transparent) 100%)',
   },
   week: {
     background:
-      'linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 60%, transparent) 0%, color-mix(in srgb, var(--accent-soft) 32%, transparent) 100%)',
+      'linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 60%, transparent) 0%, color-mix(in srgb, var(--primary-soft) 32%, transparent) 100%)',
   },
   month: {
     background:
-      'linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 30%, transparent) 0%, color-mix(in srgb, var(--accent-soft) 12%, transparent) 100%)',
+      'linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 30%, transparent) 0%, color-mix(in srgb, var(--primary-soft) 12%, transparent) 100%)',
+  },
+  watchlist: {
+    background:
+      'linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 60%, transparent) 0%, color-mix(in srgb, var(--accent-soft) 32%, transparent) 100%)',
   },
 };
 
 const LANE_BORDER: Record<PillJsLane, string> = {
-  today: 'border border-accent-line',
-  week: 'border border-accent-line/70',
-  month: 'border border-accent-line/40',
+  today: 'border border-primary-line',
+  week: 'border border-primary-line/70',
+  month: 'border border-primary-line/40',
   watchlist: '', // .glass-card carries its own border
 };
 
@@ -382,6 +392,13 @@ export function BoardSearch() {
         }
 
         if (!taskId) return;
+
+        // Successful drop onto a lane — instantly close the results popover
+        // and clear the typed query, rather than leaving stale results open.
+        setQuery('');
+        setDebounced('');
+        setDismissed(true);
+
         apply(taskId, toLane, orderedIds);
       },
     });
