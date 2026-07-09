@@ -21,7 +21,11 @@
   /* -- §1.2  Brand accents --
      INDIGO = Super Admin surface + Timeline File reference
      AMBER  = JS Priority signal
-     Never use interchangeably. */
+     Never use interchangeably.
+
+     Exception (2026-07-09): JS Priority Board lane background washes
+     invert this on purpose (Today/Week/Month → indigo, Watchlist →
+     amber) — see LANE_TINT in Board.tsx. */
   --primary:       #1e1b4b;
   --primary-soft:  #ebebf7;
   --primary-line:  #c4c2e0;

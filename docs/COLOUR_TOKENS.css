@@ -25,6 +25,11 @@
      INDIGO  = Super Admin surface + Timeline File reference
      AMBER   = JS Priority signal
      Never use interchangeably.
+
+     Exception (2026-07-09): the JS Priority Board's lane BACKGROUND
+     washes invert this on purpose (Today/Week/Month → indigo,
+     Watchlist → amber) — see LANE_TINT in Board.tsx. Everything else
+     amber/indigo elsewhere in the app still follows the rule above.
      ---------------------------------------------------------- */
   --primary:       #1e1b4b;   /* indigo */
   --primary-soft:  #ebebf7;   /* indigo background — quote callouts, soft pills */
