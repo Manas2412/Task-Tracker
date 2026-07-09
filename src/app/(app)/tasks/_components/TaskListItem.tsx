@@ -1,55 +1,17 @@
 'use client';
 
-import { useTransition } from 'react';
-import { useRouter } from 'next/navigation';
-
-import { Avatar, HoverPreview, SwipeToReveal, TaskCard, type TaskCardProps } from '@/components/ui';
-import { archiveTaskAction } from '@/app/actions/tasks';
-
-type TaskListItemProps = TaskCardProps & {
-  canArchive: boolean;
-};
+import { Avatar, HoverPreview, TaskCard, type TaskCardProps } from '@/components/ui';
 
 /**
- * Tasks-list row wrapper.
- *
- * On touch devices, a left-swipe reveals an Archive action — fires
- * `archiveTaskAction` and refreshes the list. On desktop, hovering the row
- * shows a clean preview of the task's description and owner (HoverPreview).
+ * Tasks-list row wrapper. On desktop, hovering the row shows a clean preview
+ * of the task's description and owner (HoverPreview).
  */
-export function TaskListItem({ canArchive, ...cardProps }: TaskListItemProps) {
-  const [, startTransition] = useTransition();
-  const router = useRouter();
-
-  const archive = async () => {
-    const fd = new FormData();
-    fd.set('taskId', cardProps.taskId);
-    await new Promise<void>((resolve) => {
-      startTransition(async () => {
-        const result = await archiveTaskAction(undefined, fd);
-        if (!result.ok && result.error) alert(result.error);
-        router.refresh();
-        resolve();
-      });
-    });
-  };
-
-  const card = canArchive ? (
-    <SwipeToReveal
-      action={{
-        label: 'Archive',
-        icon: 'ti-archive',
-        tone: 'danger',
-        onAction: archive,
-      }}
-    >
+export function TaskListItem(cardProps: TaskCardProps) {
+  return (
+    <HoverPreview content={<TaskPreview {...cardProps} />}>
       <TaskCard {...cardProps} />
-    </SwipeToReveal>
-  ) : (
-    <TaskCard {...cardProps} />
+    </HoverPreview>
   );
-
-  return <HoverPreview content={<TaskPreview {...cardProps} />}>{card}</HoverPreview>;
 }
 
 const MAX_PREVIEW_DOCS = 4;

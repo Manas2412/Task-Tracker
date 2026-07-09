@@ -4,22 +4,19 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import {
-  archiveTimelineFileAction,
-  deleteTimelineFileAction,
-} from '@/app/actions/timeline-files';
+import { deleteTimelineFileAction } from '@/app/actions/timeline-files';
 import { cn } from '@/lib/utils';
 
 type TfMoreMenuProps = {
   tfId: string;
   refNo: string;
-  /** OSD or Super Admin — can archive */
-  canArchive: boolean;
+  /** OSD or Super Admin — can view the audit trail */
+  canViewAudit: boolean;
   /** Super Admin only — can hard-delete */
   canDelete: boolean;
 };
 
-export function TfMoreMenu({ tfId, refNo, canArchive, canDelete }: TfMoreMenuProps) {
+export function TfMoreMenu({ tfId, refNo, canViewAudit, canDelete }: TfMoreMenuProps) {
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -48,9 +45,7 @@ export function TfMoreMenu({ tfId, refNo, canArchive, canDelete }: TfMoreMenuPro
     };
   }, [open]);
 
-  const callAction = (
-    action: typeof archiveTimelineFileAction | typeof deleteTimelineFileAction,
-  ) => {
+  const callAction = (action: typeof deleteTimelineFileAction) => {
     const fd = new FormData();
     fd.set('id', tfId);
     startTransition(async () => {
@@ -136,22 +131,12 @@ export function TfMoreMenu({ tfId, refNo, canArchive, canDelete }: TfMoreMenuPro
               label="Share link"
               onClick={copyLink}
             />
-            {canArchive || canDelete ? (
+            {canViewAudit ? (
               <MenuLink
                 icon="ti-history"
                 label="View audit trail"
                 href={`/admin/audit?entity=timeline_file&entityId=${tfId}`}
                 onClick={() => setOpen(false)}
-              />
-            ) : null}
-            {canArchive ? (
-              <MenuButton
-                icon="ti-archive"
-                label="Archive file"
-                onClick={() => {
-                  setOpen(false);
-                  callAction(archiveTimelineFileAction);
-                }}
               />
             ) : null}
             {canDelete ? (

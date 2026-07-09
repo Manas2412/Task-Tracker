@@ -104,7 +104,7 @@ pnpm dev                     # http://localhost:3000
 - Bulk import sub-section — done
 - Recurrence editor, TF more-menu, Marked-to editor, Mention picker, Global search — done
 - S3 attachments end-to-end (presign + register + delete + Drive-link fallback) — done; activates the moment `S3_*` env vars are present
-- Mobile gestures — swipe-to-archive on `/tasks` cards, swipe-to-mark-read on `/notifications` rows, pull-to-refresh on `/tasks` — done
+- Mobile gestures — swipe-to-mark-read on `/notifications` rows, pull-to-refresh on `/tasks` — done (swipe-to-archive removed with the Archive feature)
 - Performance hardening — `loading.tsx` skeletons on `/tasks`, `/timeline-files`, `/admin/audit`, `/search`; index audit complete (see [docs/PERF_NOTES.md](docs/PERF_NOTES.md))
 - Subtask user assignment with datetime deadline — assignees from same division, deadline validated against parent task — done
 - Task transfer — owner can hand off a task to another same-division user; activity trail + creator notification — done
@@ -164,10 +164,10 @@ Reassignment:
 - Downward within own chain — free.
 - Sideways or upward — requires superior's tap-approval; the "Approval needed" amber badge appears on those rows in the assignee picker.
 
-Deletion vs archive:
-- Delete (hard) — the owner or creator, the **head of the task's division** (direct head or active delegate), or a **Super Admin** (any task). Removes the task and its subtasks/comments/attachments; cannot be undone. Enforced in `deleteTaskAction` via `canActAsHeadOf`.
-- Archive (soft-delete, recoverable) — anyone with edit rights (owner, creator, director/head of the division, OSD, JS, Super Admin).
-- Timeline File — hard-delete is Super Admin only (any file, regardless of creator); archive is OSD or Super Admin.
+Deletion (the Archive / soft-delete feature has been removed from the platform):
+- Delete (hard) — the **head of the task's division** (direct head or active delegate) or a **Super Admin** (any task), plus a user for their **own personal task**. Removes the task and its subtasks/comments/attachments; cannot be undone. Enforced in `deleteTaskAction` via `canActAsHeadOf`.
+- Timeline File — hard-delete is Super Admin only (any file, regardless of creator).
+- The `archived_at` / `archived_by` columns (task + timeline file) and the `archivedAt: null` "hide archived" read filters remain in the schema, but no code path sets them any more; there is no user-facing Archive/Restore action.
 
 Planning calendar (`/calendar`):
 - One view for three kinds — **JS engagements** (teal), **task deadlines** (dark blue, every visible task with a due date), **Timeline file deadlines** (red). Tasks/TFs reuse their normal scopers, so division-only and PMU-team-only visibility hold on the calendar exactly as on the lists.

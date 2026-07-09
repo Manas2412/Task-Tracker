@@ -735,63 +735,7 @@ export async function removeMarkedToAction(
   return ok(epoch);
 }
 
-// ============================================================
-// archiveTimelineFileAction
-// ============================================================
-
 const tfIdSchema = z.object({ id: z.string().uuid() });
-
-export async function archiveTimelineFileAction(
-  prev: ActionState | undefined,
-  formData: FormData,
-): Promise<ActionState> {
-  const epoch = bump(prev);
-  const guard = await requireOsdOrSuperAdmin();
-  if (!guard.ok) return fail(guard.error, epoch);
-
-  const parsed = tfIdSchema.safeParse({ id: formData.get('id') });
-  if (!parsed.success) return fail('Invalid input.', epoch);
-
-  const tf = await prisma.timelineFile.findUnique({
-    where: { id: parsed.data.id },
-    select: { id: true, refNo: true, archivedAt: true },
-  });
-  if (!tf) return fail('Timeline file not found.', epoch);
-  if (tf.archivedAt) return ok(epoch);
-
-  try {
-    await prisma.$transaction([
-      prisma.timelineFile.update({
-        where: { id: tf.id },
-        data: { archivedAt: new Date(), archivedById: guard.userId },
-      }),
-      prisma.timelineFileActivity.create({
-        data: {
-          timelineFileId: tf.id,
-          actorId: guard.userId,
-          eventType: 'file_archived',
-          payload: {},
-        },
-      }),
-      prisma.auditLog.create({
-        data: {
-          actorId: guard.userId,
-          action: 'archive',
-          entityType: 'timeline_file',
-          entityId: tf.id,
-          before: { refNo: tf.refNo, archivedAt: null },
-          after: { refNo: tf.refNo, archivedAt: new Date().toISOString() },
-        },
-      }),
-    ]);
-  } catch (err) {
-    logError('archiveTimelineFileAction failed', err);
-    return fail('Could not archive.', epoch);
-  }
-
-  revalidatePath('/timeline-files');
-  return ok(epoch);
-}
 
 // ============================================================
 // deleteTimelineFileAction — Super Admin only (hard delete)
