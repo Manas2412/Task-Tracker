@@ -7,6 +7,7 @@ import { initialsOf } from '@/lib/format';
 import { buildVisibilityClauses } from '@/lib/visibility';
 
 import { Board, BoardSearch, type BoardTask } from './_components/Board';
+import { RemoveModeProvider, RemoveToggle } from './_components/RemoveMode';
 
 import type { PillJsLane } from '@/components/ui/Pill';
 
@@ -46,22 +47,6 @@ export default async function PriorityBoardPage() {
     ],
   });
 
-  // Attachment file names per task — surfaced only in the hover preview.
-  const taskIds = tasks.map((t) => t.id);
-  const namesByTask = new Map<string, string[]>();
-  if (taskIds.length > 0) {
-    const attachmentRows = await prisma.attachment.findMany({
-      where: { ownerType: 'task', ownerId: { in: taskIds } },
-      select: { ownerId: true, fileName: true },
-      orderBy: { uploadedAt: 'asc' },
-    });
-    for (const r of attachmentRows) {
-      const list = namesByTask.get(r.ownerId) ?? [];
-      list.push(r.fileName);
-      namesByTask.set(r.ownerId, list);
-    }
-  }
-
   const tasksByLane: Record<PillJsLane, BoardTask[]> = {
     today: [],
     week: [],
@@ -81,8 +66,6 @@ export default async function PriorityBoardPage() {
       jsPriorityLane: lane,
       divisionName: t.division.name,
       due: t.dueDate,
-      description: t.description,
-      attachmentNames: namesByTask.get(t.id) ?? [],
       owner: {
         name: t.owner.name,
         initials: initialsOf(t.owner.name),
@@ -94,6 +77,7 @@ export default async function PriorityBoardPage() {
   const totalOnBoard = LANES.reduce((n, lane) => n + tasksByLane[lane].length, 0);
 
   return (
+    <RemoveModeProvider>
     <div className="px-4 md:px-6 lg:px-8 pt-4 md:pt-6 pb-10 max-w-7xl mx-auto">
       <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
@@ -116,8 +100,10 @@ export default async function PriorityBoardPage() {
 
         {canCurate ? (
           // Top-right on desktop; stacks full-width under the title on mobile.
-          <div className="w-full md:w-auto md:pt-1 shrink-0">
+          // The Remove toggle sits directly below the search box.
+          <div className="w-full md:w-auto md:pt-1 shrink-0 flex flex-col gap-2 items-stretch md:items-end">
             <BoardSearch />
+            <RemoveToggle />
           </div>
         ) : null}
       </header>
@@ -130,6 +116,7 @@ export default async function PriorityBoardPage() {
         <Board tasksByLane={tasksByLane} canCurate={canCurate} />
       )}
     </div>
+    </RemoveModeProvider>
   );
 }
 

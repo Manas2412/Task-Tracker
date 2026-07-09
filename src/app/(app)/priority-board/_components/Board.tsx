@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sortable from 'sortablejs';
 
-import { Avatar, HoverPreview, Pill } from '@/components/ui';
+import { Avatar, Pill } from '@/components/ui';
 import { setJsPriorityLaneAction, reorderBoardAction } from '@/app/actions/tasks';
 import { formatDue } from '@/lib/format';
 import { TASK_STATUS_LABEL } from '@/lib/labels';
 import { cn } from '@/lib/utils';
+
+import { useRemoveMode } from './RemoveMode';
 
 import type { PillJsLane, PillStatusTone } from '@/components/ui/Pill';
 
@@ -39,10 +41,6 @@ export type BoardTask = {
   jsPriorityLane: PillJsLane;
   divisionName: string;
   due: Date | null;
-  /** Full description — shown only in the hover preview. */
-  description?: string | null;
-  /** Attachment file names — shown only in the hover preview. */
-  attachmentNames?: string[];
   owner: {
     name: string;
     initials: string;
@@ -166,11 +164,27 @@ function snapshotLaneOrder(laneEl: HTMLElement): string[] {
 
 export function Board({ tasksByLane, canCurate }: BoardProps) {
   const router = useRouter();
+  const { removeMode } = useRemoveMode();
   const [pending, startTransition] = useTransition();
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
   const listRefs = useRef<Record<string, HTMLUListElement | null>>({});
   const sortablesRef = useRef<Sortable[]>([]);
+
+  /** Take a task off the board — unset its JS Priority lane (lane = ''). */
+  const handleRemove = (taskId: string) => {
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set('taskId', taskId);
+      fd.set('lane', ''); // empty → null → drops off the board
+      const res = await setJsPriorityLaneAction(undefined, fd);
+      if (!res.ok) {
+        setErrorBanner(res.error ?? 'Could not remove task.');
+        setTimeout(() => setErrorBanner(null), 4000);
+      }
+      router.refresh();
+    });
+  };
 
   useEffect(() => {
     sortablesRef.current.forEach((s) => s.destroy());
@@ -189,8 +203,9 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
         forceFallback: true,
         fallbackOnBody: true,
         emptyInsertThreshold: 32,
-        // The "Drop tasks here" placeholder must never be draggable.
-        filter: '.lane-empty',
+        // Neither the "Drop tasks here" placeholder nor the remove-mode X may
+        // start a drag — clicking the X must fire its own handler instead.
+        filter: '.lane-empty, .lane-remove-btn',
         preventOnFilter: false,
         ...TOUCH_OPTS,
         onStart: () => document.body.classList.add('sortable-dragging'),
@@ -263,6 +278,8 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
             tasks={tasksByLane[lane.id] ?? []}
             registerRef={(el) => (listRefs.current[lane.id] = el)}
             canCurate={canCurate}
+            removeMode={canCurate && removeMode}
+            onRemove={handleRemove}
           />
         ))}
       </div>
@@ -567,11 +584,15 @@ function Lane({
   tasks,
   registerRef,
   canCurate,
+  removeMode,
+  onRemove,
 }: {
   lane: { id: PillJsLane; label: string; sub: string };
   tasks: BoardTask[];
   registerRef: (el: HTMLUListElement | null) => void;
   canCurate: boolean;
+  removeMode: boolean;
+  onRemove: (taskId: string) => void;
 }) {
   const isGlass = lane.id === 'watchlist';
   return (
@@ -627,9 +648,12 @@ function Lane({
             // data-task-id on the <li> — it is the Sortable draggable item,
             // so evt.item.dataset.taskId resolves in the drag handler.
             <li key={t.id} data-task-id={t.id}>
-              <HoverPreview content={<BoardCardPreview task={t} />}>
-                <LaneCard task={t} canCurate={canCurate} />
-              </HoverPreview>
+              <LaneCard
+                task={t}
+                canCurate={canCurate}
+                removeMode={removeMode}
+                onRemove={onRemove}
+              />
             </li>
           ))
         )}
@@ -642,19 +666,46 @@ function Lane({
 // LaneCard — compact variant of TaskCard for the board
 // ------------------------------------------------------------
 
-function LaneCard({ task, canCurate }: { task: BoardTask; canCurate: boolean }) {
+function LaneCard({
+  task,
+  canCurate,
+  removeMode,
+  onRemove,
+}: {
+  task: BoardTask;
+  canCurate: boolean;
+  removeMode: boolean;
+  onRemove: (taskId: string) => void;
+}) {
   const due = formatDue(task.due);
   return (
     <article
       className={cn(
         'relative bg-gradient-to-b from-accent-tint to-panel border border-accent-line rounded-xl p-2.5 shadow-card',
         canCurate ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
+        removeMode && 'pr-8',
       )}
     >
       <span
         aria-hidden="true"
         className="absolute left-0 top-3 bottom-3 w-[3px] rounded-r bg-accent"
       />
+
+      {removeMode ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onRemove(task.id);
+          }}
+          aria-label={`Remove ${task.name} from the board`}
+          title="Remove from board"
+          className="lane-remove-btn absolute top-1 right-1 z-10 grid h-6 w-6 place-items-center rounded-full bg-urgent text-white shadow-card transition-colors hover:bg-urgent/90 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-urgent"
+        >
+          <i className="ti ti-x text-[13px]" aria-hidden="true" />
+        </button>
+      ) : null}
 
       <div className="flex items-start gap-1.5">
         {canCurate ? (
@@ -712,62 +763,5 @@ function LaneCard({ task, canCurate }: { task: BoardTask; canCurate: boolean }) 
         </div>
       </div>
     </article>
-  );
-}
-
-// ------------------------------------------------------------
-// BoardCardPreview — hover tooltip: description + attached docs
-// ------------------------------------------------------------
-
-const MAX_PREVIEW_DOCS = 4;
-
-function BoardCardPreview({ task }: { task: BoardTask }) {
-  const hasDescription = !!task.description && task.description.trim().length > 0;
-  const docs = task.attachmentNames ?? [];
-  const shownDocs = docs.slice(0, MAX_PREVIEW_DOCS);
-  const extraDocs = docs.length - shownDocs.length;
-
-  return (
-    <div className="rounded-xl border border-line bg-bg p-3.5 shadow-[0_12px_32px_-10px_rgba(0,0,0,0.22)]">
-      <p className="text-[12.5px] font-medium text-ink leading-snug line-clamp-2">{task.name}</p>
-
-      <p className="mt-1.5 text-[12px] leading-relaxed text-ink-2 line-clamp-4">
-        {hasDescription ? (
-          task.description
-        ) : (
-          <span className="italic text-ink-3">No description</span>
-        )}
-      </p>
-
-      {docs.length > 0 ? (
-        <div className="mt-3 border-t border-line pt-2.5">
-          <p className="text-[11px] uppercase tracking-[0.06em] text-ink-3 mb-1.5">
-            Docs attached
-          </p>
-          <ul className="flex flex-col gap-1">
-            {shownDocs.map((fileName, i) => (
-              <li key={i} className="flex items-center gap-1.5 min-w-0">
-                <i className="ti ti-paperclip text-[12px] text-ink-3 shrink-0" aria-hidden="true" />
-                <span className="text-[12px] text-ink-2 truncate">{fileName}</span>
-              </li>
-            ))}
-            {extraDocs > 0 ? (
-              <li className="text-[11px] text-ink-3 pl-[18px]">and {extraDocs} more</li>
-            ) : null}
-          </ul>
-        </div>
-      ) : null}
-
-      <div className="mt-3 flex items-center gap-2 border-t border-line pt-2.5">
-        <Avatar
-          initials={task.owner.initials}
-          colour={task.owner.colour}
-          size="xs"
-          ariaLabel={`Owner ${task.owner.name}`}
-        />
-        <span className="text-[11px] uppercase tracking-[0.06em] text-ink-3">Owner</span>
-        <span className="ml-auto truncate text-[12px] font-medium text-ink">{task.owner.name}</span>
-      </div>
-    </div>
   );
 }
