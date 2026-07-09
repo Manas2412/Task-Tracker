@@ -259,3 +259,138 @@ export async function fetchTaskCounts(callerId: string): Promise<{
 
   return { open, dueToday, overdue };
 }
+
+const STAT_CALLER_SELECT = {
+  id: true,
+  hierarchySlot: true,
+  isSuperAdmin: true,
+  divisionId: true,
+  isPmu: true,
+  pmuId: true,
+} as const;
+
+/** One task row shown inside a stats popup (Due today / Overdue). */
+export type StatTaskRow = {
+  id: string;
+  name: string;
+  divisionName: string;
+  divisionColour: string;
+  ownerName: string;
+  status: string;
+  dueDate: string | null;
+  href: string;
+};
+
+/**
+ * Visibility-scoped list of the caller's open tasks that are due today, or
+ * overdue — the drill-down behind the Due today / Overdue stat tiles.
+ */
+export async function fetchStatTasks(
+  callerId: string,
+  kind: 'today' | 'overdue',
+): Promise<StatTaskRow[]> {
+  const me = await prisma.user.findUnique({ where: { id: callerId }, select: STAT_CALLER_SELECT });
+  if (!me) return [];
+
+  const visibilityClauses = await buildVisibilityClauses(me);
+  const dueClause: Prisma.TaskWhereInput =
+    kind === 'today'
+      ? { dueDate: { gte: startOfDayIST(), lte: endOfDayIST() } }
+      : { dueDate: { lt: startOfDayIST() } };
+
+  const rows = await prisma.task.findMany({
+    where: {
+      archivedAt: null,
+      parentTaskId: null,
+      status: { not: 'completed' },
+      AND: [{ OR: visibilityClauses }, dueClause],
+    },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      dueDate: true,
+      division: { select: { name: true, avatarColour: true } },
+      owner: { select: { name: true } },
+    },
+    orderBy: [{ dueDate: 'asc' }],
+    take: 200,
+  });
+
+  return rows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    divisionName: t.division.name,
+    divisionColour: t.division.avatarColour,
+    ownerName: t.owner.name,
+    status: t.status,
+    dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+    href: `/tasks/${t.id}`,
+  }));
+}
+
+/** Open-task counts grouped by division (and its sub-divisions). */
+export type DivisionOpenBreakdown = {
+  divisionId: string;
+  divisionName: string;
+  colour: string;
+  count: number;
+  subDivisions: { id: string; name: string; count: number }[];
+};
+
+/**
+ * Visibility-scoped breakdown of open tasks by division and sub-division —
+ * the drill-down behind the Open tasks stat tile. Sorted by count, so the
+ * divisions carrying the most work surface first.
+ */
+export async function fetchOpenTasksByDivision(
+  callerId: string,
+): Promise<DivisionOpenBreakdown[]> {
+  const me = await prisma.user.findUnique({ where: { id: callerId }, select: STAT_CALLER_SELECT });
+  if (!me) return [];
+
+  const visibilityClauses = await buildVisibilityClauses(me);
+  const rows = await prisma.task.findMany({
+    where: {
+      archivedAt: null,
+      parentTaskId: null,
+      status: { not: 'completed' },
+      AND: [{ OR: visibilityClauses }],
+    },
+    select: {
+      divisionId: true,
+      subDivisionId: true,
+      division: { select: { name: true, avatarColour: true } },
+      subDivision: { select: { name: true } },
+    },
+    take: 5000,
+  });
+
+  const map = new Map<string, DivisionOpenBreakdown>();
+  for (const t of rows) {
+    let d = map.get(t.divisionId);
+    if (!d) {
+      d = {
+        divisionId: t.divisionId,
+        divisionName: t.division.name,
+        colour: t.division.avatarColour,
+        count: 0,
+        subDivisions: [],
+      };
+      map.set(t.divisionId, d);
+    }
+    d.count += 1;
+    if (t.subDivisionId && t.subDivision) {
+      let s = d.subDivisions.find((x) => x.id === t.subDivisionId);
+      if (!s) {
+        s = { id: t.subDivisionId, name: t.subDivision.name, count: 0 };
+        d.subDivisions.push(s);
+      }
+      s.count += 1;
+    }
+  }
+
+  const result = Array.from(map.values()).sort((a, b) => b.count - a.count);
+  for (const d of result) d.subDivisions.sort((a, b) => b.count - a.count);
+  return result;
+}
