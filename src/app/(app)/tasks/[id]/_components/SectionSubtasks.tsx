@@ -159,7 +159,7 @@ function SubtaskRow({
             // friendly hint that a tap completes the subtask.
             isDone
               ? 'bg-success border-success text-white shadow-sm'
-              : 'border-ink-4 bg-panel text-transparent hover:border-success hover:bg-success-soft hover:text-success',
+              : 'border-success/60 bg-panel text-transparent hover:border-success hover:bg-success-soft hover:text-success',
           )}
         >
           <i className="ti ti-check text-[14px]" aria-hidden="true" />
