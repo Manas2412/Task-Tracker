@@ -259,7 +259,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
           <TfMoreMenu
             tfId={tf.id}
             refNo={tf.refNo}
-            canArchive={canEditFields}
+            canViewAudit={canEditFields}
             canDelete={!!me?.isSuperAdmin}
           />
         </div>

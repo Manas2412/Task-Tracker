@@ -50,8 +50,6 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 | **Toggle milestone** | own | ✓ | own | own | own | own | own | own | ✓ |
 | **Toggle visibility** | head³ | ✓ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ |
 | **Delete task (hard-delete)** — own personal always; division task see §5.13 | head³ | head³ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ (any) |
-| **Archive task** (assigned to an individual) — own personal always; division task see §5.7 | head³ | head³ | head³ | head³ | head³ | head³ | head³ | head³ | ✓ (any) |
-| **Restore archived task** |  | ✓ |  |  |  |  |  |  | ✓ |
 
 ¹ "Needs approval" = the request is created; the proposed new owner's superior must tap-approve before the reassignment takes effect.
 ² "partial" = only sees tasks owned by self or own subordinates that happen to be on the board, plus the visible-to-them JS Priority badge on every task they can already see. The full board is OSD + JS + Super Admin.
@@ -78,7 +76,6 @@ Timeline Files are visible only to divisions they are marked to, plus OSD/JS via
 | **Spawn task from Timeline File ("Create task from this file")** | head³ | ✓ | head³ | head³ |  |  | ✓ |
 | **Forward to division / change marked-to** |  | ✓ |  |  |  |  | ✓ |
 | **Share link (read-only)** | ✓ | ✓ | ✓ |  |  |  | ✓ |
-| **Archive** |  | ✓ |  |  |  |  | ✓ |
 | **Hard-delete** |  |  |  |  |  |  | ✓ |
 
 Timeline File status is **always manually set** — never auto-derived from linked task statuses.
@@ -149,18 +146,16 @@ The role switcher in the top bar is the only entry point. OSD and Super Admin ar
 - **Same-division transfer (by current owner)** — the task owner can transfer ownership to any active user in the same division without approval, and **must supply a comment** explaining the hand-off (the sheet offers one-tap reasons — "On leave", "This work belongs to another official", "Delegating it" — or free text). `ownerId` updates immediately; `createdById` stays unchanged. If the task had `personal` visibility, it flips to `division`. Activity log records `task_transferred` with `{from, to}`. The new owner receives `task_assigned`; the original creator (if different from both parties) receives `task_transferred`.
 - The reassignment picker UI marks rows that would require approval with an amber "Approval needed" badge. The transfer button is separate — a prominent card visible only to the current task owner.
 
-### 5.7 Deletion vs archive
+### 5.7 Deletion (Archive removed)
+
+The **Archive** (soft-delete) feature has been **removed from the platform** — there is no user-facing Archive or Restore action for tasks or timeline files, and the swipe-to-archive list gesture is gone. The `archived_at` / `archived_by` columns and the `archivedAt: null` read filters remain in the schema (nothing sets them any more), so any items archived before removal stay hidden; historical archive/restore events still appear in the audit trail.
 
 | Condition | Available action | Who |
 |---|---|---|
-| Task — delete (hard) | **Delete** (removes the task, its subtasks, comments, collaborators, and attachments; cannot be undone) | Owner or creator; the **head of the task's division** (direct head or active delegate); **Super Admin** for any task |
-| Task — archive | **Archive** (soft-delete, recoverable, hidden from lists) | The **head of the task's division**, a **delegate** holding that division's power, or a **Super Admin** — plus a user for their **own personal task**. A task assigned to an individual can *not* be archived by its owner/creator or by a plain OSD. Enforced by `canActAsHeadOf` in `archiveTaskAction`, and mirrored by `canArchive` on the task page and the swipe-to-archive list control. |
-| Timeline File — archive | ✓ | OSD, Super Admin |
+| Task — delete (hard) | **Delete** (removes the task, its subtasks, comments, collaborators, and attachments; cannot be undone) | The **head of the task's division** (direct head or active delegate) or a **Super Admin** (any task); plus a user for their **own personal task**. Enforced by `canActAsHeadOf` in `deleteTaskAction`. |
 | Timeline File — hard-delete | ✓ | Super Admin only (any file, regardless of creator) |
 | User | **Disable** (login blocked, audit history preserved) | Super Admin only |
 | User — hard-delete |  | Not supported — would break the audit trail |
-
-Archived items remain in the database and surface via the audit trail. The Super Admin can restore an archived task or file.
 
 ### 5.8 Status change on subordinate's task
 

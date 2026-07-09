@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
  * Wraps a trigger (e.g. a task card) and shows `content` in a floating
  * panel while the mouse is over it. The panel is rendered in a portal on
  * document.body with fixed positioning, so it is never clipped by an
- * ancestor's `overflow-hidden` (e.g. the swipe-to-archive wrapper). It
+ * ancestor's `overflow-hidden`. It
  * flips above the trigger near the bottom of the viewport and is clamped
  * horizontally. Mouse-only: touch (which has no hover) never triggers it,
  * and it also appears on keyboard focus for accessibility.

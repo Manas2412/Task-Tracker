@@ -5,7 +5,6 @@ import { PullToRefresh } from '@/components/ui';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { formatDue, initialsOf } from '@/lib/format';
-import { getHeadedDivisionIds } from '@/lib/rbac';
 import { fetchTaskCounts, fetchVisibleTasks, getPmuParentDivisionHeadId, type TaskFilter, type TaskSort } from '@/lib/visibility';
 
 import { DivisionControls } from './_components/DivisionControls';
@@ -49,7 +48,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
   });
   if (!me) redirect('/login');
 
-  const [taskResult, counts, divisions, headedDivisionIds, pmuParentHeadId] = await Promise.all([
+  const [taskResult, counts, divisions, pmuParentHeadId] = await Promise.all([
     fetchVisibleTasks({ callerId: me.id, filter, divisionId: divisionFilter || undefined, sort }),
     fetchTaskCounts(me.id),
     prisma.division.findMany({
@@ -58,7 +57,6 @@ export default async function TasksPage({ searchParams }: PageProps) {
       select: { id: true, name: true },
       orderBy: [{ kind: 'asc' }, { displayOrder: 'asc' }, { name: 'asc' }],
     }),
-    getHeadedDivisionIds(me.id),
     me.isPmu && me.pmuId
       ? getPmuParentDivisionHeadId(me.pmuId)
       : Promise.resolve<string | null>(null),
@@ -68,10 +66,6 @@ export default async function TasksPage({ searchParams }: PageProps) {
   // recipient, so a task shared with the PMU team is not lifted into their
   // "assigned" segment (they still see it under "other tasks").
   const isExcludedPmuHead = pmuParentHeadId !== null && pmuParentHeadId === me.id;
-
-  // Archive is a head power: Super Admin, or the head/active delegate of the
-  // task's division. (A user can still archive their own personal task.)
-  const headedDivisions = new Set(headedDivisionIds);
 
   const { tasks, total, capped } = taskResult;
 
@@ -136,7 +130,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
                     </div>
                     <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
                       {group.tasks.map((t) => (
-                        <TaskRow key={t.id} task={t} meId={me.id} isSuperAdmin={me.isSuperAdmin} headedDivisions={headedDivisions} />
+                        <TaskRow key={t.id} task={t} />
                       ))}
                     </ul>
                   </section>
@@ -173,7 +167,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
                   ) : (
                     <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
                       {segment.tasks.map((t) => (
-                        <TaskRow key={t.id} task={t} meId={me.id} isSuperAdmin={me.isSuperAdmin} headedDivisions={headedDivisions} />
+                        <TaskRow key={t.id} task={t} />
                       ))}
                     </ul>
                   )}
@@ -190,29 +184,14 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
 type VisibleTask = Awaited<ReturnType<typeof fetchVisibleTasks>>['tasks'][number];
 
-function TaskRow({
-  task: t,
-  meId,
-  isSuperAdmin,
-  headedDivisions,
-}: {
-  task: VisibleTask;
-  meId: string;
-  isSuperAdmin: boolean;
-  headedDivisions: Set<string>;
-}) {
+function TaskRow({ task: t }: { task: VisibleTask }) {
   const subtaskTotal = t.subtasks.length;
   const subtaskDone = t.subtasks.filter((s) => s.status === 'completed').length;
   const due = formatDue(t.dueDate);
-  const canArchive =
-    isSuperAdmin ||
-    headedDivisions.has(t.divisionId) ||
-    (t.visibility === 'personal' && t.ownerId === meId);
 
   return (
     <li>
       <TaskListItem
-        canArchive={canArchive}
         taskId={t.id}
         refNumber={t.refNumber}
         name={t.name}

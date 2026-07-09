@@ -1545,86 +1545,15 @@ export async function deleteCommentAction(
 }
 
 // ============================================================
-// archiveTask + deleteTask (solo-only) + restoreTask
+// deleteTask
 // ============================================================
 
 const taskIdSchema = z.object({ taskId: z.string().uuid() });
-
-export async function archiveTaskAction(
-  prev: ActionState | undefined,
-  formData: FormData,
-): Promise<ActionState> {
-  const epoch = bump(prev);
-  const me = await requireSession();
-  if (!me) return fail('You are signed out.', epoch);
-
-  const parsed = taskIdSchema.safeParse({ taskId: formData.get('taskId') });
-  if (!parsed.success) return fail('Invalid input.', epoch);
-
-  const task = await prisma.task.findUnique({
-    where: { id: parsed.data.taskId },
-    select: {
-      id: true,
-      name: true,
-      archivedAt: true,
-      ownerId: true,
-      createdById: true,
-      divisionId: true,
-      visibility: true,
-    },
-  });
-  if (!task) return fail('Task not found.', epoch);
-  if (task.archivedAt) return ok(epoch);
-
-  // Archiving a task assigned to an individual is a head power: only the
-  // head of the task's division, a Super Admin, or a delegate holding that
-  // division's power (canActAsHeadOf covers all three). A user may still
-  // archive their own personal task, which only they can see.
-  const actor = await getRbacActor(me.id);
-  const mayArchive =
-    (task.visibility === 'personal' && task.ownerId === me.id) ||
-    (actor !== null && canActAsHeadOf(actor, task.divisionId));
-  if (!mayArchive) {
-    return fail(
-      'Only a division head, a Super Admin, or a delegated user can archive this task.',
-      epoch,
-    );
-  }
-
-  try {
-    await prisma.$transaction([
-      prisma.task.update({
-        where: { id: task.id },
-        data: { archivedAt: new Date(), archivedById: me.id },
-      }),
-      prisma.taskActivity.create({
-        data: { taskId: task.id, actorId: me.id, eventType: 'task_archived', payload: {} },
-      }),
-      prisma.auditLog.create({
-        data: {
-          actorId: me.id,
-          action: 'archive',
-          entityType: 'task',
-          entityId: task.id,
-          before: { name: task.name, archivedAt: null },
-          after: { name: task.name, archivedAt: new Date().toISOString() },
-        },
-      }),
-    ]);
-  } catch (err) {
-    logError('archiveTaskAction failed', err);
-    return fail('Could not archive.', epoch);
-  }
-
-  revalidatePath('/tasks');
-  return ok(epoch);
-}
 
 /**
  * Hard-delete a task (and its subtasks, attachments, and cascading
  * children). Allowed for the owner or creator, a Super Admin (any task),
  * or the head of the task's division — see the permission check below.
- * Everyone else uses Archive (soft-delete) instead.
  */
 export async function deleteTaskAction(
   prev: ActionState | undefined,
