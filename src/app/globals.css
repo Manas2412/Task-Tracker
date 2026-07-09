@@ -180,6 +180,64 @@ body.sortable-dragging .pb-accordion-body {
 }
 
 /* ============================================================
+   Discussion — conversation canvas + message bubbles
+   Lifts the comment thread off the flat detail page onto a calm,
+   tinted "conversation" surface, with white message bubbles, a
+   softly-tinted bubble for the reader's own comments, and an
+   elevated composer with an indigo focus glow. Indigo is the app's
+   collaboration accent (mentions, reply links), so it sets the
+   tone here. Every tint is color-mix over existing tokens — no new
+   raw colours. Transitions inherit the reduced-motion floor below.
+   ============================================================ */
+.discussion-surface {
+  background:
+    radial-gradient(135% 95% at 100% 0%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 55%),
+    radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--primary) 5%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 62%, var(--panel)) 0%, var(--canvas) 82%);
+  border: 1px solid color-mix(in srgb, var(--primary-line) 42%, transparent);
+}
+
+.discussion-bubble {
+  border-radius: 1rem;
+  border-top-left-radius: 0.375rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(26, 26, 26, 0.05);
+}
+.discussion-bubble-own {
+  border-radius: 1rem;
+  border-top-left-radius: 0.375rem;
+  background: color-mix(in srgb, var(--primary-soft) 58%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--primary-line) 55%, transparent);
+  box-shadow: 0 1px 2px rgba(30, 27, 75, 0.05);
+}
+.discussion-bubble-reply {
+  border-radius: 0.75rem;
+  border-top-left-radius: 0.3125rem;
+  background: color-mix(in srgb, var(--canvas) 55%, var(--panel));
+  border: 1px solid var(--line-2);
+}
+
+/* The nested-reply connector — a soft indigo thread line. */
+.discussion-thread-line {
+  border-left: 2px solid color-mix(in srgb, var(--primary-line) 55%, transparent);
+}
+
+/* Elevated composer with an indigo focus ring. */
+.discussion-composer {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(26, 26, 26, 0.05);
+  transition:
+    border-color var(--dur-base) var(--ease-standard),
+    box-shadow var(--dur-base) var(--ease-standard);
+}
+.discussion-composer:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-soft) 75%, transparent);
+}
+
+/* ============================================================
    Accessibility — honour the user's reduced-motion preference.
    Every transition/animation in the app inherits this floor.
    ============================================================ */
