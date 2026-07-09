@@ -85,7 +85,7 @@ export default async function PriorityBoardPage() {
         </h1>
         <p className="mt-1.5 text-[12px] text-ink-2 max-w-2xl leading-relaxed">
           The four lanes the JS scans at a glance. {canCurate
-            ? 'Drag any task between lanes — owners, their Director, and Section Officer get notified.'
+            ? 'Search below to pull any task straight onto the board, and drag between lanes — owners, their Director, and Section Officer get notified.'
             : 'Only OSD can move tasks between lanes; this view is read-only for you.'}
         </p>
         <p className="mt-2 text-[11px] text-ink-3">
@@ -93,8 +93,10 @@ export default async function PriorityBoardPage() {
         </p>
       </header>
 
-      {totalOnBoard === 0 ? (
-        <EmptyState canCurate={canCurate} />
+      {totalOnBoard === 0 && !canCurate ? (
+        // Curators always get the live board — the search tray is how they
+        // put the first tasks on it.
+        <EmptyState />
       ) : (
         <Board tasksByLane={tasksByLane} canCurate={canCurate} />
       )}
@@ -102,7 +104,7 @@ export default async function PriorityBoardPage() {
   );
 }
 
-function EmptyState({ canCurate }: { canCurate: boolean }) {
+function EmptyState() {
   return (
     <div className="rounded-xl border border-dashed border-line bg-panel p-10 md:p-14 text-center">
       <i
@@ -111,9 +113,7 @@ function EmptyState({ canCurate }: { canCurate: boolean }) {
       />
       <h2 className="font-serif text-[20px] text-ink mb-1">No tasks on the board yet</h2>
       <p className="text-[13px] text-ink-2 max-w-md mx-auto leading-relaxed">
-        {canCurate
-          ? 'Open any task and tap the JS Priority pill to put it on the board. Or move existing tasks here once your team has created some.'
-          : 'OSD has not flagged any tasks for JS priority yet.'}
+        OSD has not flagged any tasks for JS priority yet.
       </p>
     </div>
   );
