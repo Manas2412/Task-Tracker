@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { TimelineFileCard } from '@/components/ui';
@@ -13,9 +12,10 @@ import {
   type TfSort,
   type VisibleTimelineFile,
 } from '@/lib/timeline-files';
-import { cn } from '@/lib/utils';
 
 import { CreateTimelineFileDialog } from './_components/CreateTimelineFileDialog';
+import { TfListControls } from './_components/TfListControls';
+import { TfStatsStrip } from './_components/TfStatsStrip';
 
 const VALID_FILTERS: TfFilter[] = [
   'all',
@@ -26,47 +26,30 @@ const VALID_FILTERS: TfFilter[] = [
   'closed',
 ];
 
-const FILTER_LABELS: Record<TfFilter, string> = {
-  all: 'All',
-  pending_action: 'Pending action',
-  in_progress: 'In progress',
-  awaiting_reply: 'Awaiting reply',
-  on_hold: 'On hold',
-  closed: 'Closed',
-};
-
 const VALID_SORTS: TfSort[] = ['default', 'latest'];
-
-const SORT_LABELS: Record<TfSort, string> = {
-  default: 'Default',
-  latest: 'Latest',
-};
 
 /** How the list is grouped. 'none' = a single flat list. */
 type TfGroup = 'none' | 'division';
 const VALID_GROUPS: TfGroup[] = ['none', 'division'];
 
 type PageProps = {
-  searchParams?: { filter?: string; sort?: string; group?: string };
+  searchParams?: { filter?: string; sort?: string; group?: string; division?: string };
 };
-
-/** Build a list URL, omitting params left at their default. */
-function buildHref(params: { filter: TfFilter; sort: TfSort; group: TfGroup }): string {
-  const sp = new URLSearchParams();
-  if (params.filter !== 'all') sp.set('filter', params.filter);
-  if (params.sort !== 'default') sp.set('sort', params.sort);
-  if (params.group !== 'none') sp.set('group', params.group);
-  const qs = sp.toString();
-  return qs ? `/timeline-files?${qs}` : '/timeline-files';
-}
 
 /**
  * Group visible files by the divisions each is marked to. A file marked to
  * several divisions appears under each. Groups are ordered by division name;
  * files with no marked-to division fall into a trailing "No division" group.
  * Within a group the incoming (already sorted) order is preserved.
+ *
+ * When a Division filter is active, only that division's group is emitted —
+ * a file marked to the selected division and others is collapsed into the one
+ * group the user asked for, so the grouped view can't contradict the filter.
  */
-function groupByDivision(tfs: VisibleTimelineFile[]): Array<{
+function groupByDivision(
+  tfs: VisibleTimelineFile[],
+  divisionFilter: string,
+): Array<{
   id: string;
   name: string;
   colour: string | null;
@@ -83,6 +66,7 @@ function groupByDivision(tfs: VisibleTimelineFile[]): Array<{
       continue;
     }
     for (const { division } of tf.markedTo) {
+      if (divisionFilter && division.id !== divisionFilter) continue;
       const g =
         groups.get(division.id) ??
         { id: division.id, name: division.name, colour: division.avatarColour, tfs: [] };
@@ -117,19 +101,26 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
     ? ((searchParams?.group as TfGroup) ?? 'none')
     : 'none';
 
+  const divisionFilter = searchParams?.division ?? '';
+
   const canCreate =
     session.user.isSuperAdmin || session.user.hierarchySlot === 'osd';
 
   const [tfs, counts, divisions, suggestedFileNumber] = await Promise.all([
-    fetchVisibleTimelineFiles({ callerId: session.user.id, filter, sort }),
+    fetchVisibleTimelineFiles({
+      callerId: session.user.id,
+      filter,
+      sort,
+      divisionId: divisionFilter || undefined,
+    }),
     fetchTfCounts(session.user.id),
-    canCreate
-      ? prisma.division.findMany({
-          where: { kind: 'division' },
-          orderBy: { displayOrder: 'asc' },
-          select: { id: true, name: true, avatarColour: true },
-        })
-      : Promise.resolve([]),
+    // Divisions power both the create dialog and the Division filter dropdown,
+    // so they are fetched for every viewer (not just curators).
+    prisma.division.findMany({
+      where: { kind: 'division' },
+      orderBy: { displayOrder: 'asc' },
+      select: { id: true, name: true, avatarColour: true },
+    }),
     canCreate ? suggestNextRefSeq(new Date().getUTCFullYear()) : Promise.resolve(1),
   ]);
 
@@ -168,86 +159,13 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
         </div>
       </header>
 
-      {/* Stats strip */}
-      <section
-        aria-label="Counters"
-        className="grid grid-cols-3 gap-3 mb-5"
-      >
-        <Stat label="Open files" value={counts.open} />
-        <Stat label="Pending action" value={counts.pendingAction} accent />
-        <Stat label="Overdue" value={counts.overdue} alert={counts.overdue > 0} />
-      </section>
-
-      {/* Filter chips */}
-      <nav
-        aria-label="Filter files"
-        className="flex gap-1.5 flex-wrap mb-4"
-      >
-        {VALID_FILTERS.map((f) => {
-          const active = f === filter;
-          const href = buildHref({ filter: f, sort, group });
-          return (
-            <Link
-              key={f}
-              href={href}
-              scroll={false}
-              aria-current={active ? 'page' : undefined}
-              className={cn(
-                'whitespace-nowrap px-[11px] py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
-                active
-                  ? 'bg-ink text-white border-ink'
-                  : 'bg-panel text-ink-2 border-line hover:border-ink-4',
-              )}
-            >
-              {FILTER_LABELS[f]}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Sort + group controls */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4">
-        <div className="flex items-center gap-1.5" role="group" aria-label="Sort files">
-          <span className="text-[11px] font-medium text-ink-3">Sort</span>
-          {VALID_SORTS.map((s) => {
-            const active = s === sort;
-            return (
-              <Link
-                key={s}
-                href={buildHref({ filter, sort: s, group })}
-                scroll={false}
-                aria-current={active ? 'true' : undefined}
-                className={cn(
-                  'whitespace-nowrap px-[11px] py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
-                  active
-                    ? 'bg-ink text-white border-ink'
-                    : 'bg-panel text-ink-2 border-line hover:border-ink-4',
-                )}
-              >
-                {SORT_LABELS[s]}
-              </Link>
-            );
-          })}
-        </div>
-
-        <Link
-          href={buildHref({ filter, sort, group: group === 'division' ? 'none' : 'division' })}
-          scroll={false}
-          aria-pressed={group === 'division'}
-          className={cn(
-            'inline-flex items-center gap-1.5 whitespace-nowrap px-[11px] py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
-            group === 'division'
-              ? 'bg-ink text-white border-ink'
-              : 'bg-panel text-ink-2 border-line hover:border-ink-4',
-          )}
-        >
-          <i
-            className={cn('text-[13px]', group === 'division' ? 'ti ti-check' : 'ti ti-layout-list')}
-            aria-hidden="true"
-          />
-          Group by division
-        </Link>
+      {/* Summary cards */}
+      <div className="mb-5">
+        <TfStatsStrip counts={counts} />
       </div>
+
+      {/* Status / division / sort / group controls */}
+      <TfListControls divisions={divisions.map((d) => ({ id: d.id, name: d.name }))} />
 
       {/* List */}
       <div>
@@ -259,10 +177,14 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
         </div>
 
         {tfs.length === 0 ? (
-          <EmptyState filter={filter} canCreate={canCreate} />
+          <EmptyState
+            filter={filter}
+            canCreate={canCreate}
+            divisionActive={Boolean(divisionFilter)}
+          />
         ) : group === 'division' ? (
           <div className="flex flex-col gap-6">
-            {groupByDivision(tfs).map((g) => (
+            {groupByDivision(tfs, divisionFilter).map((g) => (
               <section key={g.id} aria-label={g.name}>
                 <div className="flex items-center gap-2 mb-2">
                   <span
@@ -315,46 +237,17 @@ function TfGrid({ items }: { items: VisibleTimelineFile[] }) {
 }
 
 // ------------------------------------------------------------
-// Stat + EmptyState
+// EmptyState
 // ------------------------------------------------------------
-
-function Stat({
-  label,
-  value,
-  accent,
-  alert,
-}: {
-  label: string;
-  value: number;
-  accent?: boolean;
-  alert?: boolean;
-}) {
-  const tone = alert
-    ? 'text-urgent'
-    : accent
-      ? 'text-primary'
-      : 'text-ink';
-  return (
-    <div
-      className="p-4 rounded-xl border border-line"
-      style={{ background: 'linear-gradient(180deg, var(--canvas) 0%, var(--bg) 100%)' }}
-    >
-      <div className={cn('font-serif text-[22px] md:text-[26px] leading-none font-medium', tone)}>
-        {value}
-      </div>
-      <div className="mt-1 text-[10px] uppercase tracking-[0.04em] font-medium text-ink-3">
-        {label}
-      </div>
-    </div>
-  );
-}
 
 function EmptyState({
   filter,
   canCreate,
+  divisionActive,
 }: {
   filter: TfFilter;
   canCreate: boolean;
+  divisionActive: boolean;
 }) {
   const copy: Record<TfFilter, string> = {
     all: canCreate
@@ -366,13 +259,20 @@ function EmptyState({
     on_hold: 'Nothing on hold.',
     closed: 'No closed files.',
   };
+  // A Division filter narrowing to zero is a filtered-empty state, not an
+  // empty module — say so rather than "No timeline files yet".
+  const message = divisionActive
+    ? filter === 'all'
+      ? 'No timeline files marked to this division.'
+      : 'No timeline files marked to this division for this status.'
+    : copy[filter];
   return (
     <div className="rounded-xl border border-dashed border-line p-10 text-center bg-panel">
       <i
         className="ti ti-file-stack text-[28px] text-ink-3 mb-2 block"
         aria-hidden="true"
       />
-      <p className="text-[13px] text-ink-2">{copy[filter]}</p>
+      <p className="text-[13px] text-ink-2">{message}</p>
     </div>
   );
 }

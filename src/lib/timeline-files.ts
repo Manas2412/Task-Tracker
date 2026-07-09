@@ -1,6 +1,7 @@
 import type { Prisma, TimelineFile } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
+import { startOfDayIST, endOfDayIST } from '@/lib/date';
 
 /**
  * Server-side scoper + ref-number generator for Timeline Files.
@@ -54,6 +55,8 @@ export async function fetchVisibleTimelineFiles(opts: {
   callerId: string;
   filter: TfFilter;
   sort?: TfSort;
+  /** Narrow to files marked to this division (on top of visibility). */
+  divisionId?: string;
 }): Promise<VisibleTimelineFile[]> {
   const me = await prisma.user.findUnique({
     where: { id: opts.callerId },
@@ -69,6 +72,8 @@ export async function fetchVisibleTimelineFiles(opts: {
   const visibility = await buildTfVisibilityClause(me);
   const statusFilter: Prisma.TimelineFileWhereInput =
     opts.filter !== 'all' ? { status: opts.filter } : {};
+  const divisionFilter: Prisma.TimelineFileWhereInput =
+    opts.divisionId ? { markedTo: { some: { divisionId: opts.divisionId } } } : {};
 
   const orderBy: Prisma.TimelineFileOrderByWithRelationInput[] =
     opts.sort === 'latest'
@@ -90,7 +95,7 @@ export async function fetchVisibleTimelineFiles(opts: {
   return prisma.timelineFile.findMany({
     where: {
       archivedAt: null,
-      AND: [visibility, statusFilter],
+      AND: [visibility, statusFilter, divisionFilter],
     },
     include: {
       createdBy: { select: { id: true, name: true } },
@@ -104,12 +109,18 @@ export async function fetchVisibleTimelineFiles(opts: {
 }
 
 /**
- * Counters used by the page header.
+ * Counters behind the summary cards on the list page.
+ *
+ * `deadlineDate` is a date-only column stored at UTC midnight; because IST is
+ * ahead of UTC, that instant always falls inside its own IST calendar day, so
+ * the IST day boundaries below classify each file into exactly one of
+ * due-today / overdue (open files only). Closed files count as completed.
  */
 export async function fetchTfCounts(callerId: string): Promise<{
   open: number;
-  pendingAction: number;
+  dueToday: number;
   overdue: number;
+  completed: number;
 }> {
   const me = await prisma.user.findUnique({
     where: { id: callerId },
@@ -120,32 +131,118 @@ export async function fetchTfCounts(callerId: string): Promise<{
       divisionId: true,
     },
   });
-  if (!me) return { open: 0, pendingAction: 0, overdue: 0 };
+  if (!me) return { open: 0, dueToday: 0, overdue: 0, completed: 0 };
 
   const visibility = await buildTfVisibilityClause(me);
   const base: Prisma.TimelineFileWhereInput = {
     archivedAt: null,
     AND: [visibility],
   };
-  const now = new Date();
+  const dayStart = startOfDayIST();
+  const dayEnd = endOfDayIST();
 
-  const [open, pendingAction, overdue] = await Promise.all([
+  const [open, dueToday, overdue, completed] = await Promise.all([
     prisma.timelineFile.count({
       where: { ...base, status: { not: 'closed' } },
-    }),
-    prisma.timelineFile.count({
-      where: { ...base, status: 'pending_action' },
     }),
     prisma.timelineFile.count({
       where: {
         ...base,
         status: { not: 'closed' },
-        deadlineDate: { lt: now },
+        deadlineDate: { gte: dayStart, lte: dayEnd },
       },
+    }),
+    prisma.timelineFile.count({
+      where: {
+        ...base,
+        status: { not: 'closed' },
+        deadlineDate: { lt: dayStart },
+      },
+    }),
+    prisma.timelineFile.count({
+      where: { ...base, status: 'closed' },
     }),
   ]);
 
-  return { open, pendingAction, overdue };
+  return { open, dueToday, overdue, completed };
+}
+
+/** Which summary card a drill-down list belongs to. */
+export type TfStatKind = 'open' | 'today' | 'overdue' | 'completed';
+
+/** One file row shown inside a summary-card drill-down sheet. */
+export type TfStatRow = {
+  id: string;
+  refNo: string;
+  subject: string;
+  fromWhom: string;
+  status: string;
+  deadlineDate: string | null;
+  href: string;
+};
+
+/**
+ * Visibility-scoped list of files behind a summary card — the drill-down for
+ * Open files / Due today / Overdue / Completed. Scoped through the same
+ * `buildTfVisibilityClause`, so a card can never reveal a file the caller
+ * could not already see in the list.
+ */
+export async function fetchTfStatFiles(
+  callerId: string,
+  kind: TfStatKind,
+): Promise<TfStatRow[]> {
+  const me = await prisma.user.findUnique({
+    where: { id: callerId },
+    select: {
+      id: true,
+      hierarchySlot: true,
+      isSuperAdmin: true,
+      divisionId: true,
+    },
+  });
+  if (!me) return [];
+
+  const visibility = await buildTfVisibilityClause(me);
+  const dayStart = startOfDayIST();
+  const dayEnd = endOfDayIST();
+
+  const kindClause: Prisma.TimelineFileWhereInput =
+    kind === 'completed'
+      ? { status: 'closed' }
+      : kind === 'today'
+        ? { status: { not: 'closed' }, deadlineDate: { gte: dayStart, lte: dayEnd } }
+        : kind === 'overdue'
+          ? { status: { not: 'closed' }, deadlineDate: { lt: dayStart } }
+          : { status: { not: 'closed' } };
+
+  const orderBy: Prisma.TimelineFileOrderByWithRelationInput[] =
+    kind === 'completed'
+      ? [{ createdAt: 'desc' }]
+      : [{ deadlineDate: { sort: 'asc', nulls: 'last' } }, { receivedDate: 'desc' }];
+
+  const rows = await prisma.timelineFile.findMany({
+    where: { archivedAt: null, AND: [visibility, kindClause] },
+    select: {
+      id: true,
+      refNo: true,
+      subject: true,
+      fromWhom: true,
+      status: true,
+      deadlineDate: true,
+    },
+    orderBy,
+    take: 200,
+  });
+
+  return rows.map((f) => ({
+    id: f.id,
+    refNo: f.refNo,
+    subject: f.subject,
+    fromWhom: f.fromWhom,
+    status: f.status,
+    deadlineDate: f.deadlineDate ? f.deadlineDate.toISOString() : null,
+    href: `/timeline-files/${f.id}`,
+  }));
 }
 
 // ============================================================
