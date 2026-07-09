@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Sortable from 'sortablejs';
 
-import { Avatar, Pill } from '@/components/ui';
+import { Avatar, HoverPreview, Pill } from '@/components/ui';
 import { setJsPriorityLaneAction, reorderBoardAction } from '@/app/actions/tasks';
 import { formatDue } from '@/lib/format';
 import { TASK_STATUS_LABEL } from '@/lib/labels';
@@ -39,6 +39,10 @@ export type BoardTask = {
   jsPriorityLane: PillJsLane;
   divisionName: string;
   due: Date | null;
+  /** Full description — shown only in the hover preview. */
+  description?: string | null;
+  /** Attachment file names — shown only in the hover preview. */
+  attachmentNames?: string[];
   owner: {
     name: string;
     initials: string;
@@ -193,13 +197,23 @@ export function Board({ tasksByLane, canCurate }: BoardProps) {
         onEnd: (evt) => {
           document.body.classList.remove('sortable-dragging');
           const item = evt.item as HTMLElement;
-          const taskId = item.dataset.taskId;
+          // The Sortable item is the <li> wrapper; the id may sit on it or on
+          // a descendant (the card) — resolve either way.
+          const taskId =
+            item.dataset.taskId ??
+            item.querySelector<HTMLElement>('[data-task-id]')?.dataset.taskId;
           const toLane = (evt.to as HTMLElement).dataset.laneId as PillJsLane | undefined;
           const fromLane = (evt.from as HTMLElement).dataset.laneId as PillJsLane | undefined;
           if (!taskId || !toLane) return;
           if (toLane === fromLane && evt.newIndex === evt.oldIndex) return;
 
+          // Snapshot the target order at the drop position BEFORE reverting.
           const orderedIds = snapshotLaneOrder(evt.to as HTMLElement);
+
+          // Revert Sortable's cross-list DOM move so React reconciles from its
+          // own tree when the refreshed server data arrives.
+          const from = evt.from as HTMLElement;
+          from.insertBefore(item, from.children[evt.oldIndex ?? 0] ?? null);
 
           startTransition(async () => {
             const error = await persistLaneMove(taskId, toLane, orderedIds, toLane !== fromLane);
@@ -610,8 +624,12 @@ function Lane({
           </li>
         ) : (
           tasks.map((t) => (
-            <li key={t.id}>
-              <LaneCard task={t} canCurate={canCurate} />
+            // data-task-id on the <li> — it is the Sortable draggable item,
+            // so evt.item.dataset.taskId resolves in the drag handler.
+            <li key={t.id} data-task-id={t.id}>
+              <HoverPreview content={<BoardCardPreview task={t} />}>
+                <LaneCard task={t} canCurate={canCurate} />
+              </HoverPreview>
             </li>
           ))
         )}
@@ -628,7 +646,6 @@ function LaneCard({ task, canCurate }: { task: BoardTask; canCurate: boolean }) 
   const due = formatDue(task.due);
   return (
     <article
-      data-task-id={task.id}
       className={cn(
         'relative bg-gradient-to-b from-accent-tint to-panel border border-accent-line rounded-xl p-2.5 shadow-card',
         canCurate ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
@@ -695,5 +712,62 @@ function LaneCard({ task, canCurate }: { task: BoardTask; canCurate: boolean }) 
         </div>
       </div>
     </article>
+  );
+}
+
+// ------------------------------------------------------------
+// BoardCardPreview — hover tooltip: description + attached docs
+// ------------------------------------------------------------
+
+const MAX_PREVIEW_DOCS = 4;
+
+function BoardCardPreview({ task }: { task: BoardTask }) {
+  const hasDescription = !!task.description && task.description.trim().length > 0;
+  const docs = task.attachmentNames ?? [];
+  const shownDocs = docs.slice(0, MAX_PREVIEW_DOCS);
+  const extraDocs = docs.length - shownDocs.length;
+
+  return (
+    <div className="rounded-xl border border-line bg-bg p-3.5 shadow-[0_12px_32px_-10px_rgba(0,0,0,0.22)]">
+      <p className="text-[12.5px] font-medium text-ink leading-snug line-clamp-2">{task.name}</p>
+
+      <p className="mt-1.5 text-[12px] leading-relaxed text-ink-2 line-clamp-4">
+        {hasDescription ? (
+          task.description
+        ) : (
+          <span className="italic text-ink-3">No description</span>
+        )}
+      </p>
+
+      {docs.length > 0 ? (
+        <div className="mt-3 border-t border-line pt-2.5">
+          <p className="text-[11px] uppercase tracking-[0.06em] text-ink-3 mb-1.5">
+            Docs attached
+          </p>
+          <ul className="flex flex-col gap-1">
+            {shownDocs.map((fileName, i) => (
+              <li key={i} className="flex items-center gap-1.5 min-w-0">
+                <i className="ti ti-paperclip text-[12px] text-ink-3 shrink-0" aria-hidden="true" />
+                <span className="text-[12px] text-ink-2 truncate">{fileName}</span>
+              </li>
+            ))}
+            {extraDocs > 0 ? (
+              <li className="text-[11px] text-ink-3 pl-[18px]">and {extraDocs} more</li>
+            ) : null}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex items-center gap-2 border-t border-line pt-2.5">
+        <Avatar
+          initials={task.owner.initials}
+          colour={task.owner.colour}
+          size="xs"
+          ariaLabel={`Owner ${task.owner.name}`}
+        />
+        <span className="text-[11px] uppercase tracking-[0.06em] text-ink-3">Owner</span>
+        <span className="ml-auto truncate text-[12px] font-medium text-ink">{task.owner.name}</span>
+      </div>
+    </div>
   );
 }
