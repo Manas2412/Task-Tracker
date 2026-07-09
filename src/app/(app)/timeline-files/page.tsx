@@ -5,6 +5,7 @@ import { DivisionAccordion } from '@/components/DivisionAccordion';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { isS3Configured } from '@/lib/s3';
+import { isMediaAndIt } from '@/lib/divisions';
 import {
   fetchTfCounts,
   fetchVisibleTimelineFiles,
@@ -39,8 +40,8 @@ type PageProps = {
 
 /**
  * Group visible files by the divisions each is marked to. A file marked to
- * several divisions appears under each. Groups are ordered by division name;
- * files with no marked-to division fall into a trailing "No division" group.
+ * several divisions appears under each. Groups are ordered by division name,
+ * with Media & IT pushed below the others and a "No division" group last.
  * Within a group the incoming (already sorted) order is preserved.
  *
  * When a Division filter is active, only that division's group is emitted —
@@ -77,9 +78,10 @@ function groupByDivision(
   }
 
   return Array.from(groups.values()).sort((a, b) => {
-    // "No division" always sinks to the bottom.
-    if (a.id === NO_DIVISION) return 1;
-    if (b.id === NO_DIVISION) return -1;
+    // Media & IT sits below the other divisions; "No division" always last.
+    const ra = a.id === NO_DIVISION ? 2 : isMediaAndIt(a.name) ? 1 : 0;
+    const rb = b.id === NO_DIVISION ? 2 : isMediaAndIt(b.name) ? 1 : 0;
+    if (ra !== rb) return ra - rb;
     return a.name.localeCompare(b.name);
   });
 }
