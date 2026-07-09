@@ -226,6 +226,7 @@ export async function fetchTaskCounts(callerId: string): Promise<{
   open: number;
   dueToday: number;
   overdue: number;
+  completed: number;
 }> {
   const me = await prisma.user.findUnique({
     where: { id: callerId },
@@ -238,7 +239,7 @@ export async function fetchTaskCounts(callerId: string): Promise<{
       pmuId: true,
     },
   });
-  if (!me) return { open: 0, dueToday: 0, overdue: 0 };
+  if (!me) return { open: 0, dueToday: 0, overdue: 0, completed: 0 };
 
   const visibilityClauses = await buildVisibilityClauses(me);
   const base: Prisma.TaskWhereInput = {
@@ -247,7 +248,7 @@ export async function fetchTaskCounts(callerId: string): Promise<{
     AND: [{ OR: visibilityClauses }],
   };
 
-  const [open, dueToday, overdue] = await Promise.all([
+  const [open, dueToday, overdue, completed] = await Promise.all([
     prisma.task.count({ where: { ...base, status: { not: 'completed' } } }),
     prisma.task.count({
       where: { ...base, dueDate: { gte: startOfDayIST(), lte: endOfDayIST() }, status: { not: 'completed' } },
@@ -255,9 +256,10 @@ export async function fetchTaskCounts(callerId: string): Promise<{
     prisma.task.count({
       where: { ...base, dueDate: { lt: startOfDayIST() }, status: { not: 'completed' } },
     }),
+    prisma.task.count({ where: { ...base, status: 'completed' } }),
   ]);
 
-  return { open, dueToday, overdue };
+  return { open, dueToday, overdue, completed };
 }
 
 const STAT_CALLER_SELECT = {
@@ -282,28 +284,31 @@ export type StatTaskRow = {
 };
 
 /**
- * Visibility-scoped list of the caller's open tasks that are due today, or
- * overdue — the drill-down behind the Due today / Overdue stat tiles.
+ * Visibility-scoped list of tasks behind a stat tile: open tasks due today,
+ * open tasks overdue, or the most recently completed tasks.
  */
 export async function fetchStatTasks(
   callerId: string,
-  kind: 'today' | 'overdue',
+  kind: 'today' | 'overdue' | 'completed',
 ): Promise<StatTaskRow[]> {
   const me = await prisma.user.findUnique({ where: { id: callerId }, select: STAT_CALLER_SELECT });
   if (!me) return [];
 
   const visibilityClauses = await buildVisibilityClauses(me);
-  const dueClause: Prisma.TaskWhereInput =
-    kind === 'today'
-      ? { dueDate: { gte: startOfDayIST(), lte: endOfDayIST() } }
-      : { dueDate: { lt: startOfDayIST() } };
+  // Completed drills into finished work; today/overdue stay scoped to open
+  // tasks with a due-date window.
+  const statusAndDue: Prisma.TaskWhereInput =
+    kind === 'completed'
+      ? { status: 'completed' }
+      : kind === 'today'
+        ? { status: { not: 'completed' }, dueDate: { gte: startOfDayIST(), lte: endOfDayIST() } }
+        : { status: { not: 'completed' }, dueDate: { lt: startOfDayIST() } };
 
   const rows = await prisma.task.findMany({
     where: {
       archivedAt: null,
       parentTaskId: null,
-      status: { not: 'completed' },
-      AND: [{ OR: visibilityClauses }, dueClause],
+      AND: [{ OR: visibilityClauses }, statusAndDue],
     },
     select: {
       id: true,
@@ -313,7 +318,9 @@ export async function fetchStatTasks(
       division: { select: { name: true, avatarColour: true } },
       owner: { select: { name: true } },
     },
-    orderBy: [{ dueDate: 'asc' }],
+    // No completedAt column, so most-recently-updated approximates
+    // most-recently-completed for the Completed drill-down.
+    orderBy: kind === 'completed' ? [{ updatedAt: 'desc' }] : [{ dueDate: 'asc' }],
     take: 200,
   });
 

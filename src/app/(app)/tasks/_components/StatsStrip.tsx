@@ -9,15 +9,16 @@ import type { DivisionOpenBreakdown, StatTaskRow } from '@/lib/visibility';
 import { cn } from '@/lib/utils';
 
 type StatsStripProps = {
-  counts: { open: number; dueToday: number; overdue: number };
+  counts: { open: number; dueToday: number; overdue: number; completed: number };
 };
 
-type Kind = 'today' | 'overdue' | 'divisions';
+type Kind = 'today' | 'overdue' | 'divisions' | 'completed';
 
 const SHEET_META: Record<Kind, { title: string; subtitle: string; empty: string }> = {
   today: { title: 'Due today', subtitle: 'Open tasks due today', empty: 'Nothing due today.' },
   overdue: { title: 'Overdue', subtitle: 'Open tasks past their due date', empty: 'No overdue tasks.' },
   divisions: { title: 'Open tasks by division', subtitle: 'Where the open work sits — counts only', empty: 'No open tasks.' },
+  completed: { title: 'Completed', subtitle: 'Tasks marked completed', empty: 'No completed tasks.' },
 };
 
 /**
@@ -60,7 +61,7 @@ export function StatsStrip({ counts }: StatsStripProps) {
 
   return (
     <>
-      <div className="glass-card mt-4 grid grid-cols-3 gap-3 rounded-2xl p-4 md:gap-6 md:p-5">
+      <div className="glass-card mt-4 grid grid-cols-2 gap-3 rounded-2xl p-4 md:grid-cols-4 md:gap-6 md:p-5">
         <StatButton label="Open tasks" value={counts.open} onClick={() => openSheet('divisions')} />
         <StatButton label="Due today" value={counts.dueToday} tone="accent" onClick={() => openSheet('today')} />
         <StatButton
@@ -68,6 +69,12 @@ export function StatsStrip({ counts }: StatsStripProps) {
           value={counts.overdue}
           tone={counts.overdue > 0 ? 'urgent' : 'ink'}
           onClick={() => openSheet('overdue')}
+        />
+        <StatButton
+          label="Completed"
+          value={counts.completed}
+          tone="success"
+          onClick={() => openSheet('completed')}
         />
       </div>
 
@@ -106,10 +113,17 @@ function StatButton({
 }: {
   label: string;
   value: number;
-  tone?: 'ink' | 'accent' | 'urgent';
+  tone?: 'ink' | 'accent' | 'urgent' | 'success';
   onClick: () => void;
 }) {
-  const toneClass = tone === 'urgent' ? 'text-urgent' : tone === 'accent' ? 'text-accent' : 'text-ink';
+  const toneClass =
+    tone === 'urgent'
+      ? 'text-urgent'
+      : tone === 'accent'
+        ? 'text-accent'
+        : tone === 'success'
+          ? 'text-success'
+          : 'text-ink';
   return (
     <button
       type="button"
@@ -192,7 +206,12 @@ function TaskListView({
                   {t.divisionName} · {t.ownerName}
                 </span>
               </span>
-              {due && due.tone !== 'none' ? (
+              {t.status === 'completed' ? (
+                <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-success">
+                  <i className="ti ti-circle-check text-[12px]" aria-hidden="true" />
+                  Done
+                </span>
+              ) : due && due.tone !== 'none' ? (
                 <span
                   className={cn(
                     'shrink-0 text-[11px] font-medium',

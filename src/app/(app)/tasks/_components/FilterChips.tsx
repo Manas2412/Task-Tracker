@@ -13,13 +13,12 @@ import type { TaskFilter } from '@/lib/visibility';
  *   - tablet+: wraps freely, no scroll
  */
 
-// Due today / Overdue / Owned by me are surfaced as clickable drill-downs on
-// the stats panel instead of as filter chips.
+// Due today / Overdue / Completed / Owned by me are surfaced as clickable
+// drill-downs on the stats panel instead of as filter chips.
 const CHIPS: { id: TaskFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'urgent', label: 'Urgent' },
   { id: 'js_priority', label: 'JS Priority' },
-  { id: 'completed', label: 'Completed' },
 ];
 
 export function FilterChips({ active }: { active: TaskFilter }) {

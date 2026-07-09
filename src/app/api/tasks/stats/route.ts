@@ -5,7 +5,7 @@ import { rateLimit } from '@/lib/rate-limit';
 import { fetchOpenTasksByDivision, fetchStatTasks } from '@/lib/visibility';
 
 /**
- * GET /api/tasks/stats?kind=today|overdue|divisions
+ * GET /api/tasks/stats?kind=today|overdue|completed|divisions
  *
  * Drill-down data behind the tasks-page stat tiles. Everything is scoped to
  * the caller's task visibility (buildVisibilityClauses), so a popup can never
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
   const kind = new URL(request.url).searchParams.get('kind');
 
-  if (kind === 'today' || kind === 'overdue') {
+  if (kind === 'today' || kind === 'overdue' || kind === 'completed') {
     const tasks = await fetchStatTasks(session.user.id, kind);
     return NextResponse.json({ tasks });
   }
