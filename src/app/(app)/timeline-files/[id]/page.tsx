@@ -265,12 +265,13 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         </div>
       </header>
 
-      {/* Title block — a soft indigo tint over the frosted glass keeps the
-          Timeline-File identity while letting the glass read through. */}
+      {/* Title block — a clear soft RED tint over the frosted glass (the
+          Timeline-File colour on the calendar); stays coloured down to the
+          divider so the hero reads as a distinct block. */}
       <section
         aria-labelledby="tf-title"
         className="px-4 md:px-6 py-5 border-b border-line-2"
-        style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 70%, transparent) 0%, transparent 100%)' }}
+        style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--urgent-soft) 92%, transparent) 0%, color-mix(in srgb, var(--urgent-soft) 62%, transparent) 100%)' }}
       >
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
           <TfRefNumberEditor
