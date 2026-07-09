@@ -12,9 +12,11 @@ type Division = {
 
 type DivisionControlsProps = {
   divisions: Division[];
+  /** Group-by-division is a cross-division (leadership) view; hidden otherwise. */
+  canGroupByDivision: boolean;
 };
 
-export function DivisionControls({ divisions }: DivisionControlsProps) {
+export function DivisionControls({ divisions, canGroupByDivision }: DivisionControlsProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeDivision = searchParams.get('division') ?? '';
@@ -151,20 +153,22 @@ export function DivisionControls({ divisions }: DivisionControlsProps) {
         ) : null}
       </div>
 
-      {/* Group by division toggle */}
-      <button
-        type="button"
-        onClick={onToggleGroup}
-        className={cn(
-          'inline-flex items-center gap-1.5 px-3 py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
-          groupBy
-            ? 'bg-ink text-white border-ink'
-            : 'bg-panel text-ink-2 border-line hover:border-ink-4',
-        )}
-      >
-        <i className="ti ti-layout-rows text-[13px]" aria-hidden="true" />
-        Group by division
-      </button>
+      {/* Group by division toggle — leadership only */}
+      {canGroupByDivision ? (
+        <button
+          type="button"
+          onClick={onToggleGroup}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-3 py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
+            groupBy
+              ? 'bg-ink text-white border-ink'
+              : 'bg-panel text-ink-2 border-line hover:border-ink-4',
+          )}
+        >
+          <i className="ti ti-layout-rows text-[13px]" aria-hidden="true" />
+          Group by division
+        </button>
+      ) : null}
 
       {/* Sort dropdown — available in flat and grouped views alike */}
       <div ref={sortRef} className="relative">

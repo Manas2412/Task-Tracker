@@ -32,7 +32,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
     : 'all';
 
   const divisionFilter = searchParams?.division ?? '';
-  const groupByDivision = searchParams?.group === 'division';
+  const requestedGroupByDivision = searchParams?.group === 'division';
   const sort: TaskSort = searchParams?.sort === 'latest' ? 'latest' : 'default';
 
   const me = await prisma.user.findUnique({
@@ -47,6 +47,13 @@ export default async function TasksPage({ searchParams }: PageProps) {
     },
   });
   if (!me) redirect('/login');
+
+  // Group-by-division is a cross-division (leadership) view. Normal users only
+  // ever see their own division, so the control is hidden and a manually-set
+  // ?group=division URL param is ignored for them.
+  const canGroupByDivision =
+    me.isSuperAdmin || me.hierarchySlot === 'osd' || me.hierarchySlot === 'js';
+  const groupByDivision = canGroupByDivision && requestedGroupByDivision;
 
   const [taskResult, counts, divisions, pmuParentHeadId] = await Promise.all([
     fetchVisibleTasks({ callerId: me.id, filter, divisionId: divisionFilter || undefined, sort }),
@@ -95,7 +102,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
           <FilterChips active={filter} />
           <Suspense fallback={null}>
-            <DivisionControls divisions={divisions} />
+            <DivisionControls divisions={divisions} canGroupByDivision={canGroupByDivision} />
           </Suspense>
           <StatsStrip counts={counts} />
         </div>
