@@ -131,6 +131,13 @@ export default async function TaskDetailPage({ params }: PageProps) {
   // Due-date display for the above-the-fold hero strip (same tone grammar as
   // the task cards).
   const heroDue = formatDue(task.dueDate);
+  // Hero tint. A task spawned from / linked to a Timeline File gets a soft
+  // RED wash (the Timeline-File colour on the calendar); every other task
+  // keeps the light lavender. Kept subtle so the hero reads as a block.
+  const fromTimelineFile = task.linkedTimelineFileId !== null;
+  const heroTint = fromTimelineFile
+    ? 'linear-gradient(180deg, color-mix(in srgb, var(--urgent-soft) 92%, transparent) 0%, color-mix(in srgb, var(--urgent-soft) 62%, transparent) 100%)'
+    : 'linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 92%, transparent) 0%, color-mix(in srgb, var(--primary-soft) 62%, transparent) 100%)';
   const canPull =
     isUnassigned &&
     !isOwner &&
@@ -479,11 +486,12 @@ export default async function TaskDetailPage({ params }: PageProps) {
       </header>
 
       {/* Title block — a clear tint over the frosted glass. It stays coloured
-          right down to the divider so the hero reads as a distinct block. */}
+          right down to the divider so the hero reads as a distinct block.
+          Red for Timeline-File-generated tasks, lavender otherwise. */}
       <section
         aria-labelledby="task-title"
         className="px-4 md:px-6 py-5 border-b border-line-2"
-        style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 92%, transparent) 0%, color-mix(in srgb, var(--primary-soft) 62%, transparent) 100%)' }}
+        style={{ background: heroTint }}
       >
         {task.parentTaskId ? (
           <p className="text-[11px] text-ink-3 mb-2 inline-flex items-center gap-1">
