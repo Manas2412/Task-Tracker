@@ -13,6 +13,8 @@ type Division = {
 
 type TfListControlsProps = {
   divisions: Division[];
+  /** Group-by-division is a cross-division (leadership) view; hidden otherwise. */
+  canGroupByDivision: boolean;
 };
 
 /** Status options for the Status dropdown, each coloured with its own token
@@ -33,7 +35,7 @@ const STATUS_OPTIONS: { value: TfFilter; label: string; dot: string }[] = [
  * the URL search params the server page reads. Mirrors the tasks-page
  * DivisionControls so the two lists feel identical.
  */
-export function TfListControls({ divisions }: TfListControlsProps) {
+export function TfListControls({ divisions, canGroupByDivision }: TfListControlsProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -273,11 +275,13 @@ export function TfListControls({ divisions }: TfListControlsProps) {
         ) : null}
       </div>
 
-      {/* Group by division toggle */}
-      <button type="button" onClick={onToggleGroup} className={triggerClass(groupBy)}>
-        <i className="ti ti-layout-rows text-[13px]" aria-hidden="true" />
-        Group by division
-      </button>
+      {/* Group by division toggle — leadership only */}
+      {canGroupByDivision ? (
+        <button type="button" onClick={onToggleGroup} className={triggerClass(groupBy)}>
+          <i className="ti ti-layout-rows text-[13px]" aria-hidden="true" />
+          Group by division
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -98,9 +98,18 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
     ? ((searchParams?.sort as TfSort) ?? 'default')
     : 'default';
 
-  const group: TfGroup = VALID_GROUPS.includes((searchParams?.group as TfGroup) ?? 'none')
+  // Group-by-division is a cross-division (leadership) view. Normal users only
+  // ever see their own division, so the control is hidden and a manually-set
+  // ?group=division URL param is ignored for them.
+  const canGroupByDivision =
+    session.user.isSuperAdmin ||
+    session.user.hierarchySlot === 'osd' ||
+    session.user.hierarchySlot === 'js';
+
+  const requestedGroup: TfGroup = VALID_GROUPS.includes((searchParams?.group as TfGroup) ?? 'none')
     ? ((searchParams?.group as TfGroup) ?? 'none')
     : 'none';
+  const group: TfGroup = canGroupByDivision ? requestedGroup : 'none';
 
   const divisionFilter = searchParams?.division ?? '';
 
@@ -166,7 +175,10 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
       </div>
 
       {/* Status / division / sort / group controls */}
-      <TfListControls divisions={divisions.map((d) => ({ id: d.id, name: d.name }))} />
+      <TfListControls
+        divisions={divisions.map((d) => ({ id: d.id, name: d.name }))}
+        canGroupByDivision={canGroupByDivision}
+      />
 
       {/* List */}
       <div>
