@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { PullToRefresh } from '@/components/ui';
 import { DivisionAccordion } from '@/components/DivisionAccordion';
 import { auth } from '@/lib/auth';
+import { isMediaAndIt } from '@/lib/divisions';
 import { prisma } from '@/lib/db';
 import { formatDue, initialsOf } from '@/lib/format';
 import { fetchTaskCounts, fetchVisibleTasks, getPmuParentDivisionHeadId, type TaskFilter, type TaskSort } from '@/lib/visibility';
@@ -302,8 +303,17 @@ type DivisionGroup = {
   divisionId: string;
   divisionName: string;
   colour: string;
+  kind: string;
+  displayOrder: number;
   tasks: VisibleTask[];
 };
+
+/** Sort key: regular divisions (0), then Media & IT (1), then PMUs (2). */
+function divisionGroupRank(kind: string, name: string): number {
+  if (kind === 'pmu') return 2;
+  if (isMediaAndIt(name)) return 1;
+  return 0;
+}
 
 function groupTasksByDivision(tasks: VisibleTask[]): DivisionGroup[] {
   const map = new Map<string, DivisionGroup>();
@@ -314,13 +324,23 @@ function groupTasksByDivision(tasks: VisibleTask[]): DivisionGroup[] {
         divisionId: t.divisionId,
         divisionName: t.division.name,
         colour: t.division.avatarColour,
+        kind: t.division.kind,
+        displayOrder: t.division.displayOrder,
         tasks: [],
       };
       map.set(t.divisionId, group);
     }
     group.tasks.push(t);
   }
-  return Array.from(map.values());
+  // Media & IT sinks below the other divisions; the PMUs follow it, each set
+  // ordered by the division's own displayOrder then name.
+  return Array.from(map.values()).sort((a, b) => {
+    const ra = divisionGroupRank(a.kind, a.divisionName);
+    const rb = divisionGroupRank(b.kind, b.divisionName);
+    if (ra !== rb) return ra - rb;
+    if (a.displayOrder !== b.displayOrder) return a.displayOrder - b.displayOrder;
+    return a.divisionName.localeCompare(b.divisionName);
+  });
 }
 
 function EmptyState({ filter }: { filter: TaskFilter }) {

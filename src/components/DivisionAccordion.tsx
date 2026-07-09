@@ -19,15 +19,15 @@ type DivisionAccordionProps = {
  * A collapsible division group for the grouped tasks / timeline-files lists.
  * A tappable header — colour spine, division name, count badge, chevron —
  * toggles a smoothly-animated body (grid-template-rows trick; see
- * globals.css). Defaults open, so switching to "Group by division" still
- * reveals every division's items; each can then be collapsed to focus.
+ * globals.css). Defaults collapsed, so switching to "Group by division"
+ * shows just the division names; tap a header to reveal its items.
  */
 export function DivisionAccordion({
   name,
   colour,
   count,
   unit = 'item',
-  defaultOpen = true,
+  defaultOpen = false,
   children,
 }: DivisionAccordionProps) {
   const [open, setOpen] = useState(defaultOpen);

@@ -122,7 +122,7 @@ function buildFilterClause(filter: TaskFilter, callerId: string): Prisma.TaskWhe
 
 export type VisibleTask = Task & {
   owner: { id: string; name: string; designation: string; division: { id: string; name: string; avatarColour: string } };
-  division: { id: string; name: string; avatarColour: string };
+  division: { id: string; name: string; avatarColour: string; kind: string; displayOrder: number };
   subtasks: { status: string }[];
   collaborators: { role: string }[];
   hasAttachment: boolean;
