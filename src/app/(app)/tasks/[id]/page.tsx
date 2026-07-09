@@ -478,12 +478,12 @@ export default async function TaskDetailPage({ params }: PageProps) {
         </div>
       </header>
 
-      {/* Title block — a soft tint over the frosted glass gives the hero a
-          little colour (lighter than the Timeline-File indigo). */}
+      {/* Title block — a clear tint over the frosted glass. It stays coloured
+          right down to the divider so the hero reads as a distinct block. */}
       <section
         aria-labelledby="task-title"
         className="px-4 md:px-6 py-5 border-b border-line-2"
-        style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 42%, transparent) 0%, transparent 100%)' }}
+        style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 92%, transparent) 0%, color-mix(in srgb, var(--primary-soft) 62%, transparent) 100%)' }}
       >
         {task.parentTaskId ? (
           <p className="text-[11px] text-ink-3 mb-2 inline-flex items-center gap-1">
