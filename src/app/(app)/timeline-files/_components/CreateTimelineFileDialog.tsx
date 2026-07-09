@@ -11,6 +11,7 @@ import {
 } from '@/app/actions/attachments';
 import { INITIAL_TF_STATE, type TimelineFileState } from '@/app/actions/states';
 import { cn } from '@/lib/utils';
+import { guessContentType } from '@/lib/mime';
 import { fileBadgeFor, formatBytes, MAX_UPLOAD_BYTES } from '@/lib/s3';
 
 export type DivisionOption = {
@@ -97,6 +98,10 @@ export function CreateTimelineFileDialog({
 
       for (const file of queuedFiles) {
         setUploadStatus(`Uploading ${file.name} (${done + 1} of ${total})…`);
+        // One derived content-type for presign + PUT + register, so a file
+        // whose browser MIME is empty/non-canonical still passes the allow-list
+        // and the presigned signature matches the PUT.
+        const contentType = guessContentType(file.name, file.type);
         const presignRes = await fetch('/api/attachments/upload-url', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -104,7 +109,7 @@ export function CreateTimelineFileDialog({
             scope: 'tf_source',
             parentId: tfId,
             filename: file.name,
-            contentType: file.type || 'application/octet-stream',
+            contentType,
             sizeBytes: file.size,
           }),
         });
@@ -115,7 +120,7 @@ export function CreateTimelineFileDialog({
         const { key, url } = (await presignRes.json()) as { key: string; url: string };
         const putRes = await fetch(url, {
           method: 'PUT',
-          headers: { 'content-type': file.type || 'application/octet-stream' },
+          headers: { 'content-type': contentType },
           body: file,
         });
         if (!putRes.ok) throw new Error(`Upload rejected (${putRes.status}).`);
@@ -126,7 +131,7 @@ export function CreateTimelineFileDialog({
         regFd.set('source', 'uploaded');
         regFd.set('key', key);
         regFd.set('fileName', file.name);
-        regFd.set('mimeType', file.type || '');
+        regFd.set('mimeType', contentType);
         regFd.set('sizeBytes', String(file.size));
         const regRes = await registerAttachmentAction(undefined, regFd);
         if (!regRes.ok) throw new Error(regRes.error ?? 'Could not register file.');

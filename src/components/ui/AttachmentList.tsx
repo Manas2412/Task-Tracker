@@ -12,6 +12,7 @@ import {
   renameAttachmentAction,
 } from '@/app/actions/attachments';
 import { fileBadgeFor, formatBytes, MAX_UPLOAD_BYTES } from '@/lib/s3';
+import { guessContentType } from '@/lib/mime';
 import { cn } from '@/lib/utils';
 
 export type AttachmentRow = {
@@ -71,6 +72,10 @@ export function AttachmentList({
     setUploadError(null);
     setUploadProgress(`Uploading ${file.name}…`);
     try {
+      // One derived content-type for presign + PUT + register, so a file whose
+      // browser MIME is empty/non-canonical still passes the allow-list and the
+      // presigned signature matches the PUT.
+      const contentType = guessContentType(file.name, file.type);
       const presignRes = await fetch('/api/attachments/upload-url', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -78,7 +83,7 @@ export function AttachmentList({
           scope,
           parentId,
           filename: file.name,
-          contentType: file.type || 'application/octet-stream',
+          contentType,
           sizeBytes: file.size,
         }),
       });
@@ -90,7 +95,7 @@ export function AttachmentList({
 
       const putRes = await fetch(url, {
         method: 'PUT',
-        headers: { 'content-type': file.type || 'application/octet-stream' },
+        headers: { 'content-type': contentType },
         body: file,
       });
       if (!putRes.ok) {
@@ -103,7 +108,7 @@ export function AttachmentList({
       fd.set('source', 'uploaded');
       fd.set('key', key);
       fd.set('fileName', file.name);
-      fd.set('mimeType', file.type || '');
+      fd.set('mimeType', contentType);
       fd.set('sizeBytes', String(file.size));
       const registered = await registerAttachmentAction(undefined, fd);
       if (!registered.ok) {
