@@ -68,7 +68,8 @@ export function EventRow({ event }: { event: CalendarEvent }) {
     </>
   );
   const base = cn(
-    'w-full flex items-start gap-3 p-3 rounded-xl border bg-panel transition-shadow hover:shadow-sm text-left',
+    'w-full flex items-start gap-3 p-3 rounded-xl border transition-shadow hover:shadow-sm text-left',
+    meta.rowTint,
     meta.rowBorder,
   );
 

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { format } from 'date-fns';
 
 import { auth } from '@/lib/auth';
@@ -26,6 +27,7 @@ import { FilterBar } from './_components/FilterBar';
 import { parseCalendarFilters, buildCalendarHref, type RawParams } from './_components/filter-params';
 import { KIND_META, KIND_ORDER } from './_components/kind-style';
 import { ListView } from './_components/ListView';
+import { MobileListDefault } from './_components/MobileListDefault';
 import { MonthView } from './_components/MonthView';
 import { ViewTabs } from './_components/ViewTabs';
 import { WeekView } from './_components/WeekView';
@@ -40,8 +42,21 @@ export default async function CalendarPage({ searchParams }: PageProps) {
   if (!session?.user) redirect('/login');
 
   const sp: RawParams = searchParams ?? {};
+  // Mobile devices default to the list view (the month/week grids are
+  // desktop-oriented); an explicit ?view= always wins. A client fallback
+  // (MobileListDefault) also catches narrow viewports the UA can't see.
+  const ua = headers().get('user-agent') ?? '';
+  const isMobileUA = /iPhone|iPod|Android.*Mobile|webOS|BlackBerry|IEMobile|Opera Mini|Windows Phone/i.test(ua);
   const view: 'month' | 'week' | 'list' =
-    sp.view === 'week' ? 'week' : sp.view === 'list' ? 'list' : 'month';
+    sp.view === 'week'
+      ? 'week'
+      : sp.view === 'list'
+        ? 'list'
+        : sp.view === 'month'
+          ? 'month'
+          : isMobileUA
+            ? 'list'
+            : 'month';
   const filters = parseCalendarFilters(sp);
 
   const me = await prisma.user.findUnique({
@@ -97,6 +112,7 @@ export default async function CalendarPage({ searchParams }: PageProps) {
       canCreateTf={canCreateTf}
       participantCandidates={participantCandidates}
     >
+      <MobileListDefault resolvedView={view} hasExplicitView={Boolean(sp.view)} />
       <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 pt-4 md:pt-6 pb-12">
         <header className="mb-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
