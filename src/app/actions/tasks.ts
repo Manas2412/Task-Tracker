@@ -14,6 +14,7 @@ import {
   canAssignTaskTo,
   canCreateDivisionTask,
   canTransferTaskTo,
+  canTransferTaskToOrLinked,
   getRbacActor,
   getRbacTarget,
   resolveDivisionOwner,
@@ -2427,9 +2428,11 @@ export async function resolveReassignmentAction(
 // ============================================================
 
 /**
- * Allowed targets (enforced in `canTransferTaskTo`, src/lib/rbac/rules.ts):
+ * Allowed targets (enforced in `canTransferTaskToOrLinked`, src/lib/rbac):
  *   Super Admin   → anyone
- *   Division Head → own division(s), another Division Head, Super Admin
+ *   Division Head → own division(s), another Division Head, Super Admin,
+ *                   plus any configured cross-division link (a Khelo India
+ *                   head/delegate may also transfer to NSDF members)
  *   Division User → own division, their Division Head, Super Admin
  * A comment is mandatory on every transfer. The full trail lands in
  * task_activity (with the comment), the comment thread, and audit_log.
@@ -2485,7 +2488,7 @@ export async function transferTaskAction(
     getRbacTarget(target.id),
   ]);
   if (!actor) return fail('Your account could not be found.', epoch);
-  if (!targetRbac || !canTransferTaskTo(actor, targetRbac)) {
+  if (!targetRbac || !canTransferTaskToOrLinked(actor, targetRbac)) {
     return fail(
       'You can transfer within your division, to your division head, or to Super Admin.',
       epoch,
