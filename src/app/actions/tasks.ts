@@ -1019,6 +1019,7 @@ export async function addSubtaskAction(
     where: { id: parsed.data.parentTaskId },
     select: {
       id: true,
+      parentTaskId: true,
       divisionId: true,
       subDivisionId: true,
       visibility: true,
@@ -1029,6 +1030,13 @@ export async function addSubtaskAction(
     },
   });
   if (!parent) return fail('Parent task not found.', epoch);
+
+  // Subtasks are a single level deep: a subtask cannot itself have subtasks.
+  // Enforced here (not just hidden in the UI) so the invariant the numbering
+  // scheme relies on holds for every code path. (Mirrors the pull guard.)
+  if (parent.parentTaskId) {
+    return fail('Subtasks cannot have their own subtasks.', epoch);
+  }
 
   // A subtask inherits the parent's visibility, so adding one to a
   // division task creates another division-level task. Creating subtasks is
