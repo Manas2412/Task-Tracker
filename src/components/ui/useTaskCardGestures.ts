@@ -20,7 +20,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  */
 
 const DIR_LOCK_SLOP = 8; // px — first move past this locks the axis
-const MOVE_CANCEL = 10; // px — total movement past this cancels a long press
+const LONG_PRESS_SLOP = 16; // px — a hold that drifts past this (from the start point) cancels the long press. Generous so a real 2s finger-hold survives natural tremor.
 const SWIPE_TRIGGER = 48; // px — left-drag past this on release opens the drawer
 const RUBBER_START = 80; // px — resistance kicks in past this
 const RUBBER_FACTOR = 0.35; // rubber-band factor beyond RUBBER_START
@@ -44,6 +44,9 @@ export interface TaskCardGestures {
   longPressProgress: number;
   /** When true, the next click on the card is swallowed (a gesture just fired). */
   suppressClickRef: React.MutableRefObject<boolean>;
+  /** True on a touch phone (coarse pointer, <md). Used to scope native-gesture
+   *  suppression (callout / selection / context-menu) to mobile only. */
+  isMobile: boolean;
   /** Close whichever overlay is open and return to idle. */
   closeOverlay: () => void;
 }
@@ -172,7 +175,10 @@ export function useTaskCardGestures(opts: { longPressEnabled: boolean }): TaskCa
 
       if (longPressEnabled) {
         lpTimer.current = setTimeout(() => {
-          if (moved.current || lockedAxis.current) return;
+          // Only a real move (past LONG_PRESS_SLOP → moved=true) aborts the hold.
+          // A tiny drift that merely locked an axis must NOT — that made the
+          // effective tolerance 8px and killed most real 2s holds.
+          if (moved.current) return;
           navigator.vibrate?.(10);
           openPhase('modal');
           softReset();
@@ -193,8 +199,9 @@ export function useTaskCardGestures(opts: { longPressEnabled: boolean }): TaskCa
       lastX.current = t.clientX;
       lastT.current = performance.now();
 
-      // Any real movement kills a pending long press (a hold is near-stationary).
-      if (Math.abs(dx) + Math.abs(dy) > MOVE_CANCEL) {
+      // Real movement kills a pending long press (a hold stays near-stationary).
+      // Uses the generous LONG_PRESS_SLOP so finger tremor over 2s doesn't abort it.
+      if (Math.abs(dx) + Math.abs(dy) > LONG_PRESS_SLOP) {
         moved.current = true;
         clearTimers();
       }
@@ -270,6 +277,7 @@ export function useTaskCardGestures(opts: { longPressEnabled: boolean }): TaskCa
     isDragging,
     longPressProgress,
     suppressClickRef,
+    isMobile,
     closeOverlay,
   };
 }
