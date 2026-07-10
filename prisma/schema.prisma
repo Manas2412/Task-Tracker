@@ -360,6 +360,12 @@ model Task {
   parentTaskId             String?         @map("parent_task_id") @db.Uuid
   linkedTimelineFileId     String?         @map("linked_timeline_file_id") @db.Uuid
 
+  // Per-parent counter for subtask reference numbers (<parent ref>-NN, e.g.
+  // OJS-28 -> OJS-28-01). Advanced only on the parent when a subtask is added;
+  // stays 0 on tasks that have no subtasks. Subtasks no longer consume the
+  // division / Timeline-File sequence.
+  subtaskSeq               Int             @default(0) @map("subtask_seq")
+
   createdById              String          @map("created_by") @db.Uuid
   createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)

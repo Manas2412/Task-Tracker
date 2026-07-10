@@ -20,7 +20,7 @@ import {
 } from '@/lib/rbac';
 import { buildVisibilityClauses, getPmuParentDivisionHeadId } from '@/lib/visibility';
 import { buildTaskParticipantWhere, isTaskCollaborator, isTaskParticipant } from '@/lib/task-participants';
-import { nextTaskRefNumber } from '@/lib/task-ref';
+import { nextSubtaskRefNumber, nextTaskRefNumber } from '@/lib/task-ref';
 
 /**
  * Task server actions.
@@ -1065,8 +1065,9 @@ export async function addSubtaskAction(
 
   try {
     const subtask = await prisma.$transaction(async (tx) => {
-      // Subtasks are numbered by their parent's division (never TL-derived).
-      const refNumber = await nextTaskRefNumber({ divisionId: parent.divisionId }, tx);
+      // Subtasks are numbered relative to their parent: <parent ref>-NN,
+      // e.g. OJS-28 -> OJS-28-01. They do not consume the division / TL sequence.
+      const refNumber = await nextSubtaskRefNumber(parent.id, tx);
       return tx.task.create({
         data: {
           refNumber,
