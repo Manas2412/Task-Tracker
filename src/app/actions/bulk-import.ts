@@ -9,6 +9,7 @@ import { parseCsv, rowsToObjects } from '@/lib/csv';
 import { prisma } from '@/lib/db';
 import { parseDueDateInput } from '@/lib/format';
 import { canCreateDivisionTask, getRbacActor } from '@/lib/rbac';
+import { nextTaskRefNumber } from '@/lib/task-ref';
 
 /**
  * Bulk-import server actions (PRD §5.5 — UI present in v1, real commits
@@ -348,12 +349,7 @@ export async function commitImportAction(
     }
     try {
       const task = await prisma.$transaction(async (tx) => {
-        const div = await tx.division.update({
-          where: { id: row.divisionId },
-          data: { taskSeq: { increment: 1 } },
-          select: { abbreviation: true, taskSeq: true },
-        });
-        const refNumber = `T-${div.abbreviation || 'GEN'}${div.taskSeq}`;
+        const refNumber = await nextTaskRefNumber({ divisionId: row.divisionId }, tx);
         return tx.task.create({
           data: {
             refNumber,

@@ -330,7 +330,9 @@ model DivisionAccessDelegation {
 
 model Task {
   id                       String          @id @default(uuid()) @db.Uuid
-  refNumber                String?         @unique @map("ref_number")
+  // Not globally unique: the TL-<3 digit>-<2 digit> form can recur across
+  // years. The row UUID is the true key; this is just a lookup index.
+  refNumber                String?         @map("ref_number")
   name                     String
   description              String?
 
@@ -391,6 +393,7 @@ model Task {
   @@index([dueDate])
   @@index([parentTaskId])
   @@index([linkedTimelineFileId])
+  @@index([refNumber])
   @@map("tasks")
 }
 
@@ -479,6 +482,8 @@ model TimelineFile {
   refNo                       String              @unique @map("ref_no")
   refYear                     Int                 @map("ref_year")
   refSeq                      Int                 @map("ref_seq")
+  // Per-file counter for tasks generated from this file (TL-<seq>-NN).
+  taskSeq                     Int                 @default(0) @map("task_seq")
   subject                     String
   fromWhom                    String              @map("from_whom")
   receivedDate                DateTime            @map("received_date") @db.Date
