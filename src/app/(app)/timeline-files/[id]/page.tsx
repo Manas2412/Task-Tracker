@@ -186,31 +186,24 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
     canDelete: canEditAtt || a.uploadedById === me.id,
   }));
 
-  // Action document — single canonical one tracked by TF.actionDocumentAttachmentId.
-  const actionAttachments: AttachmentRow[] = tf.actionDocumentAttachmentId
-    ? await prisma.attachment
-        .findUnique({
-          where: { id: tf.actionDocumentAttachmentId },
-          include: { uploadedBy: { select: { name: true } } },
-        })
-        .then((a) =>
-          a
-            ? [
-                {
-                  id: a.id,
-                  fileName: a.fileName,
-                  fileUrl: a.fileUrl,
-                  mimeType: a.mimeType,
-                  sizeBytes: a.sizeBytes,
-                  source: a.source as 'uploaded' | 'drive_link',
-                  uploadedAt: a.uploadedAt,
-                  uploaderName: a.uploadedBy.name,
-                  canDelete: canEditAtt || a.uploadedById === me.id,
-                },
-              ]
-            : [],
-        )
-    : [];
+  // Action documents — the office's response / outcome files. Multiple allowed;
+  // TF.actionDocumentAttachmentId still tracks the most recent as canonical.
+  const actionRows = await prisma.attachment.findMany({
+    where: { ownerType: 'timeline_file_action', ownerId: tf.id },
+    include: { uploadedBy: { select: { name: true } } },
+    orderBy: { uploadedAt: 'asc' },
+  });
+  const actionAttachments: AttachmentRow[] = actionRows.map((a) => ({
+    id: a.id,
+    fileName: a.fileName,
+    fileUrl: a.fileUrl,
+    mimeType: a.mimeType,
+    sizeBytes: a.sizeBytes,
+    source: a.source as 'uploaded' | 'drive_link',
+    uploadedAt: a.uploadedAt,
+    uploaderName: a.uploadedBy.name,
+    canDelete: canEditAtt || a.uploadedById === me.id,
+  }));
 
   // ---------- derive rendering data ----------
 
@@ -342,12 +335,17 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
 
       <section className="px-4 md:px-6 py-5 border-b border-line-2">
         <h2 className="section-label mb-3">
-          Action document
-          {actionAttachments.length === 0 ? (
+          Action documents
+          {actionAttachments.length > 0 ? (
+            <span className="ml-2 text-ink-3 text-[11px] tracking-normal normal-case font-normal">
+              {actionAttachments.length}{' '}
+              {actionAttachments.length === 1 ? 'file' : 'files'}
+            </span>
+          ) : (
             <span className="ml-2 text-ink-3 text-[11px] tracking-normal normal-case font-normal">
               Not yet uploaded
             </span>
-          ) : null}
+          )}
         </h2>
         <AttachmentList
           scope="tf_action"
@@ -355,7 +353,8 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
           attachments={actionAttachments}
           canEdit={canEditAtt}
           s3Configured={s3Ready}
-          mode="list-single"
+          mode="list-multi"
+          emptyHint="The office's response — replies, orders, or outcome files — lives here."
         />
       </section>
 

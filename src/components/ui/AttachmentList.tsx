@@ -62,57 +62,67 @@ export function AttachmentList({
   const onPickFile = () => fileInputRef.current?.click();
 
   const onFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = '';
-    if (!file) return;
-    if (file.size > MAX_UPLOAD_BYTES) {
-      setUploadError(`File is over ${formatBytes(MAX_UPLOAD_BYTES)}.`);
+    if (files.length === 0) return;
+
+    const oversize = files.find((f) => f.size > MAX_UPLOAD_BYTES);
+    if (oversize) {
+      setUploadError(`${oversize.name} is over ${formatBytes(MAX_UPLOAD_BYTES)}.`);
       return;
     }
     setUploadError(null);
-    setUploadProgress(`Uploading ${file.name}…`);
+
     try {
-      // One derived content-type for presign + PUT + register, so a file whose
-      // browser MIME is empty/non-canonical still passes the allow-list and the
-      // presigned signature matches the PUT.
-      const contentType = guessContentType(file.name, file.type);
-      const presignRes = await fetch('/api/attachments/upload-url', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          scope,
-          parentId,
-          filename: file.name,
-          contentType,
-          sizeBytes: file.size,
-        }),
-      });
-      if (!presignRes.ok) {
-        const body = await presignRes.json().catch(() => ({}));
-        throw new Error(body.error ?? 'Could not start upload.');
-      }
-      const { key, url } = (await presignRes.json()) as { key: string; url: string };
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setUploadProgress(
+          files.length > 1
+            ? `Uploading ${file.name} (${i + 1} of ${files.length})…`
+            : `Uploading ${file.name}…`,
+        );
+        // One derived content-type for presign + PUT + register, so a file whose
+        // browser MIME is empty/non-canonical still passes the allow-list and the
+        // presigned signature matches the PUT.
+        const contentType = guessContentType(file.name, file.type);
+        const presignRes = await fetch('/api/attachments/upload-url', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            scope,
+            parentId,
+            filename: file.name,
+            contentType,
+            sizeBytes: file.size,
+          }),
+        });
+        if (!presignRes.ok) {
+          const body = await presignRes.json().catch(() => ({}));
+          throw new Error(body.error ?? 'Could not start upload.');
+        }
+        const { key, url } = (await presignRes.json()) as { key: string; url: string };
 
-      const putRes = await fetch(url, {
-        method: 'PUT',
-        headers: { 'content-type': contentType },
-        body: file,
-      });
-      if (!putRes.ok) {
-        throw new Error(`S3 rejected the upload (${putRes.status}).`);
-      }
+        const putRes = await fetch(url, {
+          method: 'PUT',
+          headers: { 'content-type': contentType },
+          body: file,
+        });
+        if (!putRes.ok) {
+          throw new Error(`S3 rejected the upload (${putRes.status}).`);
+        }
 
-      const fd = new FormData();
-      fd.set('scope', scope);
-      fd.set('parentId', parentId);
-      fd.set('source', 'uploaded');
-      fd.set('key', key);
-      fd.set('fileName', file.name);
-      fd.set('mimeType', contentType);
-      fd.set('sizeBytes', String(file.size));
-      const registered = await registerAttachmentAction(undefined, fd);
-      if (!registered.ok) {
-        throw new Error(registered.error ?? 'Could not save the attachment.');
+        const fd = new FormData();
+        fd.set('scope', scope);
+        fd.set('parentId', parentId);
+        fd.set('source', 'uploaded');
+        fd.set('key', key);
+        fd.set('fileName', file.name);
+        fd.set('mimeType', contentType);
+        fd.set('sizeBytes', String(file.size));
+        const registered = await registerAttachmentAction(undefined, fd);
+        if (!registered.ok) {
+          throw new Error(registered.error ?? 'Could not save the attachment.');
+        }
       }
       setUploadProgress(null);
     } catch (err) {
@@ -151,19 +161,23 @@ export function AttachmentList({
                 : 'Storage is not configured on this server. Use a Drive link instead.'
             }
             className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[12px] font-medium transition-colors',
+              'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] font-medium',
               s3Configured
-                ? 'border-line bg-panel text-ink hover:border-ink-4'
-                : 'border-line bg-bg text-ink-3 cursor-not-allowed',
+                ? 'upload-btn'
+                : 'border border-line bg-bg text-ink-3 cursor-not-allowed',
             )}
           >
-            <i className="ti ti-cloud-upload text-[14px]" aria-hidden="true" />
-            {mode === 'list-single' && !isEmpty ? 'Replace file' : 'Upload file'}
+            <i className="upload-btn-icon ti ti-cloud-upload text-[15px]" aria-hidden="true" />
+            {mode === 'list-single' && !isEmpty
+              ? 'Replace file'
+              : mode === 'list-single'
+                ? 'Upload file'
+                : 'Upload files'}
           </button>
           <button
             type="button"
             onClick={() => setDriveOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line bg-panel text-[12px] font-medium text-ink hover:border-ink-4 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-line bg-panel text-[12px] font-medium text-ink-2 hover:border-ink-4 hover:text-ink transition-colors"
           >
             <i className="ti ti-link text-[14px]" aria-hidden="true" />
             Add Drive link
@@ -171,6 +185,7 @@ export function AttachmentList({
           <input
             ref={fileInputRef}
             type="file"
+            multiple={mode !== 'list-single'}
             onChange={onFileChosen}
             className="sr-only"
             aria-hidden="true"

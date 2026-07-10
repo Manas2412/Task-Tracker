@@ -504,14 +504,14 @@ export function CreateTimelineFileDialog({
                         : 'Storage is not configured. Use a Drive link instead.'
                     }
                     className={cn(
-                      'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-[11px] font-medium transition-colors',
-                      s3Configured
-                        ? 'border-line bg-panel text-ink-2 hover:border-ink-4'
-                        : 'border-line bg-bg text-ink-3 cursor-not-allowed',
+                      'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium',
+                      s3Configured && !uploading
+                        ? 'upload-btn'
+                        : 'border border-line bg-bg text-ink-3 cursor-not-allowed',
                     )}
                   >
-                    <i className="ti ti-cloud-upload text-[13px]" aria-hidden="true" />
-                    Upload file
+                    <i className="upload-btn-icon ti ti-cloud-upload text-[14px]" aria-hidden="true" />
+                    Upload files
                   </button>
                   <button
                     type="button"
