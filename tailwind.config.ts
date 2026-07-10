@@ -32,6 +32,7 @@ const config: Config = {
           DEFAULT: 'var(--primary)',
           soft: 'var(--primary-soft)',
           line: 'var(--primary-line)',
+          tint: 'var(--primary-tint)',
         },
         accent: {
           DEFAULT: 'var(--accent)',

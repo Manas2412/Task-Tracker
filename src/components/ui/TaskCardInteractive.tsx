@@ -144,7 +144,7 @@ export function TaskCardInteractive(props: TaskCardInteractiveProps) {
         ownerName={cardProps.owner.name}
         ownerInitials={cardProps.owner.initials}
         ownerColour={cardProps.owner.colour}
-        attachmentNames={cardProps.attachmentNames ?? []}
+        docs={cardProps.attachmentDocs ?? []}
       />
 
       <TaskActionModal

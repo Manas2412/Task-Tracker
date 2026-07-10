@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *   - tap                → let the underlying <Link> navigate (nothing to do)
  *   - vertical drag       → hand off to native scroll + PullToRefresh (untouched)
  *   - horizontal left drag→ peek, then open the right slide-over on release
- *   - long press (~2 s)   → open the centered action modal
+ *   - long press (~1 s)   → open the centered action modal
  *
  * Load-bearing detail: the touch listeners are attached imperatively with
  * `{ passive: false }` so a horizontal drag can `preventDefault()` (stopping
@@ -20,12 +20,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  */
 
 const DIR_LOCK_SLOP = 8; // px — first move past this locks the axis
-const LONG_PRESS_SLOP = 16; // px — a hold that drifts past this (from the start point) cancels the long press. Generous so a real 2s finger-hold survives natural tremor.
+const LONG_PRESS_SLOP = 16; // px — a hold that drifts past this (from the start point) cancels the long press. Generous so a real ~1s finger-hold survives natural tremor.
 const SWIPE_TRIGGER = 48; // px — left-drag past this on release opens the drawer
 const RUBBER_START = 80; // px — resistance kicks in past this
 const RUBBER_FACTOR = 0.35; // rubber-band factor beyond RUBBER_START
 const MAX_PEEK = 104; // px — hard clamp on the peek
-const LONG_PRESS_MS = 2000; // hold duration for the action modal
+const LONG_PRESS_MS = 1000; // hold duration for the action modal (halved from 2s for a snappier trigger)
 const FLICK_VELOCITY = 0.5; // px/ms — a fast left flick opens below the distance threshold
 const SUPPRESS_RESET_MS = 350; // release the click-suppression shortly after close
 
@@ -177,7 +177,7 @@ export function useTaskCardGestures(opts: { longPressEnabled: boolean }): TaskCa
         lpTimer.current = setTimeout(() => {
           // Only a real move (past LONG_PRESS_SLOP → moved=true) aborts the hold.
           // A tiny drift that merely locked an axis must NOT — that made the
-          // effective tolerance 8px and killed most real 2s holds.
+          // effective tolerance 8px and killed most real long holds.
           if (moved.current) return;
           navigator.vibrate?.(10);
           openPhase('modal');
@@ -200,7 +200,7 @@ export function useTaskCardGestures(opts: { longPressEnabled: boolean }): TaskCa
       lastT.current = performance.now();
 
       // Real movement kills a pending long press (a hold stays near-stationary).
-      // Uses the generous LONG_PRESS_SLOP so finger tremor over 2s doesn't abort it.
+      // Uses the generous LONG_PRESS_SLOP so finger tremor over the hold doesn't abort it.
       if (Math.abs(dx) + Math.abs(dy) > LONG_PRESS_SLOP) {
         moved.current = true;
         clearTimers();

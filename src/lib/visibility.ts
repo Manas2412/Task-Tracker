@@ -157,6 +157,9 @@ export type VisibleTask = Task & {
   hasAttachment: boolean;
   /** File names of the task's attachments, oldest first (for the hover preview). */
   attachmentNames: string[];
+  /** Attachments (id + name), oldest first — power the tappable document list
+   *  in the mobile swipe-left slide-over. */
+  attachments: { id: string; fileName: string }[];
 };
 
 const TASK_PAGE_LIMIT = 200;
@@ -213,26 +216,27 @@ export async function fetchVisibleTasks(opts: {
   ]);
 
   const taskIds = tasks.map((t) => t.id);
-  const namesByTask = new Map<string, string[]>();
+  const docsByTask = new Map<string, { id: string; fileName: string }[]>();
   if (taskIds.length > 0) {
     const rows = await prisma.attachment.findMany({
       where: { ownerType: 'task', ownerId: { in: taskIds } },
-      select: { ownerId: true, fileName: true },
+      select: { id: true, ownerId: true, fileName: true },
       orderBy: { uploadedAt: 'asc' },
     });
     for (const r of rows) {
-      const list = namesByTask.get(r.ownerId) ?? [];
-      list.push(r.fileName);
-      namesByTask.set(r.ownerId, list);
+      const list = docsByTask.get(r.ownerId) ?? [];
+      list.push({ id: r.id, fileName: r.fileName });
+      docsByTask.set(r.ownerId, list);
     }
   }
 
   const mapped = tasks.map((t) => {
-    const attachmentNames = namesByTask.get(t.id) ?? [];
+    const attachments = docsByTask.get(t.id) ?? [];
     return {
       ...t,
-      hasAttachment: attachmentNames.length > 0,
-      attachmentNames,
+      hasAttachment: attachments.length > 0,
+      attachmentNames: attachments.map((a) => a.fileName),
+      attachments,
     };
   }) as VisibleTask[];
 
