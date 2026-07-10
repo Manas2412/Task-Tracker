@@ -566,14 +566,18 @@ export default async function TaskDetailPage({ params }: PageProps) {
         canEdit={canEditFields || isCollaborator}
       />
 
-      <SectionSubtasks
-        taskId={task.id}
-        subtasks={task.subtasks}
-        canEdit={canEditFields}
-        canAdd={canEditFields || isCollaborator}
-        assignees={subtaskAssignees}
-        parentDueDate={task.dueDate}
-      />
+      {/* Subtasks are one level deep — a subtask has no Subtasks section of its
+          own (and can't gain one). Any legacy nested children still render. */}
+      {!isSubtask || task.subtasks.length > 0 ? (
+        <SectionSubtasks
+          taskId={task.id}
+          subtasks={task.subtasks}
+          canEdit={canEditFields}
+          canAdd={!isSubtask && (canEditFields || isCollaborator)}
+          assignees={subtaskAssignees}
+          parentDueDate={task.dueDate}
+        />
+      ) : null}
 
       {task.linkedTimelineFile ? (
         <DetailSection title="Linked timeline file">
