@@ -16,8 +16,14 @@ export type { TaskCardProps } from './TaskCard';
 export { TaskCardInteractive } from './TaskCardInteractive';
 export type { TaskCardInteractiveProps } from './TaskCardInteractive';
 
-export { TimelineFileCard, TF_REF_CHIP } from './TimelineFileCard';
+export { TimelineFileCard, TF_REF_CHIP, TF_STATUS_LABEL, TF_STATUS_TONE } from './TimelineFileCard';
 export type { TimelineFileCardProps } from './TimelineFileCard';
+
+export { TimelineFileCardInteractive } from './TimelineFileCardInteractive';
+export type { TimelineFileCardInteractiveProps } from './TimelineFileCardInteractive';
+
+export { SlideOverShell, SlideOverSection, SlideOverDocs } from './SlideOverShell';
+export type { SlideOverDoc } from './SlideOverShell';
 
 export { Sheet } from './Sheet';
 export { CollapsibleSection } from './CollapsibleSection';

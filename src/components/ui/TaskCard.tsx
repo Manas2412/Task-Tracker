@@ -37,6 +37,9 @@ export type TaskCardProps = {
   description?: string | null;
   /** Attachment file names — not shown on the card, used by the hover preview. */
   attachmentNames?: string[];
+  /** Attachments (id + name) — not shown on the card; power the tappable
+   *  document list in the mobile swipe-left slide-over. */
+  attachmentDocs?: { id: string; fileName: string }[];
   division: { name: string };
   status: PillStatusTone;
   priority: PillPriorityTone;

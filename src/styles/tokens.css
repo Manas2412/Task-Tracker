@@ -29,6 +29,7 @@
   --primary:       #1e1b4b;
   --primary-soft:  #ebebf7;
   --primary-line:  #c4c2e0;
+  --primary-tint:  #f4f4fc;   /* very light indigo — mobile preview-panel wash */
 
   --accent:        #b45309;
   --accent-soft:   #fef3c7;

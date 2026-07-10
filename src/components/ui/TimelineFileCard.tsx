@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { MarkedToChip } from '@/components/ui/MarkedToChip';
 import { Pill } from '@/components/ui/Pill';
+import { istDayDiff } from '@/lib/date';
 import { TASK_PRIORITY_LABEL } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 
@@ -23,7 +24,7 @@ export const TF_REF_CHIP =
  * Indigo accent throughout (the "structure" signal — TF and Super Admin).
  */
 
-const TF_STATUS_LABEL: Record<string, string> = {
+export const TF_STATUS_LABEL: Record<string, string> = {
   pending_action: 'Pending action',
   in_progress: 'In progress',
   awaiting_reply: 'Awaiting reply',
@@ -31,7 +32,7 @@ const TF_STATUS_LABEL: Record<string, string> = {
   closed: 'Closed',
 };
 
-const TF_STATUS_TONE: Record<string, PillStatusTone> = {
+export const TF_STATUS_TONE: Record<string, PillStatusTone> = {
   pending_action: 'pending_action',
   in_progress: 'in_progress',
   awaiting_reply: 'awaiting_reply',
@@ -188,15 +189,20 @@ function Compact(p: CompactProps) {
 // Helpers
 // ------------------------------------------------------------
 
+// IST-explicit so the countdown agrees on the server and (now that this card
+// renders inside a client wrapper) the browser — no hydration mismatch or
+// off-by-one at the IST day boundary. deadlineDate is a UTC-midnight date-only
+// column; istDayDiff compares by IST calendar day.
 function daysUntil(d: Date): number {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(d);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  return istDayDiff(d, new Date());
 }
 
 function formatShort(d: Date): string {
-  // 18 May 2026
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  // 18 May 2026 — timeZone pinned to IST so server and client render the same day.
+  return d.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  });
 }

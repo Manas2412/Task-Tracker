@@ -78,6 +78,11 @@ export type VisibleTimelineFile = TimelineFile & {
     division: { id: string; name: string; avatarColour: string };
   }>;
   _count: { taskLinks: number };
+  /** Source correspondence files (id + name), oldest first — the tappable
+   *  document list in the mobile swipe-left slide-over. */
+  sourceDocs: { id: string; fileName: string }[];
+  /** Action / response files (id + name), oldest first. */
+  actionDocs: { id: string; fileName: string }[];
 };
 
 export async function fetchVisibleTimelineFiles(opts: {
@@ -106,7 +111,7 @@ export async function fetchVisibleTimelineFiles(opts: {
 
   const orderBy = tfListOrderBy(opts.sort ?? 'default');
 
-  return prisma.timelineFile.findMany({
+  const tfs = await prisma.timelineFile.findMany({
     where: {
       archivedAt: null,
       AND: [visibility, statusFilter, divisionFilter],
@@ -120,6 +125,35 @@ export async function fetchVisibleTimelineFiles(opts: {
     },
     orderBy,
   });
+
+  // Batched preview documents for the mobile slide-over — one query for every
+  // visible file's source + action attachments, grouped back per file. Mirrors
+  // the task-list attachment fetch in `fetchVisibleTasks`.
+  const tfIds = tfs.map((t) => t.id);
+  const sourceByTf = new Map<string, { id: string; fileName: string }[]>();
+  const actionByTf = new Map<string, { id: string; fileName: string }[]>();
+  if (tfIds.length > 0) {
+    const rows = await prisma.attachment.findMany({
+      where: {
+        ownerType: { in: ['timeline_file_source', 'timeline_file_action'] },
+        ownerId: { in: tfIds },
+      },
+      select: { id: true, ownerId: true, ownerType: true, fileName: true },
+      orderBy: { uploadedAt: 'asc' },
+    });
+    for (const r of rows) {
+      const target = r.ownerType === 'timeline_file_action' ? actionByTf : sourceByTf;
+      const list = target.get(r.ownerId) ?? [];
+      list.push({ id: r.id, fileName: r.fileName });
+      target.set(r.ownerId, list);
+    }
+  }
+
+  return tfs.map((t) => ({
+    ...t,
+    sourceDocs: sourceByTf.get(t.id) ?? [],
+    actionDocs: actionByTf.get(t.id) ?? [],
+  }));
 }
 
 /**

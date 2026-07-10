@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { TimelineFileCard } from '@/components/ui';
+import { TimelineFileCardInteractive } from '@/components/ui';
 import { DivisionAccordion } from '@/components/DivisionAccordion';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
@@ -228,7 +228,7 @@ function TfGrid({ items }: { items: VisibleTimelineFile[] }) {
     <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {items.map((tf) => (
         <li key={tf.id}>
-          <TimelineFileCard
+          <TimelineFileCardInteractive
             refNo={tf.refNo}
             subject={tf.subject}
             fromWhom={tf.fromWhom}
@@ -239,6 +239,8 @@ function TfGrid({ items }: { items: VisibleTimelineFile[] }) {
             markedTo={tf.markedTo.map((m) => m.division)}
             taskLinkCount={tf._count.taskLinks}
             href={`/timeline-files/${tf.id}`}
+            sourceDocs={tf.sourceDocs}
+            actionDocs={tf.actionDocs}
           />
         </li>
       ))}

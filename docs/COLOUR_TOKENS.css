@@ -34,6 +34,7 @@
   --primary:       #1e1b4b;   /* indigo */
   --primary-soft:  #ebebf7;   /* indigo background — quote callouts, soft pills */
   --primary-line:  #c4c2e0;   /* indigo border */
+  --primary-tint:  #f4f4fc;   /* very light indigo — mobile preview-panel wash */
 
   --accent:        #b45309;   /* amber */
   --accent-soft:   #fef3c7;   /* amber background — JS Priority badges, deadline warnings */
