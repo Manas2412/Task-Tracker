@@ -217,6 +217,7 @@ function TaskRow({ task: t }: { task: VisibleTask }) {
             ? t.division.name
             : undefined
         }
+        mobileSplit
         href={`/tasks/${t.id}`}
       />
     </li>
