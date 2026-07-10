@@ -13,9 +13,6 @@ export { HoverPreview } from './HoverPreview';
 export { TaskCard } from './TaskCard';
 export type { TaskCardProps } from './TaskCard';
 
-export { TaskCardInteractive } from './TaskCardInteractive';
-export type { TaskCardInteractiveProps } from './TaskCardInteractive';
-
 export { TimelineFileCard, TF_REF_CHIP } from './TimelineFileCard';
 export type { TimelineFileCardProps } from './TimelineFileCard';
 
