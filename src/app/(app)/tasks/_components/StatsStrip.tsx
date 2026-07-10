@@ -59,23 +59,40 @@ export function StatsStrip({ counts }: StatsStripProps) {
   const close = () => setKind(null);
   const meta = kind ? SHEET_META[kind] : null;
 
+  const items: { label: string; value: number; tone: 'ink' | 'accent' | 'urgent' | 'success'; kind: Kind }[] = [
+    { label: 'Open tasks', value: counts.open, tone: 'ink', kind: 'divisions' },
+    { label: 'Due today', value: counts.dueToday, tone: 'accent', kind: 'today' },
+    { label: 'Overdue', value: counts.overdue, tone: counts.overdue > 0 ? 'urgent' : 'ink', kind: 'overdue' },
+    { label: 'Completed', value: counts.completed, tone: 'success', kind: 'completed' },
+  ];
+
   return (
     <>
-      <div className="glass-card mt-4 grid grid-cols-2 gap-3 rounded-2xl p-4 md:grid-cols-4 md:gap-6 md:p-5">
-        <StatButton label="Open tasks" value={counts.open} onClick={() => openSheet('divisions')} />
-        <StatButton label="Due today" value={counts.dueToday} tone="accent" onClick={() => openSheet('today')} />
-        <StatButton
-          label="Overdue"
-          value={counts.overdue}
-          tone={counts.overdue > 0 ? 'urgent' : 'ink'}
-          onClick={() => openSheet('overdue')}
-        />
-        <StatButton
-          label="Completed"
-          value={counts.completed}
-          tone="success"
-          onClick={() => openSheet('completed')}
-        />
+      {/* Mobile: four separate summary cards (2×2). */}
+      <div className="mt-4 grid grid-cols-2 gap-2.5 md:hidden">
+        {items.map((it) => (
+          <StatButton
+            key={it.label}
+            label={it.label}
+            value={it.value}
+            tone={it.tone}
+            variant="card"
+            onClick={() => openSheet(it.kind)}
+          />
+        ))}
+      </div>
+      {/* Desktop: one frosted glass card holding the four tiles. */}
+      <div className="glass-card mt-4 hidden grid-cols-4 gap-6 rounded-2xl p-5 md:grid">
+        {items.map((it) => (
+          <StatButton
+            key={it.label}
+            label={it.label}
+            value={it.value}
+            tone={it.tone}
+            variant="tile"
+            onClick={() => openSheet(it.kind)}
+          />
+        ))}
       </div>
 
       <Sheet open={kind !== null} onClose={close} title={meta?.title} subtitle={meta?.subtitle}>
@@ -109,11 +126,14 @@ function StatButton({
   label,
   value,
   tone = 'ink',
+  variant = 'tile',
   onClick,
 }: {
   label: string;
   value: number;
   tone?: 'ink' | 'accent' | 'urgent' | 'success';
+  /** 'card' = a standalone bordered card (mobile); 'tile' = inside the glass card (desktop). */
+  variant?: 'tile' | 'card';
   onClick: () => void;
 }) {
   const toneClass =
@@ -128,9 +148,20 @@ function StatButton({
     <button
       type="button"
       onClick={onClick}
-      className="group -m-1 rounded-xl p-1 text-left transition-colors hover:bg-white/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+      className={cn(
+        'group text-left transition-[background-color,border-color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink',
+        variant === 'card'
+          ? 'rounded-2xl border border-line bg-panel p-3.5 shadow-card hover:border-ink-4 hover:shadow-card-hover'
+          : '-m-1 rounded-xl p-1 hover:bg-white/40',
+      )}
     >
-      <div className={cn('font-serif text-[22px] leading-none font-medium md:text-[28px]', toneClass)}>
+      <div
+        className={cn(
+          'font-serif leading-none font-medium',
+          variant === 'card' ? 'text-[24px]' : 'text-[22px] md:text-[28px]',
+          toneClass,
+        )}
+      >
         {value}
       </div>
       <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.04em] text-ink-3 md:text-[11px]">

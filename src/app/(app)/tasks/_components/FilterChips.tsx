@@ -25,7 +25,7 @@ export function FilterChips({ active }: { active: TaskFilter }) {
   return (
     <nav
       aria-label="Filter tasks"
-      className="flex gap-1.5 overflow-x-auto md:overflow-visible md:flex-wrap snap-x snap-proximity [&::-webkit-scrollbar]:hidden -mx-1 px-1 py-1"
+      className="flex justify-end md:justify-start gap-1.5 overflow-x-auto md:overflow-visible md:flex-wrap snap-x snap-proximity [&::-webkit-scrollbar]:hidden -mx-1 px-1 py-1"
     >
       {CHIPS.map((chip) => {
         const isActive = chip.id === active;

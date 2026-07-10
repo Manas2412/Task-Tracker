@@ -49,6 +49,13 @@ export type TaskCardProps = {
   primaryDivisionName?: string;
   /** Render the indigo Milestone pill in the footer when true. */
   milestone?: boolean;
+  /**
+   * Mobile layout: when true, the status pills + meta sit in a right-hand
+   * column beside the title/division (a shorter card) instead of stacked
+   * below. Reverts to the stacked layout on desktop. Opt-in (tasks list only)
+   * so other TaskCard usages keep the classic layout.
+   */
+  mobileSplit?: boolean;
   href?: string;
   className?: string;
 };
@@ -67,6 +74,7 @@ export function TaskCard({
   hasAttachment,
   primaryDivisionName,
   milestone,
+  mobileSplit,
   href,
   className,
 }: TaskCardProps) {
@@ -74,17 +82,21 @@ export function TaskCard({
   const Wrapper: React.ElementType = href ? Link : 'article';
   const wrapperProps = href ? { href } : {};
 
+  const priorityDot = cn('w-2 h-2 rounded-full shrink-0', PRIORITY_DOT[priority]);
+
   return (
     <Wrapper
       {...wrapperProps}
       data-task-id={taskId}
       className={cn(
-        'relative block bg-panel border border-line rounded-xl p-[13px] shadow-card',
+        'relative bg-panel border border-line rounded-xl p-[13px] shadow-card',
         'transition-[color,border-color,box-shadow,transform] duration-[var(--dur-base)] ease-[var(--ease-standard)]',
         'hover:border-ink-4 hover:-translate-y-px hover:shadow-card-hover active:translate-y-0 active:scale-[0.99]',
         'motion-reduce:transition-none motion-reduce:transform-none',
         'focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2',
         isJs && 'border-accent-line bg-gradient-to-b from-accent-tint to-panel',
+        // Two columns on mobile when split; classic stacked card on desktop.
+        mobileSplit ? 'flex items-start gap-3 md:block' : 'block',
         className,
       )}
     >
@@ -95,32 +107,54 @@ export function TaskCard({
         />
       ) : null}
 
-      <header className="flex items-start justify-between gap-2.5 mb-2">
-        <div className="flex-1 min-w-0">
-          {refNumber ? (
-            <span className="font-mono text-[10px] text-ink-3 tracking-wide">{refNumber}</span>
-          ) : null}
-          <h3 className="text-[14px] font-medium leading-[1.35] text-ink tracking-[-0.005em]">
-            {name}
-          </h3>
-        </div>
-        <span
-          aria-label={`${priority} priority`}
-          className={cn('w-2 h-2 rounded-full mt-[5px] shrink-0', PRIORITY_DOT[priority])}
-        />
-      </header>
+      {/* Identity: title block + division. `md:contents` lets it dissolve into
+          the card's normal stacking on desktop. */}
+      <div className={mobileSplit ? 'flex-1 min-w-0 md:contents' : 'contents'}>
+        <header className="flex items-start justify-between gap-2.5 mb-2">
+          <div className="flex-1 min-w-0">
+            {refNumber ? (
+              <span className="font-mono text-[10px] text-ink-3 tracking-wide">{refNumber}</span>
+            ) : null}
+            <h3 className="text-[14px] font-medium leading-[1.35] text-ink tracking-[-0.005em]">
+              {name}
+            </h3>
+          </div>
+          <span
+            aria-label={`${priority} priority`}
+            className={cn(priorityDot, 'mt-[5px]', mobileSplit && 'hidden md:block')}
+          />
+        </header>
 
-      <p className="text-[11px] text-ink-3 mb-2 inline-flex items-center gap-1.5">
-        <span
-          className="w-1.5 h-1.5 rounded-full shrink-0"
-          style={{ backgroundColor: owner.colour }}
-          aria-hidden="true"
-        />
-        {division.name}
-      </p>
+        <p className="text-[11px] text-ink-3 mb-2 inline-flex items-center gap-1.5">
+          <span
+            className="w-1.5 h-1.5 rounded-full shrink-0"
+            style={{ backgroundColor: owner.colour }}
+            aria-hidden="true"
+          />
+          {division.name}
+        </p>
+      </div>
 
-      <footer className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-1.5 flex-wrap">
+      {/* Status + meta: a right-hand column on mobile when split, the footer row
+          on desktop. */}
+      <footer
+        className={cn(
+          mobileSplit
+            ? 'shrink-0 max-w-[47%] flex flex-col items-end gap-1.5 md:max-w-none md:flex-row md:items-center md:justify-between'
+            : 'flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between',
+        )}
+      >
+        {mobileSplit ? (
+          <span aria-hidden="true" className={cn(priorityDot, 'md:hidden')} />
+        ) : null}
+
+        <div
+          className={cn(
+            mobileSplit
+              ? 'flex flex-wrap justify-end gap-1 md:gap-1.5 md:justify-start md:items-center'
+              : 'flex gap-1.5 flex-wrap',
+          )}
+        >
           <Pill variant="status" tone={status} label={STATUS_LABEL[status]} />
           {jsPriorityLane ? <Pill variant="js" lane={jsPriorityLane} /> : null}
           {milestone ? <Pill variant="milestone" /> : null}
@@ -135,7 +169,14 @@ export function TaskCard({
           ) : null}
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-ink-3 shrink-0 w-full sm:w-auto sm:justify-end">
+        <div
+          className={cn(
+            'flex items-center text-[11px] text-ink-3 shrink-0',
+            mobileSplit
+              ? 'flex-wrap justify-end gap-x-2 gap-y-1 md:flex-nowrap md:w-auto md:justify-end'
+              : 'gap-2 w-full sm:w-auto sm:justify-end',
+          )}
+        >
           {hasAttachment ? (
             <i className="ti ti-paperclip text-[13px] text-ink-3" aria-hidden="true" title="Has attachment" />
           ) : null}
