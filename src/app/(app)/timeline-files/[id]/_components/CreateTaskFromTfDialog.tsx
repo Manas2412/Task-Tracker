@@ -4,21 +4,34 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFormState, useFormStatus } from 'react-dom';
 
-import { Sheet } from '@/components/ui';
+import { Sheet, UserPicker, type UserPickerOption } from '@/components/ui';
 import { createTaskAction } from '@/app/actions/tasks';
 import { INITIAL_CREATE_STATE, type CreateTaskState } from '@/app/actions/states';
 import { cn } from '@/lib/utils';
 
-type DivisionOption = {
+export type CtfDivisionOption = {
   id: string;
   name: string;
+  /** Office of JS tasks may be owned by any active user. */
+  isOfficeOfJs: boolean;
+};
+
+export type CtfOwnerCandidate = {
+  id: string;
+  name: string;
+  designation: string;
+  divisionId: string;
+  divisionName: string;
+  divisionColour: string;
 };
 
 type CreateTaskFromTfDialogProps = {
   tfId: string;
   refNo: string;
   defaultDueDate: string | null; // ISO yyyy-mm-dd
-  divisions: DivisionOption[]; // marked-to divisions
+  divisions: CtfDivisionOption[]; // marked-to divisions the caller may spawn into
+  /** Active members of those divisions — the optional initial-owner pool. */
+  ownerCandidates: CtfOwnerCandidate[];
 };
 
 const PRIORITIES = [
@@ -33,6 +46,7 @@ export function CreateTaskFromTfDialog({
   refNo,
   defaultDueDate,
   divisions,
+  ownerCandidates,
 }: CreateTaskFromTfDialogProps) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -44,17 +58,20 @@ export function CreateTaskFromTfDialog({
   );
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
   const [divisionId, setDivisionId] = useState(divisions[0]?.id ?? '');
+  const [ownerId, setOwnerId] = useState('');
 
   useEffect(() => {
     if (open) {
       setPriority('medium');
       setDivisionId(divisions[0]?.id ?? '');
+      setOwnerId('');
     }
   }, [open, divisions]);
 
   useEffect(() => {
     if (state.ok) {
       formRef.current?.reset();
+      setOwnerId('');
       setOpen(false);
       router.refresh();
     }
@@ -62,6 +79,26 @@ export function CreateTaskFromTfDialog({
   }, [state.ok, state.epoch]);
 
   const isCrossDivision = divisions.length > 1;
+  const selectedDivision = divisions.find((d) => d.id === divisionId);
+
+  // Owner pool for the picked division: its members, or any active user for an
+  // Office-of-JS task. Marked-to targets are always top-level divisions (the
+  // marked-to editor offers no PMUs), so a home-division match is exactly
+  // createTaskAction's server-side membership check on this path.
+  const ownerOptions: UserPickerOption[] = ownerCandidates
+    .filter((c) => (selectedDivision?.isOfficeOfJs ? true : c.divisionId === divisionId))
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      designation: c.designation,
+      divisionName: c.divisionName,
+      divisionColour: c.divisionColour,
+    }));
+
+  const onDivisionChange = (id: string) => {
+    setDivisionId(id);
+    setOwnerId(''); // the previous owner may not belong to the new division
+  };
 
   return (
     <>
@@ -166,7 +203,7 @@ export function CreateTaskFromTfDialog({
                   <select
                     id="ctf-div"
                     value={divisionId}
-                    onChange={(e) => setDivisionId(e.target.value)}
+                    onChange={(e) => onDivisionChange(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-line bg-panel text-[13px] outline-none focus:border-ink appearance-none"
                   >
                     {divisions.map((d) => (
@@ -179,6 +216,27 @@ export function CreateTaskFromTfDialog({
               ) : (
                 <div />
               )}
+            </div>
+
+            {/* Owner (optional) — a head may name the initial owner up front,
+                otherwise the task starts unassigned for a member to claim. */}
+            <div>
+              <label htmlFor="ctf-owner" className="block text-[11px] font-medium text-ink-2 mb-1.5">
+                Owner <span className="font-normal text-ink-3">· optional</span>
+              </label>
+              <UserPicker
+                options={ownerOptions}
+                value={ownerId}
+                onChange={setOwnerId}
+                name="ownerId"
+                placeholder="Leave blank to start unassigned…"
+              />
+              <p className="text-[11px] text-ink-3 mt-1">
+                Blank keeps it unassigned — any member of the division can claim it.
+              </p>
+              {state.fieldErrors?.ownerId ? (
+                <p className="text-[11px] text-urgent mt-1">{state.fieldErrors.ownerId}</p>
+              ) : null}
             </div>
 
             {/* Priority */}
