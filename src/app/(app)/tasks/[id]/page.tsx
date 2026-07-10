@@ -10,6 +10,7 @@ import { prisma } from '@/lib/db';
 import { formatDue, initialsOf } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import {
+  canManageTask,
   canTransferTaskTo,
   fetchTransferTargets,
   getHeadedDivisionsByUser,
@@ -164,17 +165,24 @@ export default async function TaskDetailPage({ params }: PageProps) {
       isHeadOfTaskDivision ||
       (task.visibility === 'personal' && task.ownerId === session.user.id);
 
-  // Working the task — status, priority, description, subtasks — stays open
-  // to the owner, creator, Director+ in same division, head, OSD, JS,
-  // Super Admin.
-  const canEditFields =
-    task.ownerId === session.user.id ||
-    task.createdById === session.user.id ||
-    session.user.isSuperAdmin ||
-    session.user.hierarchySlot === 'osd' ||
-    session.user.hierarchySlot === 'js' ||
-    (session.user.hierarchySlot === 'director' && session.user.divisionId === task.divisionId) ||
-    isHeadOfTaskDivision;
+  // Managing the task — status, priority, description, subtasks, AND its
+  // collaborators — all follow one rule (canManageTask), the very rule the
+  // server enforces in canEditTask. It stays with the owner, the ORIGINAL
+  // creator (so a Head / OSD / Super Admin who set the task up keeps it after
+  // handing ownership off), a Super Admin, OSD, JS, a Director of the task's
+  // division, or the division head — including an active delegate, who is the
+  // temporary head for the delegation's lifetime.
+  const canManage = canManageTask(
+    {
+      id: session.user.id,
+      isSuperAdmin: session.user.isSuperAdmin,
+      hierarchySlot: session.user.hierarchySlot,
+      divisionId: session.user.divisionId,
+      headedDivisionIds: actor?.headedDivisionIds ?? [],
+    },
+    { ownerId: task.ownerId, createdById: task.createdById, divisionId: task.divisionId },
+  );
+  const canEditFields = canManage;
 
   // Redefining the task — name, due date, recurrence — is stricter: a normal
   // owner (e.g. after a transfer) cannot. Mirrors canEditTaskDetails on the
@@ -187,12 +195,11 @@ export default async function TaskDetailPage({ params }: PageProps) {
     isHeadOfTaskDivision ||
     (task.visibility === 'personal' && task.ownerId === session.user.id);
 
-  // Collaborator editing: owner, creator, or OSD / Super Admin can manage.
-  const canEditCollaborators =
-    task.ownerId === session.user.id ||
-    task.createdById === session.user.id ||
-    session.user.isSuperAdmin ||
-    session.user.hierarchySlot === 'osd';
+  // Collaborator add/remove is a task-management right — the same rule as
+  // editing fields. Crucially this keeps it with the Head / OSD / Super Admin
+  // (or the delegated Head) even after the task's ownership is handed to
+  // someone else, since the creator and the division head both retain it.
+  const canEditCollaborators = canManage;
 
   // PMU team share — a PMU team leader can share their own PMU task with the
   // whole team, surfacing it in every teammate's assigned list (except the

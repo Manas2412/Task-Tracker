@@ -13,8 +13,10 @@ import {
   canActAsHeadOf,
   canAssignTaskTo,
   canCreateDivisionTask,
+  canManageTask,
   canTransferTaskTo,
   canTransferTaskToOrLinked,
+  getHeadedDivisionIds,
   getRbacActor,
   getRbacTarget,
   resolveDivisionOwner,
@@ -155,19 +157,18 @@ async function canEditTask(
   callerId: string,
   task: { ownerId: string; createdById: string; divisionId: string },
 ): Promise<boolean> {
+  // Owner / creator never need a role lookup — the creator keeps this even
+  // after handing ownership off (see canManageTask).
   if (task.ownerId === callerId || task.createdById === callerId) return true;
   const caller = await prisma.user.findUnique({
     where: { id: callerId },
-    select: { isSuperAdmin: true, hierarchySlot: true, divisionId: true },
+    select: { id: true, isSuperAdmin: true, hierarchySlot: true, divisionId: true },
   });
   if (!caller) return false;
-  if (caller.isSuperAdmin) return true;
-  if (caller.hierarchySlot === 'js' || caller.hierarchySlot === 'osd') return true;
-  if (caller.hierarchySlot === 'director' && caller.divisionId === task.divisionId) return true;
-  // Division heads (direct or via active delegation) manage the tasks of
-  // divisions they head — heads are not always director-slot users.
-  const actor = await getRbacActor(callerId);
-  return actor !== null && canActAsHeadOf(actor, task.divisionId);
+  // headedDivisionIds folds in active delegations, so a delegate manages the
+  // division's tasks exactly as its head would, for the delegation's lifetime.
+  const headedDivisionIds = await getHeadedDivisionIds(callerId);
+  return canManageTask({ ...caller, headedDivisionIds }, task);
 }
 
 /**

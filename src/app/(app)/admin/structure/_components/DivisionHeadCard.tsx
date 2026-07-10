@@ -17,11 +17,25 @@ export type HeadCandidate = {
   divisionColour: string;
 };
 
+export type ActiveDelegate = {
+  id: string;
+  name: string;
+  designation: string;
+  /** Human date the delegation window closes, e.g. "5 Aug 2026". */
+  until: string;
+};
+
 type DivisionHeadCardProps = {
   divisionId: string;
   divisionName: string;
   currentHead: HeadCandidate | null;
   candidates: HeadCandidate[];
+  /**
+   * Users currently holding an active delegation of this division's head
+   * access. While a delegation is live the recipient is the temporary head,
+   * so they are surfaced next to the Change control. Usually one.
+   */
+  activeDelegates?: ActiveDelegate[];
   /** Only Super Admin may change the mapping; others see it read-only. */
   canEdit: boolean;
 };
@@ -35,6 +49,7 @@ export function DivisionHeadCard({
   divisionName,
   currentHead,
   candidates,
+  activeDelegates = [],
   canEdit,
 }: DivisionHeadCardProps) {
   const [open, setOpen] = useState(false);
@@ -73,6 +88,26 @@ export function DivisionHeadCard({
           <p className="text-[13px] text-ink-3">No head assigned</p>
         )}
       </div>
+      {activeDelegates.length > 0 ? (
+        <div
+          className="shrink-0 max-w-[46%] flex items-center gap-1.5 rounded-lg border border-line bg-bg px-2.5 py-1.5"
+          title={activeDelegates
+            .map((d) => `${d.name} · acting head until ${d.until}`)
+            .join('\n')}
+        >
+          <i className="ti ti-user-check text-[14px] text-primary shrink-0" aria-hidden="true" />
+          <div className="min-w-0 leading-tight">
+            <p className="text-[10px] text-ink-3">Acting head</p>
+            <p className="text-[12px] font-medium text-ink truncate">
+              {activeDelegates[0].name}
+              {activeDelegates.length > 1 ? (
+                <span className="font-normal text-ink-3"> +{activeDelegates.length - 1}</span>
+              ) : null}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {canEdit ? (
         <button
           type="button"

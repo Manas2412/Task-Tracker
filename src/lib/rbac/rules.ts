@@ -145,6 +145,43 @@ export function canCreateDivisionTask(actor: RbacActor, divisionId: string): boo
 }
 
 /**
+ * Who may MANAGE a task — edit its status / priority / description / subtasks
+ * and add or remove its collaborators. The rule is the single source of truth
+ * behind the server `canEditTask` guard (see src/app/actions/tasks.ts) and the
+ * task-detail page's edit affordances, so the UI never shows a control the
+ * server would refuse (nor hides one it would allow).
+ *
+ * Granted to:
+ *   - the current owner or the ORIGINAL creator — the creator keeps management
+ *     rights even after ownership is handed to someone else, so a Head / OSD /
+ *     Super Admin who set up a task can still curate its collaborators;
+ *   - a Super Admin, OSD, or JS (whole-office oversight);
+ *   - a Director of the task's own division;
+ *   - the head of the task's division — INCLUDING an active delegate, since
+ *     `headedDivisionIds` folds in live delegations. A delegate is the
+ *     temporary head for the delegation's lifetime and manages its tasks
+ *     exactly as the head would.
+ *
+ * Pure so it can be unit-tested and shared verbatim by client and server.
+ */
+export function canManageTask(
+  caller: {
+    id: string;
+    isSuperAdmin: boolean;
+    hierarchySlot: string;
+    divisionId: string;
+    headedDivisionIds: string[];
+  },
+  task: { ownerId: string; createdById: string; divisionId: string },
+): boolean {
+  if (task.ownerId === caller.id || task.createdById === caller.id) return true;
+  if (caller.isSuperAdmin) return true;
+  if (caller.hierarchySlot === 'osd' || caller.hierarchySlot === 'js') return true;
+  if (caller.hierarchySlot === 'director' && caller.divisionId === task.divisionId) return true;
+  return caller.headedDivisionIds.includes(task.divisionId);
+}
+
+/**
  * Only the direct head (divisions.head_user_id) or a Super Admin can
  * delegate a division's access — a delegate cannot re-delegate.
  */
