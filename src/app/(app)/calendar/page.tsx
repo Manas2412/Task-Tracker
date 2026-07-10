@@ -111,6 +111,7 @@ export default async function CalendarPage({ searchParams }: PageProps) {
       canManageEngagements={canManageEngagements}
       canCreateTf={canCreateTf}
       participantCandidates={participantCandidates}
+      events={events}
     >
       <MobileListDefault resolvedView={view} hasExplicitView={Boolean(sp.view)} />
       <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 pt-4 md:pt-6 pb-12">

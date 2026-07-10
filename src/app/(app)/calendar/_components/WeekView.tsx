@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 
+import { formatDayLong } from '@/lib/date';
 import { cn } from '@/lib/utils';
 
 import type { CalendarEvent, WeekDay } from '@/lib/calendar';
@@ -24,18 +25,24 @@ export function WeekView({ grid, events }: WeekViewProps) {
 
   return (
     <div className="rounded-xl border border-line bg-panel overflow-hidden">
-      {/* Weekday header strip */}
+      {/* Weekday header strip (desktop-oriented; mobile uses per-column labels) */}
       <div className="grid grid-cols-7 border-b border-line bg-bg">
         {WEEKDAY_LABELS.map((d, i) => {
           const cell = grid[i];
+          const key = isoDay(cell.date);
+          const count = byDay.get(key)?.length ?? 0;
           return (
             <div key={d} className="px-2 py-2 text-center">
               <span className="text-[10px] uppercase tracking-[0.06em] font-medium text-ink-3 block">
                 {d}
               </span>
               <DayCellButton
-                dateIso={isoDay(cell.date)}
-                ariaLabel={`Add on ${isoDay(cell.date)}`}
+                dateIso={key}
+                ariaLabel={
+                  count > 0
+                    ? `Open ${formatDayLong(key)}, ${count} ${count === 1 ? 'item' : 'items'}`
+                    : `Open ${formatDayLong(key)}`
+                }
                 className="mt-1 px-1.5 py-0.5 inline-block"
               >
                 <span
@@ -68,12 +75,16 @@ export function WeekView({ grid, events }: WeekViewProps) {
             <div
               key={i}
               className={cn(
-                'border-r border-line-2 min-h-[160px] md:min-h-[200px] p-1.5 flex flex-col gap-1',
+                'border-r border-line-2 min-h-[160px] md:min-h-[200px] p-1 md:p-1.5 flex flex-col gap-1',
                 i === 6 && 'border-r-0',
               )}
             >
-              {/* Mobile date label (desktop uses the header) */}
-              <div className="flex items-center justify-between md:hidden mb-1">
+              {/* Mobile date label (desktop uses the header strip) */}
+              <DayCellButton
+                dateIso={key}
+                ariaLabel={`Open ${formatDayLong(key)}`}
+                className="md:hidden flex items-center justify-between gap-1 mb-1 px-1 py-0.5"
+              >
                 <span
                   className={cn(
                     'text-[11px] font-medium leading-none',
@@ -82,10 +93,12 @@ export function WeekView({ grid, events }: WeekViewProps) {
                 >
                   {format(cell.date, 'd MMM')}
                 </span>
-                {dayEvents.length > 0 && (
-                  <span className="text-[9px] text-ink-3 leading-none">{dayEvents.length}</span>
-                )}
-              </div>
+                {dayEvents.length > 0 ? (
+                  <span className="min-w-[16px] h-4 px-1 grid place-items-center rounded-full bg-line-2 text-ink-3 text-[9px] font-medium leading-none tabular-nums">
+                    {dayEvents.length}
+                  </span>
+                ) : null}
+              </DayCellButton>
 
               <div className="flex flex-col gap-0.5">
                 {dayEvents.map((e) => (
