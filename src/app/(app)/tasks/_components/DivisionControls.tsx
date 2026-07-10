@@ -88,7 +88,7 @@ export function DivisionControls({ divisions, canGroupByDivision }: DivisionCont
   const activeName = divisions.find((d) => d.id === activeDivision)?.name;
 
   return (
-    <div className="flex flex-wrap items-center justify-end md:justify-start gap-2 mt-2">
+    <div className="flex flex-wrap items-center justify-start gap-2 mt-2">
       {/* Division filter dropdown */}
       <div ref={wrapperRef} className="relative">
         <button
@@ -115,7 +115,7 @@ export function DivisionControls({ divisions, canGroupByDivision }: DivisionCont
         {dropdownOpen ? (
           <ul
             role="listbox"
-            className="absolute right-0 md:left-0 md:right-auto top-full mt-1 z-30 min-w-[200px] rounded-xl border border-line bg-panel shadow-xl overflow-hidden max-h-[320px] overflow-y-auto"
+            className="absolute left-0 top-full mt-1 z-30 min-w-[200px] max-w-[calc(100vw-2rem)] rounded-xl border border-line bg-panel shadow-xl overflow-hidden max-h-[320px] overflow-y-auto"
           >
             <li>
               <button
