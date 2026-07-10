@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   divisionRefNumber,
   padTaskSeq,
+  subtaskRefNumber,
   timelineTaskRefNumber,
   tlSeqDigits,
 } from '@/lib/task-ref';
@@ -39,5 +40,13 @@ describe('task ref-number formatting', () => {
     expect(timelineTaskRefNumber(5, 1)).toBe('TL-005-01');
     expect(timelineTaskRefNumber(5, 2)).toBe('TL-005-02');
     expect(timelineTaskRefNumber(4, 1)).toBe('TL-004-01');
+  });
+
+  it('formats a subtask number relative to its parent', () => {
+    expect(subtaskRefNumber('OJS-28', 1)).toBe('OJS-28-01');
+    expect(subtaskRefNumber('OJS-28', 2)).toBe('OJS-28-02');
+    expect(subtaskRefNumber('SGM-01', 10)).toBe('SGM-01-10');
+    // Timeline-File-parented subtasks nest under the TL number.
+    expect(subtaskRefNumber('TL-005-01', 1)).toBe('TL-005-01-01');
   });
 });

@@ -43,6 +43,16 @@ export function timelineTaskRefNumber(refSeq: number, seq: number): string {
 }
 
 /**
+ * `<parent ref>-<2-digit seq>` — a subtask's number is derived from its
+ * parent, e.g. OJS-28 → OJS-28-01, OJS-28-02; TL-005-01 → TL-005-01-01.
+ * Subtasks carry their own per-parent sequence and do NOT advance the
+ * division / Timeline-File counters.
+ */
+export function subtaskRefNumber(parentRefNumber: string, seq: number): string {
+  return `${parentRefNumber}-${padTaskSeq(seq)}`;
+}
+
+/**
  * Reserve and return the next reference number for a task, atomically bumping
  * the relevant counter inside the caller's transaction. Pass
  * `linkedTimelineFileId` for a task generated from a Timeline File.
@@ -65,4 +75,23 @@ export async function nextTaskRefNumber(
     select: { abbreviation: true, taskSeq: true },
   });
   return divisionRefNumber(div.abbreviation, div.taskSeq);
+}
+
+/**
+ * Reserve and return the next reference number for a subtask, atomically
+ * bumping the parent's per-parent counter inside the caller's transaction.
+ * Returns `null` when the parent itself has no reference number (e.g. unseeded
+ * dev data) — the subtask stays unnumbered rather than inheriting a bogus
+ * `null-01` prefix. In production every task carries a reference number.
+ */
+export async function nextSubtaskRefNumber(
+  parentTaskId: string,
+  tx: Prisma.TransactionClient = prisma,
+): Promise<string | null> {
+  const parent = await tx.task.update({
+    where: { id: parentTaskId },
+    data: { subtaskSeq: { increment: 1 } },
+    select: { refNumber: true, subtaskSeq: true },
+  });
+  return parent.refNumber ? subtaskRefNumber(parent.refNumber, parent.subtaskSeq) : null;
 }
