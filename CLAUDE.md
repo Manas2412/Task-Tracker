@@ -59,6 +59,27 @@ pnpm dev                     # http://localhost:3000
 
 `npm` and `yarn` work too — the scripts are package-manager-agnostic.
 
+### Troubleshooting — a feature "breaks" but the code looks correct
+
+First suspect **schema drift**: the dev database can fall behind
+`prisma/migrations`, so columns/tables the generated Prisma client selects don't
+exist yet and every query against those models throws. Because the client
+selects all schema columns, a single missing column (e.g. `timeline_files.task_seq`)
+can take out whole flows — the tasks list, a Timeline File's detail page, or
+Create-Task-from-a-file — while the code is perfectly fine.
+
+Check and fix before hunting a code bug:
+
+```bash
+pnpm exec prisma migrate status      # lists any un-applied migrations
+pnpm db:migrate:deploy               # applies them (prisma migrate deploy)
+```
+
+To probe the live schema/data safely, run a `tsx` script **from the project
+root** (so `@/…` and `@prisma/client` resolve), load `.env` yourself, and wrap
+any writes in a `prisma.$transaction` that throws to roll back — so a
+verification never persists test rows.
+
 ## Build phases — copied verbatim from PRD §11
 
 ### Phase 1 — Foundation *(ACTIVE)*
