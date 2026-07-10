@@ -34,6 +34,22 @@ export function isoDay(d: Date): string {
 }
 
 /**
+ * Long, human-readable IST date for a `YYYY-MM-DD` day, e.g.
+ * "Friday, 10 July 2026". Pure (no server-only deps) so it is safe to use
+ * in client components — used for the calendar sheet title and the day-cell
+ * accessible labels (screen readers can't read a raw ISO key as a date).
+ */
+export function formatDayLong(iso: string): string {
+  return new Date(`${iso}T00:00:00+05:30`).toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  });
+}
+
+/**
  * Combine an IST wall-clock date (`YYYY-MM-DD`) and time (`HH:mm`) into the
  * UTC instant to store. India has a fixed +05:30 offset (no DST), so the
  * offset suffix parse is exact. Returns null on malformed input.

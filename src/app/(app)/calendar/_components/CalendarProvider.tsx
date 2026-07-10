@@ -1,12 +1,14 @@
 'use client';
 
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useQuickCreate } from '@/app/(app)/tasks/_components/QuickCreate';
 import { Sheet } from '@/components/ui';
-import { cn } from '@/lib/utils';
+import { formatDayLong, isoDay } from '@/lib/date';
 
+import type { CalendarEvent } from '@/lib/calendar';
+import { DaySheet, type CreateAction } from './DaySheet';
 import { EngagementDetail } from './EngagementDetail';
 import { EngagementForm } from './EngagementForm';
 import type { PickUser } from './types';
@@ -14,8 +16,13 @@ import type { PickUser } from './types';
 type CalendarContextValue = {
   canManageEngagements: boolean;
   canCreateTf: boolean;
-  /** Open the "add to this date" menu for a clicked cell. */
-  openDateMenu: (dateIso: string) => void;
+  /**
+   * Open the day sheet. In view mode (default) it shows that day's agenda
+   * plus the "Create new" actions; in create mode (`createOnly`) it shows
+   * only the create actions — used by the "+"/"New" shortcuts, where the
+   * agenda is either already on screen or beside the point.
+   */
+  openDay: (dateIso: string, createOnly?: boolean) => void;
   /** Open an engagement's detail sheet. */
   openEngagementDetail: (id: string) => void;
 };
@@ -32,87 +39,134 @@ type ProviderProps = {
   canManageEngagements: boolean;
   canCreateTf: boolean;
   participantCandidates: PickUser[];
+  /** Every event in the loaded window — the day sheet reads its agenda from here. */
+  events: CalendarEvent[];
   children: ReactNode;
 };
 
-function formatDay(iso: string): string {
-  return new Date(`${iso}T00:00:00+05:30`).toLocaleDateString('en-IN', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'Asia/Kolkata',
-  });
+/** "Today" / "Tomorrow" relative to the current IST day, else null. */
+function relativeLabel(iso: string): 'Today' | 'Tomorrow' | null {
+  const now = new Date();
+  if (iso === isoDay(now)) return 'Today';
+  // India has no DST, so +24h always lands on the next calendar day.
+  if (iso === isoDay(new Date(now.getTime() + 24 * 60 * 60 * 1000))) return 'Tomorrow';
+  return null;
 }
 
 export function CalendarProvider({
   canManageEngagements,
   canCreateTf,
   participantCandidates,
+  events,
   children,
 }: ProviderProps) {
   const router = useRouter();
   const quickCreate = useQuickCreate();
 
-  const [menuDate, setMenuDate] = useState<string | null>(null);
+  const [dayIso, setDayIso] = useState<string | null>(null);
+  const [dayCreateOnly, setDayCreateOnly] = useState(false);
   const [createDate, setCreateDate] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
 
-  const openDateMenu = (dateIso: string) => setMenuDate(dateIso);
+  const eventsByDay = useMemo(() => {
+    const m = new Map<string, CalendarEvent[]>();
+    for (const e of events) {
+      const key = isoDay(e.date);
+      const bucket = m.get(key);
+      if (bucket) bucket.push(e);
+      else m.set(key, [e]);
+    }
+    return m;
+  }, [events]);
+
+  const openDay = (dateIso: string, createOnly = false) => {
+    setDayCreateOnly(createOnly);
+    setDayIso(dateIso);
+  };
   const openEngagementDetail = (id: string) => setDetailId(id);
 
   const startEngagement = (dateIso: string) => {
-    setMenuDate(null);
+    setDayIso(null);
     setCreateDate(dateIso);
   };
   const startTask = (dateIso: string) => {
-    setMenuDate(null);
+    setDayIso(null);
     quickCreate.open({ dueDate: dateIso });
   };
   const startTf = () => {
-    setMenuDate(null);
+    setDayIso(null);
     router.push('/timeline-files');
   };
 
+  const dayEvents = dayIso ? (eventsByDay.get(dayIso) ?? []) : [];
+  const showAgenda = dayIso !== null && !dayCreateOnly;
+
+  const dayActions: CreateAction[] = dayIso
+    ? [
+        ...(canManageEngagements
+          ? [
+              {
+                key: 'engagement',
+                icon: 'ti-users-group',
+                tone: 'text-info',
+                label: 'Add JS engagement',
+                hint: 'Schedule a meeting',
+                onClick: () => startEngagement(dayIso),
+              } as CreateAction,
+            ]
+          : []),
+        {
+          key: 'task',
+          icon: 'ti-checkbox',
+          tone: 'text-primary',
+          label: 'Create task',
+          hint: 'With this due date',
+          onClick: () => startTask(dayIso),
+        },
+        ...(canCreateTf
+          ? [
+              {
+                key: 'tf',
+                icon: 'ti-file-stack',
+                tone: 'text-urgent',
+                label: 'Create timeline file',
+                hint: 'Opens the files workspace',
+                onClick: startTf,
+              } as CreateAction,
+            ]
+          : []),
+      ]
+    : [];
+
+  const daySubtitle = (() => {
+    if (!dayIso) return undefined;
+    const rel = relativeLabel(dayIso);
+    if (dayCreateOnly) return rel ?? undefined;
+    const count = dayEvents.length;
+    const items = count === 0 ? 'No items scheduled' : `${count} ${count === 1 ? 'item' : 'items'}`;
+    return rel ? `${rel} · ${items}` : items;
+  })();
+
   return (
     <CalendarContext.Provider
-      value={{ canManageEngagements, canCreateTf, openDateMenu, openEngagementDetail }}
+      value={{ canManageEngagements, canCreateTf, openDay, openEngagementDetail }}
     >
       {children}
 
-      {/* Date action menu */}
+      {/* Day sheet — the day's agenda plus the "Create new" actions. */}
       <Sheet
-        open={menuDate !== null}
-        onClose={() => setMenuDate(null)}
-        title={menuDate ? `Add to ${formatDay(menuDate)}` : 'Add'}
+        open={dayIso !== null}
+        onClose={() => setDayIso(null)}
+        title={dayIso ? formatDayLong(dayIso) : 'Day'}
+        subtitle={daySubtitle}
       >
-        {menuDate ? (
-          <div className="flex flex-col gap-2">
-            {canManageEngagements ? (
-              <ActionButton
-                icon="ti-users-group"
-                tone="text-info"
-                label="Add JS engagement"
-                hint="Schedule a meeting"
-                onClick={() => startEngagement(menuDate)}
-              />
-            ) : null}
-            <ActionButton
-              icon="ti-checkbox"
-              tone="text-primary"
-              label="Create task"
-              hint="With this due date"
-              onClick={() => startTask(menuDate)}
-            />
-            {canCreateTf ? (
-              <ActionButton
-                icon="ti-file-stack"
-                tone="text-urgent"
-                label="Create timeline file"
-                hint="Opens the files workspace"
-                onClick={startTf}
-              />
-            ) : null}
-          </div>
+        {dayIso !== null ? (
+          <DaySheet
+            events={dayEvents}
+            actions={dayActions}
+            showAgenda={showAgenda}
+            onRowActivate={() => setDayIso(null)}
+          />
         ) : null}
       </Sheet>
 
@@ -150,36 +204,5 @@ export function CalendarProvider({
         ) : null}
       </Sheet>
     </CalendarContext.Provider>
-  );
-}
-
-function ActionButton({
-  icon,
-  tone,
-  label,
-  hint,
-  onClick,
-}: {
-  icon: string;
-  tone: string;
-  label: string;
-  hint: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-line bg-panel hover:border-ink-4 hover:bg-bg transition-colors text-left"
-    >
-      <span className={cn('w-9 h-9 grid place-items-center rounded-lg bg-bg', tone)}>
-        <i className={cn('ti', icon, 'text-[18px]')} aria-hidden="true" />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[14px] font-medium text-ink">{label}</span>
-        <span className="block text-[12px] text-ink-3">{hint}</span>
-      </span>
-      <i className="ti ti-chevron-right text-[15px] text-ink-3 ml-auto" aria-hidden="true" />
-    </button>
   );
 }
