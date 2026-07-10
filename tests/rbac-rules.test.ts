@@ -6,6 +6,7 @@ import {
   canCreateDivisionTask,
   canDelegateDivision,
   canTransferTaskTo,
+  canTransferTaskToOrLinked,
   isEligibleDelegate,
   roleOf,
   type RbacActor,
@@ -131,6 +132,50 @@ describe('canTransferTaskTo — super admin', () => {
   it('still rejects inactive targets', () => {
     const sa = actor({ isSuperAdmin: true });
     expect(canTransferTaskTo(sa, target({ isActive: false }))).toBe(false);
+  });
+});
+
+describe('canTransferTaskToOrLinked — cross-division links (Khelo India → NSDF)', () => {
+  // Chanchal: home + head of KI, granted the KI→NSDF transfer link.
+  const kiHead = actor({ id: 'chanchal', divisionId: KI, headedDivisionIds: [KI], transferableDivisionIds: [NSDF] });
+
+  it('lets a Khelo India head transfer to an NSDF member (beyond the base matrix)', () => {
+    // The base matrix alone forbids it — a plain NSDF member is neither in KI nor a head.
+    expect(canTransferTaskTo(kiHead, target({ divisionId: NSDF }))).toBe(false);
+    expect(canTransferTaskToOrLinked(kiHead, target({ divisionId: NSDF }))).toBe(true);
+  });
+
+  it('works the same for a KI delegate (headship via delegation)', () => {
+    // A user whose home is elsewhere but who holds the KI headship + link.
+    const delegate = actor({ id: 'deleg', divisionId: MEDIA, headedDivisionIds: [KI], transferableDivisionIds: [NSDF] });
+    expect(canTransferTaskToOrLinked(delegate, target({ divisionId: NSDF }))).toBe(true);
+  });
+
+  it('does not widen the link to other divisions', () => {
+    expect(canTransferTaskToOrLinked(kiHead, target({ divisionId: MEDIA }))).toBe(false);
+    expect(canTransferTaskToOrLinked(kiHead, target({ divisionId: SGM }))).toBe(false);
+  });
+
+  it('still rejects inactive NSDF targets and self-transfers', () => {
+    expect(canTransferTaskToOrLinked(kiHead, target({ divisionId: NSDF, isActive: false }))).toBe(false);
+    expect(canTransferTaskToOrLinked(kiHead, target({ id: kiHead.id, divisionId: NSDF }))).toBe(false);
+  });
+
+  it('grants nothing extra to a regular Khelo India user (no link, not a head)', () => {
+    const kiUser = actor({ divisionId: KI });
+    expect(canTransferTaskToOrLinked(kiUser, target({ divisionId: NSDF }))).toBe(false);
+  });
+
+  it('is one-way — an NSDF head with no link cannot reach KI members through it', () => {
+    const nsdfHead = actor({ id: 'zuber', divisionId: ABD, headedDivisionIds: [ABD, NSDF] });
+    // A plain KI member is outside Zuber's headed divisions and not a head himself.
+    expect(canTransferTaskToOrLinked(nsdfHead, target({ divisionId: KI }))).toBe(false);
+  });
+
+  it('preserves the base matrix when there is no link', () => {
+    // Identical to canTransferTaskTo for the ordinary same-division case.
+    const plain = actor({ divisionId: KI });
+    expect(canTransferTaskToOrLinked(plain, target({ divisionId: KI }))).toBe(true);
   });
 });
 

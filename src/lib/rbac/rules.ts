@@ -28,6 +28,15 @@ export type RbacActor = {
   isOsd?: boolean;
   /** Divisions where the actor holds head powers — direct + delegated. */
   headedDivisionIds: string[];
+  /**
+   * Extra divisions this actor may TRANSFER tasks into, beyond the base
+   * matrix — configured cross-division links (see CROSS_DIVISION_TRANSFER_LINKS
+   * in `src/lib/rbac/index.ts`, e.g. a Khelo India head/delegate may hand tasks
+   * to NSDF members). Only consulted by `canTransferTaskToOrLinked` — the base
+   * matrix and the reassignment approval path are unaffected. Populated by
+   * `getRbacActor`; absent when there are no links for the actor.
+   */
+  transferableDivisionIds?: string[];
 };
 
 export type RbacTarget = {
@@ -84,6 +93,20 @@ export function canTransferTaskTo(actor: RbacActor, target: RbacTarget): boolean
 
   if (target.divisionId === actor.divisionId) return true;
   return target.headedDivisionIds.includes(actor.divisionId);
+}
+
+/**
+ * Transfer target check for the Transfer-task flow: the base matrix
+ * (`canTransferTaskTo`) PLUS any configured cross-division links carried on
+ * `actor.transferableDivisionIds` (e.g. a Khelo India head/delegate may hand
+ * tasks to NSDF members). The reassignment approval matrix deliberately stays
+ * on the base rule, so cross-division owner *proposals* remain blocked and all
+ * other transfer logic is unchanged.
+ */
+export function canTransferTaskToOrLinked(actor: RbacActor, target: RbacTarget): boolean {
+  if (canTransferTaskTo(actor, target)) return true;
+  if (!target.isActive || target.id === actor.id) return false;
+  return (actor.transferableDivisionIds ?? []).includes(target.divisionId);
 }
 
 /**

@@ -1,12 +1,29 @@
 import { prisma } from '@/lib/db';
 
 import {
-  canTransferTaskTo,
+  canTransferTaskToOrLinked,
   type RbacActor,
   type RbacTarget,
 } from './rules';
 
 export * from './rules';
+
+/**
+ * Configured cross-division transfer links. A head/delegate of the KEY
+ * division may TRANSFER (hand off) tasks to members of the listed divisions,
+ * on top of the normal transfer matrix. Divisions are keyed by their
+ * ABBREVIATION (e.g. 'KI', 'NSDF') — unlike the display name, an abbreviation
+ * is set once at creation and has no admin edit path, so a division rename in
+ * Structure & Hierarchy cannot silently break the link. If no division carries
+ * the abbreviation, the link is simply skipped — fail-closed: it only ever adds
+ * the extra reach, never removes a base-matrix permission.
+ *
+ * Product rule: the Khelo India (KI) division head/delegate may transfer to
+ * NSDF members. Everything else stays on the base transfer matrix.
+ */
+const CROSS_DIVISION_TRANSFER_LINKS: Record<string, string[]> = {
+  KI: ['NSDF'],
+};
 
 /**
  * DB-backed context builders for division-based RBAC.
@@ -45,6 +62,40 @@ export async function getHeadedDivisionIds(
   return [...ids];
 }
 
+/**
+ * Extra divisions the actor may TRANSFER tasks into via
+ * `CROSS_DIVISION_TRANSFER_LINKS`, resolved from the divisions they currently
+ * head (direct + delegated). Returns [] for non-heads (the common case)
+ * without touching the database.
+ */
+export async function getTransferableDivisionIds(headedDivisionIds: string[]): Promise<string[]> {
+  if (headedDivisionIds.length === 0) return [];
+
+  const abbreviations = new Set<string>();
+  for (const [head, targets] of Object.entries(CROSS_DIVISION_TRANSFER_LINKS)) {
+    abbreviations.add(head);
+    for (const t of targets) abbreviations.add(t);
+  }
+
+  const divisions = await prisma.division.findMany({
+    where: { abbreviation: { in: [...abbreviations] } },
+    select: { id: true, abbreviation: true },
+  });
+  const idByAbbr = new Map(divisions.map((d) => [d.abbreviation, d.id]));
+  const headed = new Set(headedDivisionIds);
+
+  const extra = new Set<string>();
+  for (const [headAbbr, targetAbbrs] of Object.entries(CROSS_DIVISION_TRANSFER_LINKS)) {
+    const headId = idByAbbr.get(headAbbr);
+    if (!headId || !headed.has(headId)) continue;
+    for (const ta of targetAbbrs) {
+      const tid = idByAbbr.get(ta);
+      if (tid) extra.add(tid);
+    }
+  }
+  return [...extra];
+}
+
 /** Full RBAC view of one user, or null when the user is missing/disabled. */
 export async function getRbacActor(userId: string): Promise<RbacActor | null> {
   const user = await prisma.user.findUnique({
@@ -59,12 +110,14 @@ export async function getRbacActor(userId: string): Promise<RbacActor | null> {
   });
   if (!user || !user.isActive) return null;
   const headedDivisionIds = await getHeadedDivisionIds(userId);
+  const transferableDivisionIds = await getTransferableDivisionIds(headedDivisionIds);
   return {
     id: user.id,
     divisionId: user.divisionId,
     isSuperAdmin: user.isSuperAdmin,
     isOsd: user.hierarchySlot === 'osd',
     headedDivisionIds,
+    transferableDivisionIds,
   };
 }
 
@@ -214,7 +267,7 @@ export async function fetchTransferTargets(actor: RbacActor): Promise<TransferTa
 
   return users
     .filter((u) =>
-      canTransferTaskTo(actor, {
+      canTransferTaskToOrLinked(actor, {
         id: u.id,
         divisionId: u.divisionId,
         isSuperAdmin: u.isSuperAdmin,
