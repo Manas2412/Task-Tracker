@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { format } from 'date-fns';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
@@ -136,6 +137,33 @@ export default async function StructurePage({ searchParams }: PageProps) {
       </div>
     );
   }
+
+  // Active delegations on the shown division. A live delegation makes its
+  // recipient the temporary head (all head powers) for the window, so the
+  // Structure head card surfaces who currently holds that access next to the
+  // Change control. Only meaningful for top-level divisions (delegation is
+  // division-scoped). Expiry is purely time-based — the window filter is the
+  // single source of "active".
+  const now = new Date();
+  const activeHeadDelegations =
+    activeDivision.kind === 'division'
+      ? await prisma.divisionAccessDelegation.findMany({
+          where: {
+            divisionId: activeDivision.id,
+            revokedAt: null,
+            startsAt: { lte: now },
+            endsAt: { gte: now },
+          },
+          include: { delegatedTo: { select: { id: true, name: true, designation: true } } },
+          orderBy: { endsAt: 'asc' },
+        })
+      : [];
+  const activeDelegates = activeHeadDelegations.map((d) => ({
+    id: d.delegatedTo.id,
+    name: d.delegatedTo.name,
+    designation: d.delegatedTo.designation,
+    until: format(d.endsAt, 'd LLL yyyy'),
+  }));
 
   // Officers shown in the chart. PMU-team members appear only under their
   // PMU node — never in the ministry division chart. A PMU chart is the
@@ -288,6 +316,7 @@ export default async function StructurePage({ searchParams }: PageProps) {
                 divisionName: u.division.name,
                 divisionColour: u.division.avatarColour,
               }))}
+            activeDelegates={activeDelegates}
             canEdit={session.user.isSuperAdmin === true}
           />
         ) : null}

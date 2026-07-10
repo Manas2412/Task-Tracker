@@ -5,6 +5,7 @@ import {
   canAssignTaskTo,
   canCreateDivisionTask,
   canDelegateDivision,
+  canManageTask,
   canTransferTaskTo,
   canTransferTaskToOrLinked,
   isEligibleDelegate,
@@ -244,6 +245,74 @@ describe('canCreateDivisionTask', () => {
     const user = actor({ divisionId: KI });
     expect(canCreateDivisionTask(user, KI)).toBe(false);
     expect(canCreateDivisionTask(user, SGM)).toBe(false);
+  });
+});
+
+describe('canManageTask — edit fields + manage collaborators', () => {
+  // A task created by the SGM head, then handed to a plain SGM member.
+  const task = { ownerId: 'member-x', createdById: 'sgm-head', divisionId: SGM };
+
+  const caller = (
+    overrides: Partial<{
+      id: string;
+      isSuperAdmin: boolean;
+      hierarchySlot: string;
+      divisionId: string;
+      headedDivisionIds: string[];
+    }> = {},
+  ) => ({
+    id: 'caller-1',
+    isSuperAdmin: false,
+    hierarchySlot: 'under_secretary',
+    divisionId: SGM,
+    headedDivisionIds: [] as string[],
+    ...overrides,
+  });
+
+  it('allows the current owner', () => {
+    expect(canManageTask(caller({ id: 'member-x' }), task)).toBe(true);
+  });
+
+  it('lets the original creator keep it AFTER ownership is handed off', () => {
+    // The crux of the requirement: the SGM head created the task, no longer
+    // owns it, is not currently a head here — yet still manages it as creator.
+    expect(
+      canManageTask(caller({ id: 'sgm-head', headedDivisionIds: [] }), task),
+    ).toBe(true);
+  });
+
+  it('allows Super Admin, OSD, and JS', () => {
+    expect(canManageTask(caller({ isSuperAdmin: true }), task)).toBe(true);
+    expect(canManageTask(caller({ hierarchySlot: 'osd' }), task)).toBe(true);
+    expect(canManageTask(caller({ hierarchySlot: 'js' }), task)).toBe(true);
+  });
+
+  it("allows a Director of the task's own division only", () => {
+    expect(
+      canManageTask(caller({ hierarchySlot: 'director', divisionId: SGM }), task),
+    ).toBe(true);
+    expect(
+      canManageTask(caller({ hierarchySlot: 'director', divisionId: KI }), task),
+    ).toBe(false);
+  });
+
+  it('allows the division head', () => {
+    expect(canManageTask(caller({ headedDivisionIds: [SGM] }), task)).toBe(true);
+  });
+
+  it('allows an active DELEGATE of the division (delegation folds into headedDivisionIds)', () => {
+    // A user homed elsewhere, holding a live delegation over SGM, is the
+    // temporary head and manages SGM tasks — including their collaborators.
+    const delegate = caller({ id: 'deleg', divisionId: MEDIA, headedDivisionIds: [SGM] });
+    expect(canManageTask(delegate, task)).toBe(true);
+  });
+
+  it('rejects a plain member who is neither owner, creator, nor head', () => {
+    expect(canManageTask(caller({ id: 'someone-else', divisionId: SGM }), task)).toBe(false);
+  });
+
+  it('rejects a head of a different division', () => {
+    expect(canManageTask(caller({ headedDivisionIds: [KI] }), task)).toBe(false);
   });
 });
 
