@@ -19,9 +19,38 @@ export type TfFilter = 'all' | 'pending_action' | 'in_progress' | 'awaiting_repl
 /**
  * List ordering:
  *   - 'default' — open files first, then soonest deadline, then newest.
- *   - 'latest'  — most recently added files first (createdAt desc).
+ *   - 'latest'  — "Recently modified": most recent meaningful activity first
+ *     (TimelineFile.lastActivityAt desc). A freshly created file has
+ *     lastActivityAt = createdAt, so new files also land on top.
+ *   - 'alpha'   — A–Z by subject.
  */
-export type TfSort = 'default' | 'latest';
+export type TfSort = 'default' | 'latest' | 'alpha';
+
+/**
+ * Prisma `orderBy` for the timeline-files list, by sort mode. Pure and
+ * exported so the ordering is unit-testable without a database. Each branch
+ * ends with a deterministic tiebreaker.
+ */
+export function tfListOrderBy(
+  sort: TfSort,
+): Prisma.TimelineFileOrderByWithRelationInput[] {
+  switch (sort) {
+    case 'latest':
+      return [{ lastActivityAt: 'desc' }, { receivedDate: 'desc' }];
+    case 'alpha':
+      return [{ subject: 'asc' }, { receivedDate: 'desc' }];
+    case 'default':
+    default:
+      return [
+        // Open files first; closed last.
+        { status: 'asc' },
+        // Then by deadline (closest first), nulls last.
+        { deadlineDate: { sort: 'asc', nulls: 'last' } },
+        // Stable tiebreaker.
+        { receivedDate: 'desc' },
+      ];
+  }
+}
 
 type CallerSummary = {
   id: string;
@@ -75,22 +104,7 @@ export async function fetchVisibleTimelineFiles(opts: {
   const divisionFilter: Prisma.TimelineFileWhereInput =
     opts.divisionId ? { markedTo: { some: { divisionId: opts.divisionId } } } : {};
 
-  const orderBy: Prisma.TimelineFileOrderByWithRelationInput[] =
-    opts.sort === 'latest'
-      ? [
-          // Most recently added correspondence first.
-          { createdAt: 'desc' },
-          // Stable tiebreaker for same-instant rows.
-          { receivedDate: 'desc' },
-        ]
-      : [
-          // Open files first; closed last.
-          { status: 'asc' },
-          // Then by deadline (closest first), nulls last.
-          { deadlineDate: { sort: 'asc', nulls: 'last' } },
-          // Stable tiebreaker.
-          { receivedDate: 'desc' },
-        ];
+  const orderBy = tfListOrderBy(opts.sort ?? 'default');
 
   return prisma.timelineFile.findMany({
     where: {

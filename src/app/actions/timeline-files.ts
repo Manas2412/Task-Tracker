@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { touchTimelineFileActivity } from '@/lib/activity';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
 
 /**
@@ -284,7 +285,7 @@ export async function updateTimelineFileStatusAction(
     await prisma.$transaction([
       prisma.timelineFile.update({
         where: { id: tf.id },
-        data: { status: parsed.data.status },
+        data: { status: parsed.data.status, lastActivityAt: new Date() },
       }),
       prisma.timelineFileActivity.create({
         data: {
@@ -350,7 +351,7 @@ export async function updateTimelineFilePriorityAction(
     await prisma.$transaction([
       prisma.timelineFile.update({
         where: { id: tf.id },
-        data: { priority: parsed.data.priority },
+        data: { priority: parsed.data.priority, lastActivityAt: new Date() },
       }),
       prisma.timelineFileActivity.create({
         data: {
@@ -454,6 +455,9 @@ export async function updateTimelineFileFieldsAction(
     data.deskComments = parsed.data.deskComments.length > 0 ? parsed.data.deskComments : null;
 
   if (Object.keys(data).length === 0) return ok(epoch);
+
+  // A real field change landed above — mark it as recent activity.
+  data.lastActivityAt = new Date();
 
   try {
     await prisma.timelineFile.update({ where: { id: parsed.data.id }, data });
@@ -570,7 +574,7 @@ export async function updateTimelineFileRefNumberAction(
   try {
     await prisma.timelineFile.update({
       where: { id: tf.id },
-      data: { refNo, refYear, refSeq },
+      data: { refNo, refYear, refSeq, lastActivityAt: new Date() },
     });
 
     await prisma.timelineFileActivity.create({
@@ -644,6 +648,7 @@ export async function addMarkedToAction(
         payload: { divisionId: parsed.data.divisionId },
       },
     });
+    await touchTimelineFileActivity(prisma, parsed.data.id);
 
     const tf = await prisma.timelineFile.findUnique({
       where: { id: parsed.data.id },
@@ -726,6 +731,7 @@ export async function removeMarkedToAction(
         payload: { divisionId: parsed.data.divisionId },
       },
     });
+    await touchTimelineFileActivity(prisma, parsed.data.id);
   } catch (err) {
     logError('removeMarkedToAction failed', err);
     return fail('Could not remove division.', epoch);
@@ -882,6 +888,8 @@ export async function postTfCommentAction(
         parentCommentId: parsed.data.parentCommentId ?? null,
       },
     });
+    // A comment is a discussion update — surface the file in "Recently modified".
+    await touchTimelineFileActivity(prisma, tf.id);
 
     const mentionNotifs: Prisma.NotificationCreateManyInput[] = mentions
       .filter((uid) => uid !== me.id)

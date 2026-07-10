@@ -29,10 +29,39 @@ import {
 export type TaskFilter = 'all' | 'today' | 'overdue' | 'mine' | 'urgent' | 'completed' | 'js_priority';
 
 /**
- * List ordering. `default` is the smart order (JS Priority lane, then due
- * date, then priority, then newest); `latest` is newest-created first.
+ * List ordering:
+ *   - `default` — the smart order (JS Priority lane, then due date, then
+ *     priority, then newest).
+ *   - `latest`  — "Recently modified": most recent meaningful activity first
+ *     (Task.lastActivityAt desc). A freshly created task has
+ *     lastActivityAt = createdAt, so new tasks also land on top.
+ *   - `alpha`   — A–Z by task name.
  */
-export type TaskSort = 'default' | 'latest';
+export type TaskSort = 'default' | 'latest' | 'alpha';
+
+/**
+ * Prisma `orderBy` for the tasks list, by sort mode. Pure and exported so the
+ * ordering is unit-testable without a database. Every branch ends with a
+ * deterministic tiebreaker so equal leading keys never reorder run to run.
+ */
+export function taskListOrderBy(
+  sort: TaskSort,
+): Prisma.TaskOrderByWithRelationInput[] {
+  switch (sort) {
+    case 'latest':
+      return [{ lastActivityAt: 'desc' }, { createdAt: 'desc' }];
+    case 'alpha':
+      return [{ name: 'asc' }, { createdAt: 'desc' }];
+    case 'default':
+    default:
+      return [
+        { jsPriorityLane: { sort: 'asc', nulls: 'last' } },
+        { dueDate: { sort: 'asc', nulls: 'last' } },
+        { priority: 'desc' },
+        { createdAt: 'desc' },
+      ];
+  }
+}
 
 export { buildVisibilityClausesFrom };
 export type { CallerSummary };
@@ -177,15 +206,7 @@ export async function fetchVisibleTasks(opts: {
         subtasks: { select: { status: true } },
         collaborators: { select: { role: true } },
       },
-      orderBy:
-        opts.sort === 'latest'
-          ? [{ createdAt: 'desc' }]
-          : [
-              { jsPriorityLane: { sort: 'asc', nulls: 'last' } },
-              { dueDate: { sort: 'asc', nulls: 'last' } },
-              { priority: 'desc' },
-              { createdAt: 'desc' },
-            ],
+      orderBy: taskListOrderBy(opts.sort ?? 'default'),
       take: TASK_PAGE_LIMIT,
     }),
     prisma.task.count({ where }),

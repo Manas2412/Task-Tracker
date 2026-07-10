@@ -8,6 +8,7 @@ import { Prisma } from '@prisma/client';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { touchTaskActivity, touchTimelineFileActivity } from '@/lib/activity';
 import { parseDueDateInput } from '@/lib/format';
 import {
   canActAsHeadOf,
@@ -422,8 +423,12 @@ export async function createTaskAction(
             payload: { taskId: created.id, taskName: created.name },
           },
         });
+        // Linking a task is a meaningful update to the file it lands on.
+        await touchTimelineFileActivity(tx, parsed.data.linkedTimelineFileId);
       }
 
+      // The new task's lastActivityAt defaults to now() (created row), so it
+      // opens at the top of "Recently modified" without an explicit stamp.
       await tx.taskActivity.create({
         data: {
           taskId: created.id,
@@ -549,7 +554,7 @@ export async function updateTaskStatusAction(
       if (!noChange) {
         await tx.task.update({
           where: { id: task.id },
-          data: { status: parsed.data.status },
+          data: { status: parsed.data.status, lastActivityAt: new Date() },
         });
         await tx.taskActivity.create({
           data: {
@@ -570,6 +575,9 @@ export async function updateTaskStatusAction(
             mentions: extractMentionIds(parsed.data.note),
           },
         });
+        // A note posted without a status change is still a discussion update;
+        // the status branch above already stamped the change case.
+        if (noChange) await touchTaskActivity(tx, task.id);
       }
     });
 
@@ -668,7 +676,7 @@ export async function updateTaskPriorityAction(
     await prisma.$transaction([
       prisma.task.update({
         where: { id: task.id },
-        data: { priority: parsed.data.priority },
+        data: { priority: parsed.data.priority, lastActivityAt: new Date() },
       }),
       prisma.taskActivity.create({
         data: {
@@ -943,6 +951,9 @@ export async function updateTaskFieldsAction(
 
   if (Object.keys(data).length === 0) return ok(epoch);
 
+  // A real field change landed above — mark it as recent activity.
+  data.lastActivityAt = new Date();
+
   try {
     await prisma.$transaction([
       prisma.task.update({ where: { id: task.id }, data }),
@@ -1101,6 +1112,8 @@ export async function addSubtaskAction(
         payload: { name: subtask.name, subtaskId: subtask.id, assigneeId: assigneeId !== me.id ? assigneeId : undefined },
       },
     });
+    // Adding a subtask is a meaningful update to the parent task.
+    await touchTaskActivity(prisma, parent.id);
     if (assigneeId !== me.id) {
       await prisma.notification.create({
         data: {
@@ -1171,6 +1184,8 @@ export async function toggleSubtaskAction(
                 payload: { subtaskId: subtask.id, name: subtask.name },
               },
             }),
+            // Completing/reopening a subtask advances the parent's progress.
+            touchTaskActivity(prisma, subtask.parentTaskId),
           ]
         : []),
     ]);
@@ -1300,6 +1315,8 @@ export async function updateSubtaskAction(
           },
         },
       }),
+      // Reassigning/rescheduling a subtask is a meaningful parent update.
+      touchTaskActivity(prisma, parent.id),
     ]);
 
     if (parsed.data.assigneeId && parsed.data.assigneeId !== subtask.ownerId && parsed.data.assigneeId !== me.id) {
@@ -1421,6 +1438,8 @@ export async function postCommentAction(
         parentCommentId: parsed.data.parentCommentId ?? null,
       },
     });
+    // A comment is a discussion update — surface the task in "Recently modified".
+    await touchTaskActivity(prisma, task.id);
 
     const mentionNotifs = mentions
       .filter((uid) => uid !== me.id)
@@ -1726,7 +1745,7 @@ export async function setJsPriorityLaneAction(
     await prisma.$transaction(async (tx) => {
       await tx.task.update({
         where: { id: task.id },
-        data: { jsPriorityLane: parsed.data.lane },
+        data: { jsPriorityLane: parsed.data.lane, lastActivityAt: new Date() },
       });
       await tx.taskActivity.create({
         data: {
@@ -1928,6 +1947,7 @@ export async function addCollaboratorAction(
         },
       },
     });
+    await touchTaskActivity(prisma, task.id);
     // Notify the new collaborator.
     if (parsed.data.userId !== me.id) {
       await prisma.notification.create({
@@ -2018,6 +2038,7 @@ export async function removeCollaboratorAction(
         },
       },
     });
+    await touchTaskActivity(prisma, parsed.data.taskId);
   } catch (err) {
     logError('removeCollaboratorAction failed', err);
     return fail('Could not remove collaborator.', epoch);
@@ -2093,7 +2114,7 @@ export async function setPmuTeamShareAction(
     await prisma.$transaction([
       prisma.task.update({
         where: { id: task.id },
-        data: { sharedWithPmuTeam: parsed.data.shared },
+        data: { sharedWithPmuTeam: parsed.data.shared, lastActivityAt: new Date() },
       }),
       prisma.taskActivity.create({
         data: {
@@ -2242,7 +2263,7 @@ export async function reassignTaskAction(
       await prisma.$transaction([
         prisma.task.update({
           where: { id: task.id },
-          data: { ownerId: parsed.data.newOwnerId },
+          data: { ownerId: parsed.data.newOwnerId, lastActivityAt: new Date() },
         }),
         prisma.taskActivity.create({
           data: {
@@ -2360,7 +2381,7 @@ export async function resolveReassignmentAction(
     await prisma.$transaction([
       prisma.task.update({
         where: { id: request.taskId },
-        data: { ownerId: request.proposedOwnerId },
+        data: { ownerId: request.proposedOwnerId, lastActivityAt: new Date() },
       }),
       prisma.taskActivity.create({
         data: {
@@ -2508,6 +2529,7 @@ export async function transferTaskAction(
 
   const updates: Parameters<typeof prisma.task.update>[0]['data'] = {
     ownerId: target.id,
+    lastActivityAt: new Date(),
   };
   // A top-level personal task auto-promotes to division on transfer so it
   // does not vanish from the recipient's view (§5.6). Subtasks are exempt:
@@ -2635,7 +2657,7 @@ export async function pullTaskAction(
   await prisma.$transaction([
     prisma.task.update({
       where: { id: task.id },
-      data: { ownerId: me.id },
+      data: { ownerId: me.id, lastActivityAt: new Date() },
     }),
     prisma.taskActivity.create({
       data: {

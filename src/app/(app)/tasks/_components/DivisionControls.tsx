@@ -16,12 +16,24 @@ type DivisionControlsProps = {
   canGroupByDivision: boolean;
 };
 
+/**
+ * Sort options for the tasks list. The empty value is the default order and is
+ * cleared from the URL. Kept in sync with TaskSort / VALID_SORTS on the server.
+ */
+const SORT_OPTIONS: { value: '' | 'latest' | 'alpha'; label: string; hint: string }[] = [
+  { value: '', label: 'Default order', hint: 'JS Priority, due date, priority' },
+  { value: 'latest', label: 'Recently modified', hint: 'Most recent activity on top' },
+  { value: 'alpha', label: 'A–Z', hint: 'Alphabetical by task name' },
+];
+
 export function DivisionControls({ divisions, canGroupByDivision }: DivisionControlsProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeDivision = searchParams.get('division') ?? '';
   const groupBy = searchParams.get('group') === 'division';
-  const sortLatest = searchParams.get('sort') === 'latest';
+  const activeSort = (searchParams.get('sort') ?? '') as '' | 'latest' | 'alpha';
+  const sortActive = activeSort !== '';
+  const activeSortLabel = SORT_OPTIONS.find((o) => o.value === activeSort)?.label;
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
@@ -80,7 +92,7 @@ export function DivisionControls({ divisions, canGroupByDivision }: DivisionCont
     router.push(buildHref({ group: groupBy ? '' : 'division' }), { scroll: false });
   };
 
-  const onSelectSort = (sort: '' | 'latest') => {
+  const onSelectSort = (sort: '' | 'latest' | 'alpha') => {
     setSortOpen(false);
     router.push(buildHref({ sort }), { scroll: false });
   };
@@ -175,15 +187,17 @@ export function DivisionControls({ divisions, canGroupByDivision }: DivisionCont
         <button
           type="button"
           onClick={() => setSortOpen(!sortOpen)}
+          aria-haspopup="listbox"
+          aria-expanded={sortOpen}
           className={cn(
             'inline-flex items-center gap-1.5 px-3 py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
-            sortLatest
+            sortActive
               ? 'bg-ink text-white border-ink'
               : 'bg-panel text-ink-2 border-line hover:border-ink-4',
           )}
         >
           <i className="ti ti-arrows-sort text-[13px]" aria-hidden="true" />
-          {sortLatest ? 'Sort: latest' : 'Sort'}
+          {sortActive && activeSortLabel ? `Sort: ${activeSortLabel}` : 'Sort'}
           <i
             className={cn(
               'ti text-[11px] transition-transform',
@@ -196,42 +210,28 @@ export function DivisionControls({ divisions, canGroupByDivision }: DivisionCont
         {sortOpen ? (
           <ul
             role="listbox"
-            className="absolute right-0 md:left-0 md:right-auto top-full mt-1 z-30 min-w-[180px] rounded-xl border border-line bg-panel shadow-xl overflow-hidden"
+            className="absolute right-0 md:left-0 md:right-auto top-full mt-1 z-30 min-w-[200px] rounded-xl border border-line bg-panel shadow-xl overflow-hidden"
           >
-            <li>
-              <button
-                type="button"
-                role="option"
-                aria-selected={!sortLatest}
-                onClick={() => onSelectSort('')}
-                className={cn(
-                  'w-full text-left px-3 py-2.5 text-[12.5px] transition-colors',
-                  !sortLatest ? 'bg-primary-soft font-medium text-ink' : 'text-ink-2 hover:bg-bg',
-                )}
-              >
-                Default order
-                <span className="block text-[10.5px] text-ink-3 mt-0.5">
-                  JS Priority, due date, priority
-                </span>
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                role="option"
-                aria-selected={sortLatest}
-                onClick={() => onSelectSort('latest')}
-                className={cn(
-                  'w-full text-left px-3 py-2.5 text-[12.5px] transition-colors',
-                  sortLatest ? 'bg-primary-soft font-medium text-ink' : 'text-ink-2 hover:bg-bg',
-                )}
-              >
-                Latest first
-                <span className="block text-[10.5px] text-ink-3 mt-0.5">
-                  Newest created on top
-                </span>
-              </button>
-            </li>
+            {SORT_OPTIONS.map((o) => {
+              const active = o.value === activeSort;
+              return (
+                <li key={o.value || 'default'}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    onClick={() => onSelectSort(o.value)}
+                    className={cn(
+                      'w-full text-left px-3 py-2.5 text-[12.5px] transition-colors',
+                      active ? 'bg-primary-soft font-medium text-ink' : 'text-ink-2 hover:bg-bg',
+                    )}
+                  >
+                    {o.label}
+                    <span className="block text-[10.5px] text-ink-3 mt-0.5">{o.hint}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         ) : null}
       </div>
