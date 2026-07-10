@@ -193,6 +193,57 @@ body.sortable-dragging .pb-accordion-body {
   min-height: 0;
 }
 
+/* ============================================================
+   Upload file button — an inviting indigo control with a soft
+   glow ring and a gently bobbing cloud icon on hover. Tokens
+   only (indigo, the app's structure/document accent); the
+   reduced-motion floor below stills the animation.
+   ============================================================ */
+.upload-btn {
+  color: var(--primary);
+  border: 1px solid var(--primary-line);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary-soft) 90%, var(--panel)) 0%,
+    var(--panel) 100%
+  );
+  transition:
+    box-shadow var(--dur-base) var(--ease-standard),
+    transform var(--dur-base) var(--ease-standard),
+    border-color var(--dur-base) var(--ease-standard),
+    background var(--dur-base) var(--ease-standard);
+}
+.upload-btn:hover {
+  border-color: var(--primary);
+  background: linear-gradient(
+    180deg,
+    var(--primary-soft) 0%,
+    color-mix(in srgb, var(--primary-soft) 55%, var(--panel)) 100%
+  );
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--primary-soft) 70%, transparent),
+    0 8px 20px -8px color-mix(in srgb, var(--primary) 55%, transparent);
+  transform: translateY(-1px);
+}
+.upload-btn:active {
+  transform: translateY(0);
+}
+.upload-btn .upload-btn-icon {
+  transition: transform var(--dur-base) var(--ease-emphasis);
+}
+.upload-btn:hover .upload-btn-icon {
+  animation: uploadBob 1s ease-in-out infinite;
+}
+@keyframes uploadBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2.5px);
+  }
+}
+
 /* Task hover-preview card — subtle fade-in on appear. */
 @keyframes hoverPop {
   from { opacity: 0; transform: translateY(3px); }
