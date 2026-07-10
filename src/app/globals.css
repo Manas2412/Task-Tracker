@@ -244,6 +244,21 @@ body.sortable-dragging .pb-accordion-body {
   }
 }
 
+/* ============================================================
+   Calendar list rows — a light wash of the item's category colour
+   (the same hue as its legend pill), kept lighter than the icon
+   tile so the tile stays distinct. Tokens only, via color-mix.
+   ============================================================ */
+.cal-row-task {
+  background-color: color-mix(in srgb, var(--primary-soft) 55%, var(--panel));
+}
+.cal-row-engagement {
+  background-color: color-mix(in srgb, var(--info-soft) 55%, var(--panel));
+}
+.cal-row-tf {
+  background-color: color-mix(in srgb, var(--urgent-soft) 55%, var(--panel));
+}
+
 /* Task hover-preview card — subtle fade-in on appear. */
 @keyframes hoverPop {
   from { opacity: 0; transform: translateY(3px); }

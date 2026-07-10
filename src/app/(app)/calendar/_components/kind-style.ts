@@ -19,6 +19,8 @@ export const KIND_META: Record<
     dot: string;
     /** Border for the list-view row card. */
     rowBorder: string;
+    /** Light background wash for the list-view row (matches the pill hue). */
+    rowTint: string;
     /** Icon tile in the list view + detail. */
     tile: string;
   }
@@ -29,6 +31,7 @@ export const KIND_META: Record<
     chip: 'bg-info-soft text-info hover:bg-info-soft/80',
     dot: 'bg-info',
     rowBorder: 'border-info/40',
+    rowTint: 'cal-row-engagement',
     tile: 'bg-info-soft text-info',
   },
   task: {
@@ -37,6 +40,7 @@ export const KIND_META: Record<
     chip: 'bg-primary-soft text-primary hover:bg-primary-soft/80',
     dot: 'bg-primary',
     rowBorder: 'border-primary-line/40',
+    rowTint: 'cal-row-task',
     tile: 'bg-primary-soft text-primary',
   },
   tf: {
@@ -45,6 +49,7 @@ export const KIND_META: Record<
     chip: 'bg-urgent-soft text-urgent hover:bg-urgent-soft/80',
     dot: 'bg-urgent',
     rowBorder: 'border-urgent/40',
+    rowTint: 'cal-row-tf',
     tile: 'bg-urgent-soft text-urgent',
   },
 };
