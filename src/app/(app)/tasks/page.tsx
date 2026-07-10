@@ -18,6 +18,7 @@ import { QuickCreatePrimary } from './_components/QuickCreate';
 import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/ui/Pill';
 
 const VALID_FILTERS: TaskFilter[] = ['all', 'today', 'overdue', 'mine', 'urgent', 'completed', 'js_priority'];
+const VALID_SORTS: TaskSort[] = ['default', 'latest', 'alpha'];
 
 type PageProps = {
   searchParams?: { filter?: string; division?: string; group?: string; sort?: string };
@@ -35,7 +36,9 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
   const divisionFilter = searchParams?.division ?? '';
   const requestedGroupByDivision = searchParams?.group === 'division';
-  const sort: TaskSort = searchParams?.sort === 'latest' ? 'latest' : 'default';
+  const sort: TaskSort = VALID_SORTS.includes((searchParams?.sort as TaskSort) ?? 'default')
+    ? ((searchParams?.sort as TaskSort) ?? 'default')
+    : 'default';
 
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },

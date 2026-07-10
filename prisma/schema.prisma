@@ -370,6 +370,15 @@ model Task {
   createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  // Timestamp of the last MEANINGFUL activity on the task — creation, a
+  // comment, a subtask/attachment/tag change, an owner/status/priority/context
+  // edit, etc. Powers the "Recently modified" list sort. Deliberately distinct
+  // from updatedAt (@updatedAt, "Last edited"): it also advances on cross-table
+  // events (comments, attachments) that don't touch the task row, and is NEVER
+  // advanced by passive reads (task_read / subtask_read). Maintained by the
+  // touch helpers in src/lib/activity.ts. See DATA_MODEL.md.
+  lastActivityAt           DateTime        @default(now()) @map("last_activity_at") @db.Timestamptz(6)
+
   archivedAt               DateTime?       @map("archived_at") @db.Timestamptz(6)
   archivedById             String?         @map("archived_by") @db.Uuid
 
@@ -400,6 +409,7 @@ model Task {
   @@index([parentTaskId])
   @@index([linkedTimelineFileId])
   @@index([refNumber])
+  @@index([lastActivityAt])
   @@map("tasks")
 }
 
@@ -502,6 +512,13 @@ model TimelineFile {
 
   createdById                 String              @map("created_by") @db.Uuid
   createdAt                   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  // Timestamp of the last MEANINGFUL activity on the file — creation, a status
+  // or field change, a comment, a marked-to change, a linked task, a document
+  // upload, etc. Powers the "Recently modified" list sort, mirroring
+  // Task.lastActivityAt. Timeline files have no @updatedAt, so this is their
+  // sole "last touched" signal. Maintained by the touch helpers in
+  // src/lib/activity.ts; never advanced by passive reads.
+  lastActivityAt              DateTime            @default(now()) @map("last_activity_at") @db.Timestamptz(6)
   archivedAt                  DateTime?           @map("archived_at") @db.Timestamptz(6)
   archivedById                String?             @map("archived_by") @db.Uuid
 
@@ -519,6 +536,7 @@ model TimelineFile {
   @@index([deadlineDate])
   @@index([status])
   @@index([receivedDate(sort: Desc)])
+  @@index([lastActivityAt])
   @@map("timeline_files")
 }
 

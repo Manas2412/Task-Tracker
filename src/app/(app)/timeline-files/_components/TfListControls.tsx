@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { cn } from '@/lib/utils';
-import type { TfFilter, TfSort } from '@/lib/timeline-files';
+import type { TfFilter } from '@/lib/timeline-files';
 
 type Division = {
   id: string;
@@ -29,6 +29,17 @@ const STATUS_OPTIONS: { value: TfFilter; label: string; dot: string }[] = [
 ];
 
 /**
+ * Sort options for the files list. The empty value is the default order and is
+ * cleared from the URL. Kept in sync with TfSort / VALID_SORTS on the server,
+ * and mirrors the tasks-page sort menu so the two lists feel identical.
+ */
+const SORT_OPTIONS: { value: '' | 'latest' | 'alpha'; label: string; hint: string }[] = [
+  { value: '', label: 'Default order', hint: 'Open first, soonest deadline' },
+  { value: 'latest', label: 'Recently modified', hint: 'Most recent activity on top' },
+  { value: 'alpha', label: 'A–Z', hint: 'Alphabetical by subject' },
+];
+
+/**
  * Client controls for the timeline-files list: a Status dropdown (replaces the
  * old status filter chips), a Division dropdown (all divisions), a Sort
  * dropdown (default / latest), and a Group-by-division toggle. Each writes to
@@ -41,7 +52,9 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
 
   const activeStatus = (searchParams.get('filter') as TfFilter | null) ?? 'all';
   const activeDivision = searchParams.get('division') ?? '';
-  const sortLatest = searchParams.get('sort') === 'latest';
+  const activeSort = (searchParams.get('sort') ?? '') as '' | 'latest' | 'alpha';
+  const sortActive = activeSort !== '';
+  const activeSortLabel = SORT_OPTIONS.find((o) => o.value === activeSort)?.label;
   const groupBy = searchParams.get('group') === 'division';
 
   const [statusOpen, setStatusOpen] = useState(false);
@@ -87,7 +100,7 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
     setDivisionOpen(false);
     router.push(buildHref({ division: divId || '' }), { scroll: false });
   };
-  const onSelectSort = (sort: '' | TfSort) => {
+  const onSelectSort = (sort: '' | 'latest' | 'alpha') => {
     setSortOpen(false);
     router.push(buildHref({ sort }), { scroll: false });
   };
@@ -226,10 +239,10 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
           onClick={() => setSortOpen((v) => !v)}
           aria-haspopup="listbox"
           aria-expanded={sortOpen}
-          className={triggerClass(sortLatest)}
+          className={triggerClass(sortActive)}
         >
           <i className="ti ti-arrows-sort text-[13px]" aria-hidden="true" />
-          {sortLatest ? 'Sort: latest' : 'Sort'}
+          {sortActive && activeSortLabel ? `Sort: ${activeSortLabel}` : 'Sort'}
           <i
             className={cn('ti text-[11px] transition-transform', sortOpen ? 'ti-chevron-up' : 'ti-chevron-down')}
             aria-hidden="true"
@@ -241,36 +254,26 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
             role="listbox"
             className="absolute left-0 top-full mt-1 z-30 min-w-[200px] rounded-xl border border-line bg-panel shadow-xl overflow-hidden"
           >
-            <li>
-              <button
-                type="button"
-                role="option"
-                aria-selected={!sortLatest}
-                onClick={() => onSelectSort('')}
-                className={cn(
-                  'w-full text-left px-3 py-2.5 text-[12.5px] transition-colors',
-                  !sortLatest ? 'bg-primary-soft font-medium text-ink' : 'text-ink-2 hover:bg-bg',
-                )}
-              >
-                Default order
-                <span className="block text-[10.5px] text-ink-3 mt-0.5">Open first, soonest deadline</span>
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                role="option"
-                aria-selected={sortLatest}
-                onClick={() => onSelectSort('latest')}
-                className={cn(
-                  'w-full text-left px-3 py-2.5 text-[12.5px] transition-colors',
-                  sortLatest ? 'bg-primary-soft font-medium text-ink' : 'text-ink-2 hover:bg-bg',
-                )}
-              >
-                Latest first
-                <span className="block text-[10.5px] text-ink-3 mt-0.5">Newest added on top</span>
-              </button>
-            </li>
+            {SORT_OPTIONS.map((o) => {
+              const active = o.value === activeSort;
+              return (
+                <li key={o.value || 'default'}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    onClick={() => onSelectSort(o.value)}
+                    className={cn(
+                      'w-full text-left px-3 py-2.5 text-[12.5px] transition-colors',
+                      active ? 'bg-primary-soft font-medium text-ink' : 'text-ink-2 hover:bg-bg',
+                    )}
+                  >
+                    {o.label}
+                    <span className="block text-[10.5px] text-ink-3 mt-0.5">{o.hint}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         ) : null}
       </div>

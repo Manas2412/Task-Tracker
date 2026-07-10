@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { touchTaskActivity, touchTimelineFileActivity } from '@/lib/activity';
 import { isTaskCollaborator } from '@/lib/task-participants';
 import {
   deleteObject as deleteS3Object,
@@ -294,6 +295,8 @@ async function writeAttachment(args: {
           payload: { fileName: args.fileName, source: args.source },
         },
       });
+      // A file upload is a meaningful update — surface it in "Recently modified".
+      await touchTaskActivity(prisma, args.parentId);
       revalidatePath(`/tasks/${args.parentId}`);
     } else {
       // tf_source or tf_action
@@ -322,6 +325,8 @@ async function writeAttachment(args: {
           },
         });
       }
+      // A document upload (action or source) is a meaningful file update.
+      await touchTimelineFileActivity(prisma, args.parentId);
       revalidatePath(`/timeline-files/${args.parentId}`);
     }
 
@@ -393,6 +398,7 @@ export async function renameAttachmentAction(
           payload: { oldName, newName: parsed.data.fileName },
         },
       });
+      await touchTaskActivity(prisma, att.ownerId);
       revalidatePath(`/tasks/${att.ownerId}`);
     } else {
       await prisma.timelineFileActivity.create({
@@ -403,6 +409,7 @@ export async function renameAttachmentAction(
           payload: { oldName, newName: parsed.data.fileName },
         },
       });
+      await touchTimelineFileActivity(prisma, att.ownerId);
       revalidatePath(`/timeline-files/${att.ownerId}`);
     }
 
@@ -474,6 +481,7 @@ export async function deleteAttachmentAction(
             payload: { fileName: att.fileName },
           },
         });
+        await touchTaskActivity(tx, att.ownerId);
       } else {
         await tx.timelineFileActivity.create({
           data: {
@@ -483,6 +491,7 @@ export async function deleteAttachmentAction(
             payload: { fileName: att.fileName, ownerType: att.ownerType },
           },
         });
+        await touchTimelineFileActivity(tx, att.ownerId);
       }
     });
 

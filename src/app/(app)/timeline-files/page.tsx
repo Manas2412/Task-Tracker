@@ -28,7 +28,7 @@ const VALID_FILTERS: TfFilter[] = [
   'closed',
 ];
 
-const VALID_SORTS: TfSort[] = ['default', 'latest'];
+const VALID_SORTS: TfSort[] = ['default', 'latest', 'alpha'];
 
 /** How the list is grouped. 'none' = a single flat list. */
 type TfGroup = 'none' | 'division';

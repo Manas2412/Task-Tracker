@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { touchTaskActivity } from '@/lib/activity';
 
 /**
  * Tag actions (Phase 3 — final).
@@ -260,6 +261,7 @@ export async function addTagToTaskAction(
         payload: { tagId: tag.id, tagName: tag.name },
       },
     });
+    await touchTaskActivity(prisma, task.id);
   } catch (err: unknown) {
     if (
       err &&
@@ -320,6 +322,7 @@ export async function removeTagFromTaskAction(
         },
       });
     }
+    await touchTaskActivity(prisma, task.id);
   } catch (err) {
     logError('removeTagFromTaskAction failed', err);
     return fail('Could not remove the tag.', epoch);
