@@ -4,26 +4,16 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Sheet, Switch } from '@/components/ui';
-import { cn } from '@/lib/utils';
 
-import type { CalendarFilters as Filters, CalendarKind } from '@/lib/calendar';
-import { buildCalendarHref, serializeKinds, type RawParams } from './filter-params';
-import { KIND_META } from './kind-style';
+import type { CalendarFilters as Filters } from '@/lib/calendar';
+import { buildCalendarHref, type RawParams } from './filter-params';
 
 type Props = {
   sp: RawParams;
   filters: Filters;
-  /** Whether the engagement kind is offered (OJS members + Super Admins). */
-  showEngagements: boolean;
   /** Divisions offered in the division filter (only shown when >1). */
   divisions: { id: string; name: string }[];
 };
-
-const KIND_CHIPS: { kind: CalendarKind; label: string }[] = [
-  { kind: 'engagement', label: 'JS engagements' },
-  { kind: 'task', label: 'Task deadlines' },
-  { kind: 'tf', label: 'Timeline files' },
-];
 
 const PRIORITY_OPTIONS = [
   { value: 'urgent', label: 'Urgent' },
@@ -40,10 +30,8 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: 'Completed' },
 ];
 
-export function CalendarFilters({ sp, filters, showEngagements, divisions }: Props) {
+export function CalendarFilters({ sp, filters, divisions }: Props) {
   const router = useRouter();
-  const chips = KIND_CHIPS.filter((c) => c.kind !== 'engagement' || showEngagements);
-  const availableKinds = chips.map((c) => c.kind);
   // The division control (and therefore the division filter) is only offered to
   // cross-division viewers. Keep the badge and the applied URL in lock-step with
   // the control so a phantom ?division from a shared URL can't linger unseen.
@@ -51,22 +39,21 @@ export function CalendarFilters({ sp, filters, showEngagements, divisions }: Pro
 
   const [open, setOpen] = useState(false);
   // Pending selections — synced to the applied filters each time the sheet opens.
-  const [kinds, setKinds] = useState<Set<CalendarKind>>(new Set(filters.kinds));
+  // Item-kind filtering lives outside the sheet, in the KindFilterBar legend.
   const [mine, setMine] = useState(filters.mine);
   const [divisionId, setDivisionId] = useState(filters.divisionId ?? '');
   const [priority, setPriority] = useState(filters.priority ?? '');
   const [status, setStatus] = useState(filters.status ?? '');
 
-  // Badge on the trigger reflects the currently APPLIED filters.
+  // Badge on the trigger reflects the currently APPLIED filters (kinds excluded —
+  // they are toggled on the legend, not here).
   const appliedCount =
     (filters.mine ? 1 : 0) +
     (canPickDivision && filters.divisionId ? 1 : 0) +
     (filters.priority ? 1 : 0) +
-    (filters.status ? 1 : 0) +
-    (availableKinds.some((k) => !filters.kinds.has(k)) ? 1 : 0);
+    (filters.status ? 1 : 0);
 
   const openSheet = () => {
-    setKinds(new Set(filters.kinds));
     setMine(filters.mine);
     setDivisionId(filters.divisionId ?? '');
     setPriority(filters.priority ?? '');
@@ -74,20 +61,7 @@ export function CalendarFilters({ sp, filters, showEngagements, divisions }: Pro
     setOpen(true);
   };
 
-  const allSelected = availableKinds.every((k) => kinds.has(k));
-
-  const selectAllKinds = () => setKinds(new Set(availableKinds));
-  const toggleKind = (kind: CalendarKind) => {
-    setKinds((prev) => {
-      const next = new Set(prev);
-      if (next.has(kind)) next.delete(kind);
-      else next.add(kind);
-      return next;
-    });
-  };
-
   const reset = () => {
-    setKinds(new Set(availableKinds));
     setMine(false);
     setDivisionId('');
     setPriority('');
@@ -95,11 +69,11 @@ export function CalendarFilters({ sp, filters, showEngagements, divisions }: Pro
   };
 
   const apply = () => {
-    // Preserve only view + date; rebuild every filter param from the pending state.
+    // Preserve view + date + the legend's kind selection (types); rebuild the
+    // rest of the filters from the pending state.
     const href = buildCalendarHref(
-      { view: sp.view, date: sp.date },
+      { view: sp.view, date: sp.date, types: sp.types },
       {
-        types: serializeKinds(kinds, availableKinds),
         mine: mine ? '1' : null,
         division: canPickDivision ? divisionId || null : null,
         priority: priority || null,
@@ -130,50 +104,6 @@ export function CalendarFilters({ sp, filters, showEngagements, divisions }: Pro
 
       <Sheet open={open} onClose={() => setOpen(false)} title="Filters">
         <div className="flex flex-col gap-5">
-          {/* Item types */}
-          <section>
-            <p className="text-[10px] uppercase tracking-[0.08em] text-ink-3 font-medium mb-2">
-              Show
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={selectAllKinds}
-                aria-pressed={allSelected}
-                className={cn(
-                  'inline-flex items-center px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-colors',
-                  allSelected
-                    ? 'border-ink bg-ink text-white'
-                    : 'border-line bg-bg text-ink-2 hover:text-ink',
-                )}
-              >
-                All
-              </button>
-              {chips.map(({ kind, label }) => {
-                const active = kinds.has(kind);
-                return (
-                  <button
-                    key={kind}
-                    type="button"
-                    onClick={() => toggleKind(kind)}
-                    aria-pressed={active}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-colors',
-                      active
-                        ? 'border-ink-4 bg-panel text-ink'
-                        : 'border-line bg-bg text-ink-3 hover:text-ink-2',
-                    )}
-                  >
-                    <span
-                      className={cn('w-2.5 h-2.5 rounded-full', active ? KIND_META[kind].dot : 'bg-ink-4/40')}
-                    />
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
           {/* My items */}
           <label className="flex items-center justify-between gap-3 cursor-pointer">
             <span className="min-w-0">

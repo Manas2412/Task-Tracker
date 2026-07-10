@@ -23,6 +23,8 @@ export const KIND_META: Record<
     rowTint: string;
     /** Icon tile in the list view + detail. */
     tile: string;
+    /** Active (selected) state for the kind filter button — a soft glow in the kind hue. */
+    activeBtn: string;
   }
 > = {
   engagement: {
@@ -33,6 +35,7 @@ export const KIND_META: Record<
     rowBorder: 'border-info/40',
     rowTint: 'cal-row-engagement',
     tile: 'bg-info-soft text-info',
+    activeBtn: 'bg-info-soft text-info border-info/40 ring-2 ring-info/30 shadow-sm',
   },
   task: {
     label: 'Task deadline',
@@ -42,6 +45,7 @@ export const KIND_META: Record<
     rowBorder: 'border-primary-line/40',
     rowTint: 'cal-row-task',
     tile: 'bg-primary-soft text-primary',
+    activeBtn: 'bg-primary-soft text-primary border-primary/30 ring-2 ring-primary/25 shadow-sm',
   },
   tf: {
     label: 'Timeline file',
@@ -51,6 +55,7 @@ export const KIND_META: Record<
     rowBorder: 'border-urgent/40',
     rowTint: 'cal-row-tf',
     tile: 'bg-urgent-soft text-urgent',
+    activeBtn: 'bg-urgent-soft text-urgent border-urgent/40 ring-2 ring-urgent/30 shadow-sm',
   },
 };
 

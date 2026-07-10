@@ -65,13 +65,21 @@ export function serializeKinds(
   return ALL_KINDS.filter((k) => active.includes(k)).join(',');
 }
 
-/** Toggle a kind in the `types` param, returning the new serialized value or null (= all). */
-export function toggleKindParam(current: Set<CalendarKind>, kind: CalendarKind): string | null {
+/**
+ * Toggle a kind for the legend filter, considering only the kinds available to
+ * this viewer (`available`). Returns the new serialized `types` value, or null
+ * (= all, param dropped) — including when the toggle would leave no AVAILABLE
+ * kind selected, so a viewer can never strand the calendar on a kind they can't
+ * even see (e.g. a non-OJS user turning off both task and tf). Delegates to
+ * `serializeKinds` so the "all / none → default" collapse stays in one place.
+ */
+export function toggleKindParam(
+  current: Set<CalendarKind>,
+  kind: CalendarKind,
+  available: CalendarKind[] = ALL_KINDS,
+): string | null {
   const next = new Set(current);
   if (next.has(kind)) next.delete(kind);
   else next.add(kind);
-  // Never allow an empty set — re-enabling everything is the sensible reset.
-  if (next.size === 0) return ALL_KINDS.join(',');
-  if (next.size === ALL_KINDS.length) return null; // default (all) → drop the param
-  return ALL_KINDS.filter((k) => next.has(k)).join(',');
+  return serializeKinds(next, available);
 }
