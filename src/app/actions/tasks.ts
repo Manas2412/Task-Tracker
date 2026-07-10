@@ -265,6 +265,22 @@ export async function createTaskAction(
   formData: FormData,
 ): Promise<CreateTaskState> {
   const epoch = bump(prev);
+  // Top-level guard: without this, a throw in the pre-transaction section
+  // (session / RBAC / division lookups) rejects the server action instead of
+  // returning a state, so the client form shows NOTHING (no error, no close).
+  // Any failure now surfaces as a visible message and is logged server-side.
+  try {
+    return await createTaskInner(formData, epoch);
+  } catch (err) {
+    logError('createTaskAction crashed', err);
+    return fail('Could not create the task. Try again.', epoch);
+  }
+}
+
+async function createTaskInner(
+  formData: FormData,
+  epoch: number,
+): Promise<CreateTaskState> {
   const me = await requireSession();
   if (!me) return fail('You are signed out. Refresh and try again.', epoch);
 

@@ -100,6 +100,17 @@ export function CreateTaskFromTfDialog({
     setOwnerId(''); // the previous owner may not belong to the new division
   };
 
+  // Surface any error the server returns. `name` and `ownerId` render inline;
+  // anything else (a general error, or a field error like dueDate) must still
+  // be shown so a failed submit is never silent.
+  const generalError =
+    state.error ??
+    (state.fieldErrors
+      ? Object.entries(state.fieldErrors).find(
+          ([k]) => k !== 'name' && k !== 'ownerId',
+        )?.[1]
+      : undefined);
+
   return (
     <>
       <button
@@ -268,12 +279,12 @@ export function CreateTaskFromTfDialog({
               </div>
             </div>
 
-            {state.error ? (
+            {generalError ? (
               <p
                 role="alert"
                 className="text-[12px] text-urgent bg-urgent-soft border border-urgent/20 rounded-lg px-3 py-2"
               >
-                {state.error}
+                {generalError}
               </p>
             ) : null}
 
