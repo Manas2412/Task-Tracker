@@ -20,19 +20,7 @@ import {
 } from '@/lib/rbac';
 import { buildVisibilityClauses, getPmuParentDivisionHeadId } from '@/lib/visibility';
 import { buildTaskParticipantWhere, isTaskCollaborator, isTaskParticipant } from '@/lib/task-participants';
-
-async function nextTaskRefNumber(
-  divisionId: string,
-  tx: Prisma.TransactionClient = prisma,
-): Promise<string> {
-  const div = await tx.division.update({
-    where: { id: divisionId },
-    data: { taskSeq: { increment: 1 } },
-    select: { abbreviation: true, taskSeq: true },
-  });
-  const prefix = div.abbreviation || 'GEN';
-  return `T-${prefix}${div.taskSeq}`;
-}
+import { nextTaskRefNumber } from '@/lib/task-ref';
 
 /**
  * Task server actions.
@@ -131,7 +119,10 @@ async function spawnRecurringTask(taskId: string, actorId: string): Promise<void
   const nextDue = nextOccurrence(task.dueDate, task.recurrenceRule);
 
   await prisma.$transaction(async (tx) => {
-    const refNumber = await nextTaskRefNumber(task.divisionId, tx);
+    const refNumber = await nextTaskRefNumber(
+      { divisionId: task.divisionId, linkedTimelineFileId: task.linkedTimelineFileId },
+      tx,
+    );
     const spawned = await tx.task.create({
       data: {
         refNumber,
@@ -393,7 +384,10 @@ export async function createTaskAction(
 
   try {
     const task = await prisma.$transaction(async (tx) => {
-      const refNumber = await nextTaskRefNumber(targetDivisionId, tx);
+      const refNumber = await nextTaskRefNumber(
+        { divisionId: targetDivisionId, linkedTimelineFileId: parsed.data.linkedTimelineFileId ?? null },
+        tx,
+      );
       const created = await tx.task.create({
         data: {
           refNumber,
@@ -1071,7 +1065,8 @@ export async function addSubtaskAction(
 
   try {
     const subtask = await prisma.$transaction(async (tx) => {
-      const refNumber = await nextTaskRefNumber(parent.divisionId, tx);
+      // Subtasks are numbered by their parent's division (never TL-derived).
+      const refNumber = await nextTaskRefNumber({ divisionId: parent.divisionId }, tx);
       return tx.task.create({
         data: {
           refNumber,

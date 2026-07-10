@@ -169,10 +169,10 @@ export function CreateDivisionDialog({
               <input
                 name="abbreviation"
                 value={abbr}
-                onChange={(e) => setAbbr(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                onChange={(e) => setAbbr(e.target.value.toUpperCase().replace(/[^A-Z0-9&_]/g, ''))}
                 maxLength={10}
                 autoComplete="off"
-                placeholder="e.g. KI, ABD, OJS"
+                placeholder="e.g. KI, ABD, M&IT, KI_PMU"
                 className="w-full px-3 py-2.5 rounded-lg border border-line bg-panel text-[13px] font-mono tracking-wide outline-none transition-colors focus:border-ink placeholder:text-ink-4 placeholder:font-sans placeholder:tracking-normal"
               />
               {abbr ? (
