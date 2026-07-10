@@ -80,7 +80,10 @@ export function TaskCard({
 }: TaskCardProps) {
   const isJs = !!jsPriorityLane;
   const Wrapper: React.ElementType = href ? Link : 'article';
-  const wrapperProps = href ? { href } : {};
+  // draggable={false}: stop a touch hold-drag from starting a native link-drag
+  // on the anchor (which would fire touchcancel and abort the card's swipe /
+  // long-press gestures). Inert for desktop click and tap.
+  const wrapperProps = href ? { href, draggable: false } : {};
 
   const priorityDot = cn('w-2 h-2 rounded-full shrink-0', PRIORITY_DOT[priority]);
 

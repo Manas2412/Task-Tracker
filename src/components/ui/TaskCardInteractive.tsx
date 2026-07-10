@@ -37,8 +37,16 @@ export function TaskCardInteractive(props: TaskCardInteractiveProps) {
   const { canChangeStatus, canWatchlist, ...cardProps } = props;
   const longPressEnabled = canChangeStatus || canWatchlist;
 
-  const { ref, phase, swipeOffset, isDragging, longPressProgress, suppressClickRef, closeOverlay } =
-    useTaskCardGestures({ longPressEnabled });
+  const {
+    ref,
+    phase,
+    swipeOffset,
+    isDragging,
+    longPressProgress,
+    suppressClickRef,
+    isMobile,
+    closeOverlay,
+  } = useTaskCardGestures({ longPressEnabled });
 
   // Memoize the card subtree so swipe/long-press state changes only update the
   // wrapper transform + the progress ring — never re-render the card itself.
@@ -73,14 +81,28 @@ export function TaskCardInteractive(props: TaskCardInteractiveProps) {
         <i className="ti ti-chevron-left text-[18px]" />
       </div>
 
-      {/* Swipe surface — the card follows the finger; tap still navigates. */}
+      {/* Swipe surface — the card follows the finger; tap still navigates.
+          On a touch phone we suppress the browser's native link/text behaviours
+          (iOS callout, Android context-menu, text-selection, tap highlight) —
+          otherwise they fire ~0.5s into a hold/drag and dispatch touchcancel,
+          killing the long-press timer and stealing slow swipes. Scoped to
+          isMobile so desktop right-click / text-selection are untouched. */}
       <div
         ref={ref}
         onClickCapture={onClickCapture}
+        onContextMenu={isMobile ? (e) => e.preventDefault() : undefined}
         style={{
           transform: `translateX(${swipeOffset}px)`,
           transition: isDragging ? 'none' : 'transform 200ms ease-out',
           touchAction: 'pan-y',
+          ...(isMobile
+            ? {
+                WebkitTouchCallout: 'none',
+                WebkitUserSelect: 'none',
+                userSelect: 'none',
+                WebkitTapHighlightColor: 'transparent',
+              }
+            : {}),
         }}
         className="relative"
       >
