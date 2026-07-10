@@ -4,8 +4,11 @@ import {
   ALL_KINDS,
   buildCalendarHref,
   parseCalendarFilters,
+  serializeKinds,
   toggleKindParam,
 } from '@/app/(app)/calendar/_components/filter-params';
+
+import type { CalendarKind } from '@/lib/calendar';
 
 describe('parseCalendarFilters', () => {
   it('defaults to all kinds and no narrowing', () => {
@@ -54,6 +57,33 @@ describe('toggleKindParam', () => {
   it('never produces an empty selection — it resets to all', () => {
     const one = new Set<'task' | 'tf' | 'engagement'>(['task']);
     expect(toggleKindParam(one, 'task')).toBe(ALL_KINDS.join(','));
+  });
+});
+
+describe('serializeKinds', () => {
+  const set = (...ks: CalendarKind[]) => new Set<CalendarKind>(ks);
+
+  it('returns null when all available kinds are selected (= default, param dropped)', () => {
+    expect(serializeKinds(set('engagement', 'task', 'tf'))).toBeNull();
+  });
+
+  it('returns null for an empty selection (meaningless → falls back to all)', () => {
+    expect(serializeKinds(set())).toBeNull();
+  });
+
+  it('serialises a partial selection in ALL_KINDS order', () => {
+    expect(serializeKinds(set('tf', 'task'))).toBe('task,tf');
+    expect(serializeKinds(set('task'))).toBe('task');
+  });
+
+  it('respects a viewer-specific available set (non-OJS: task + tf only)', () => {
+    const available: CalendarKind[] = ['task', 'tf'];
+    // Both available kinds on → null (default all).
+    expect(serializeKinds(set('task', 'tf'), available)).toBeNull();
+    // A selected engagement is ignored because it is not available to this viewer.
+    expect(serializeKinds(set('task', 'tf', 'engagement'), available)).toBeNull();
+    // One available kind on → that kind.
+    expect(serializeKinds(set('task'), available)).toBe('task');
   });
 });
 

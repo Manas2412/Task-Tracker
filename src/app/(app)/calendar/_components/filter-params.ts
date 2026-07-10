@@ -50,6 +50,21 @@ export function buildCalendarHref(sp: RawParams, overrides: Record<string, strin
   return qs ? `/calendar?${qs}` : '/calendar';
 }
 
+/**
+ * Serialize a set of selected kinds to the `types` param value, considering
+ * only the kinds actually available to this viewer. Returns null (drop the
+ * param, = default "all") when all available kinds are on, or when none are
+ * (an empty selection is meaningless, so it falls back to all).
+ */
+export function serializeKinds(
+  selected: Set<CalendarKind>,
+  available: CalendarKind[] = ALL_KINDS,
+): string | null {
+  const active = available.filter((k) => selected.has(k));
+  if (active.length === 0 || active.length === available.length) return null;
+  return ALL_KINDS.filter((k) => active.includes(k)).join(',');
+}
+
 /** Toggle a kind in the `types` param, returning the new serialized value or null (= all). */
 export function toggleKindParam(current: Set<CalendarKind>, kind: CalendarKind): string | null {
   const next = new Set(current);

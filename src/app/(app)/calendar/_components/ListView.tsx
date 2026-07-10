@@ -65,9 +65,6 @@ function DayHeading({ date, dateIso }: { date: Date; dateIso: string }) {
       <span className={cn('font-serif text-[18px] leading-none', today ? 'text-accent' : 'text-ink')}>
         {label}
       </span>
-      {!today && !tomorrow ? (
-        <span className="text-[11px] text-ink-3">{format(date, 'd LLL yyyy')}</span>
-      ) : null}
       <span className="ml-auto">
         <AddOnDayButton dateIso={dateIso} />
       </span>
