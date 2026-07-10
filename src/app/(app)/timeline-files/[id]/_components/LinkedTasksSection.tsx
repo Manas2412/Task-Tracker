@@ -5,7 +5,11 @@ import { initialsOf, formatDue } from '@/lib/format';
 import { TASK_STATUS_LABEL } from '@/lib/labels';
 import { cn } from '@/lib/utils';
 
-import { CreateTaskFromTfDialog } from './CreateTaskFromTfDialog';
+import {
+  CreateTaskFromTfDialog,
+  type CtfDivisionOption,
+  type CtfOwnerCandidate,
+} from './CreateTaskFromTfDialog';
 
 import type { PillStatusTone } from '@/components/ui/Pill';
 
@@ -22,7 +26,8 @@ type LinkedTasksSectionProps = {
   tfId: string;
   refNo: string;
   defaultDueDate: string | null;
-  markedTo: { id: string; name: string }[];
+  markedTo: CtfDivisionOption[];
+  ownerCandidates: CtfOwnerCandidate[];
   linkedTasks: LinkedTaskRow[];
   canCreateTasks: boolean;
 };
@@ -32,6 +37,7 @@ export function LinkedTasksSection({
   refNo,
   defaultDueDate,
   markedTo,
+  ownerCandidates,
   linkedTasks,
   canCreateTasks,
 }: LinkedTasksSectionProps) {
@@ -90,6 +96,7 @@ export function LinkedTasksSection({
           refNo={refNo}
           defaultDueDate={defaultDueDate}
           divisions={markedTo}
+          ownerCandidates={ownerCandidates}
         />
       ) : null}
     </section>

@@ -234,7 +234,40 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
     .map((m) => ({
       id: m.division.id,
       name: m.division.name,
+      isOfficeOfJs: m.division.name === 'Office of JS',
     }));
+
+  // Optional initial-owner pool for the create-from-file dialog: active members
+  // of the divisions the caller may spawn into (any active user when Office of
+  // JS is a target — the same rule createTaskAction enforces on save). Marked-to
+  // targets are always kind:'division' (the marked-to editor offers no PMUs), so
+  // a home-division match matches the server's membership check for this path.
+  const hasOfficeOfJsTarget = markedToOptions.some((d) => d.isOfficeOfJs);
+  const ownerCandidateRows =
+    creatableDivisionIds.length > 0
+      ? await prisma.user.findMany({
+          where: {
+            isActive: true,
+            ...(hasOfficeOfJsTarget ? {} : { divisionId: { in: creatableDivisionIds } }),
+          },
+          select: {
+            id: true,
+            name: true,
+            designation: true,
+            divisionId: true,
+            division: { select: { name: true, avatarColour: true } },
+          },
+          orderBy: { name: 'asc' },
+        })
+      : [];
+  const ownerCandidates = ownerCandidateRows.map((u) => ({
+    id: u.id,
+    name: u.name,
+    designation: u.designation,
+    divisionId: u.divisionId,
+    divisionName: u.division.name,
+    divisionColour: u.division.avatarColour,
+  }));
 
   // Stable signature line for the secretary's quote.
   const secretarySignature = `Secretary, Sports · ${format(tf.receivedDate, 'd LLL')}`;
@@ -308,6 +341,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         refNo={tf.refNo}
         defaultDueDate={deadlineIso}
         markedTo={markedToOptions}
+        ownerCandidates={ownerCandidates}
         linkedTasks={linkedTasks}
         canCreateTasks={canCreateTasks}
       />
