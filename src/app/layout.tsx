@@ -52,13 +52,29 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: 'cover',
+  // Light default; the init script and the toggle rewrite this meta's content
+  // to match the *active* app theme (so the mobile URL-bar tint follows the
+  // in-app toggle, not just the OS scheme).
   themeColor: '#f5f4f0',
 };
 
+// Runs before first paint: resolves the saved theme (or the OS preference on a
+// first visit) and applies it to <html> so there is no light flash in dark.
+// The localStorage read is isolated in its own try so that, if storage access
+// throws, the OS-preference fallback and the attribute writes still run.
+const THEME_INIT = `(function(){var d=document.documentElement,t;try{t=localStorage.getItem('theme')}catch(e){}if(t!=='light'&&t!=='dark'){try{t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}catch(e){t='light'}}d.setAttribute('data-theme',t);d.style.colorScheme=t;try{var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',t==='dark'?'#0e0e11':'#f5f4f0')}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={cn(manrope.variable, newsreader.variable, jetbrainsMono.variable)}>
-      <body>{children}</body>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={cn(manrope.variable, newsreader.variable, jetbrainsMono.variable)}
+    >
+      <body>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+        {children}
+      </body>
       {process.env.NEXT_PUBLIC_GA_ID && (
         <>
           <Script

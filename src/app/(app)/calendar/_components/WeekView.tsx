@@ -44,7 +44,7 @@ export function WeekView({ grid, events }: WeekViewProps) {
                 className="mt-1 inline-flex flex-col items-center gap-0.5 px-2 py-1"
               >
                 {cell.isToday ? (
-                  <span className="inline-flex items-center justify-center w-8 h-8 md:w-9 md:h-9 rounded-full bg-accent text-white text-[15px] md:text-[17px] font-medium tabular-nums">
+                  <span className="inline-flex items-center justify-center w-8 h-8 md:w-9 md:h-9 rounded-full bg-accent text-onink text-[15px] md:text-[17px] font-medium tabular-nums">
                     {cell.date.getDate()}
                   </span>
                 ) : (

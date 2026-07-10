@@ -7,5 +7,6 @@ export { UserMenu } from './UserMenu';
 export { NotificationsBell, type BellNotification } from './NotificationsBell';
 export { RoleSwitcher } from './RoleSwitcher';
 export { SearchField } from './SearchField';
+export { ThemeToggle } from './ThemeToggle';
 export { PrimaryAction } from './PrimaryAction';
 export { FloatingActionButton } from './FloatingActionButton';

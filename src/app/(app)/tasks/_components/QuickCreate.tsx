@@ -578,14 +578,14 @@ function QuickCreateForm({
                       className={cn(
                         'inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg border text-[12px] font-medium transition-colors',
                         active
-                          ? 'border-ink bg-ink text-white'
+                          ? 'border-ink bg-ink text-onink'
                           : 'border-line bg-panel text-ink-2 hover:border-ink-4 hover:text-ink',
                       )}
                     >
                       <i className="ti ti-user text-[13px]" aria-hidden="true" />
                       <span className="max-w-[120px] truncate">{p.name}</span>
                       <span
-                        className={cn('text-[10px]', active ? 'text-white/70' : 'text-ink-3')}
+                        className={cn('text-[10px]', active ? 'text-onink/70' : 'text-ink-3')}
                       >
                         {p.role}
                       </span>
@@ -732,7 +732,7 @@ function SaveButton({ uploading }: { uploading: boolean }) {
     <button
       type="submit"
       disabled={disabled}
-      className="flex-1 py-3 rounded-lg bg-ink text-white text-[14px] font-medium transition-opacity disabled:opacity-60"
+      className="flex-1 py-3 rounded-lg bg-ink text-onink text-[14px] font-medium transition-opacity disabled:opacity-60"
     >
       {uploading ? 'Uploading…' : pending ? 'Saving…' : 'Save task'}
     </button>

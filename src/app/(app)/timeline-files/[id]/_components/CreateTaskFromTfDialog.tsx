@@ -116,7 +116,7 @@ export function CreateTaskFromTfDialog({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center justify-center gap-1.5 w-full py-2.5 mt-3 rounded-lg bg-ink text-white text-[13px] font-medium hover:bg-ink-2 transition-colors"
+        className="inline-flex items-center justify-center gap-1.5 w-full py-2.5 mt-3 rounded-lg bg-ink text-onink text-[13px] font-medium hover:bg-ink-2 transition-colors"
       >
         <i className="ti ti-plus text-[14px]" aria-hidden="true" />
         Create task from this file
@@ -328,7 +328,7 @@ function CreateButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+      className="flex-1 py-2.5 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-60"
     >
       {pending ? 'Creating…' : 'Create task'}
     </button>

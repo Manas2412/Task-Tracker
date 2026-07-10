@@ -536,7 +536,7 @@ function SaveButton() {
     <button
       type="submit"
       disabled={pending}
-      className="px-3 py-1 rounded-md text-[11px] font-medium bg-ink text-white disabled:bg-ink-4"
+      className="px-3 py-1 rounded-md text-[11px] font-medium bg-ink text-onink disabled:bg-ink-4"
     >
       {pending ? 'Saving…' : 'Save'}
     </button>
@@ -856,7 +856,7 @@ function SendButton() {
       type="submit"
       aria-label="Post comment"
       disabled={pending}
-      className="w-8 h-8 grid place-items-center rounded-full bg-primary text-white shadow-sm transition-colors hover:bg-primary/90 disabled:bg-ink-4 disabled:cursor-not-allowed"
+      className="w-8 h-8 grid place-items-center rounded-full bg-primary text-onink shadow-sm transition-colors hover:bg-primary/90 disabled:bg-ink-4 disabled:cursor-not-allowed"
     >
       <i className={cn('ti', pending ? 'ti-loader-2 animate-spin' : 'ti-send-2', 'text-[15px]')} aria-hidden="true" />
     </button>

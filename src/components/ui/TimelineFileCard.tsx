@@ -157,7 +157,7 @@ function Compact(p: CompactProps) {
         p.className,
       )}
     >
-      <div className="w-9 h-9 grid place-items-center rounded-lg bg-primary text-white shrink-0">
+      <div className="w-9 h-9 grid place-items-center rounded-lg bg-primary text-onink shrink-0">
         <i className="ti ti-file-stack text-[18px]" aria-hidden="true" />
       </div>
       <div className="flex-1 min-w-0">

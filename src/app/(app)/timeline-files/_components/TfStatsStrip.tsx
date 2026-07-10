@@ -109,7 +109,7 @@ function StatButton({
     <button
       type="button"
       onClick={onClick}
-      className="group -m-1 rounded-xl p-1 text-left transition-colors hover:bg-white/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+      className="group -m-1 rounded-xl p-1 text-left transition-colors hover:bg-line-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
     >
       <div className={cn('font-serif text-[22px] leading-none font-medium md:text-[28px]', toneClass)}>
         {value}

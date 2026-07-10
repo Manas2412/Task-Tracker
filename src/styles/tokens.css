@@ -14,6 +14,11 @@
   --ink-2:   #525252;
   --ink-3:   #8a8a8a;
   --ink-4:   #b8b6ae;
+  /* Foreground that sits ON an --ink-coloured surface (primary buttons,
+     selected chips, tooltips). White in light mode; flips dark in the dark
+     theme, where --ink itself becomes near-white. Pair every `bg-ink` fill
+     with `text-onink` (never a bare `text-white`) so it survives both themes. */
+  --on-ink:  #ffffff;
 
   --line:    #e8e6df;
   --line-2:  #efedf0;
@@ -105,4 +110,84 @@
   --glass-border:   rgba(255, 255, 255, 0.66);
   --glass-blur:     20px;
   --glass-shadow:   0 10px 34px -14px rgba(26, 26, 26, 0.22), 0 2px 8px -4px rgba(26, 26, 26, 0.10);
+}
+
+/* ============================================================
+   Dark theme — variable overrides only.
+   Applied by `[data-theme="dark"]` on <html> (set pre-paint by the
+   no-flash script in the root layout, toggled by ThemeToggle). Because
+   the whole app consumes these tokens through Tailwind classes
+   (bg-panel, text-ink, …) and color-mix() over them, flipping the
+   variables re-themes every screen with no per-component changes.
+
+   Design intent:
+   - Layered near-black neutrals (bg < canvas < panel) for card elevation.
+   - Ink scale inverted for text; --on-ink flips to dark so `bg-ink`
+     buttons become light surfaces with dark labels.
+   - Brand + status hues are the mid-tone dark-mode variants: bright
+     enough to read as text on the dark `-soft` wash, dark enough that
+     white still reads on the solid fill. `-soft` and `-tint` become
+     dark washes of the same hue.
+   - Glass surfaces re-based on dark; shadows deepened for real elevation.
+   ============================================================ */
+[data-theme='dark'] {
+  /* -- Neutrals -- */
+  --bg:      #0e0e11;
+  --canvas:  #16161a;
+  --panel:   #1c1c21;
+
+  --ink:     #ececef;
+  --ink-2:   #b2b2b8;
+  --ink-3:   #86868d;
+  --ink-4:   #5a5a62;
+  --on-ink:  #16161a;
+
+  --line:    #2d2d34;
+  --line-2:  #262229;
+
+  /* -- Brand accents -- */
+  --primary:       #8886f2;
+  --primary-soft:  #262450;
+  --primary-line:  #403e78;
+  --primary-tint:  #191921;
+
+  --accent:        #e6a24e;
+  --accent-soft:   #3a2b13;
+  --accent-line:   #5e461e;
+  --accent-tint:   #1e1a12;
+
+  /* -- Status colours -- */
+  --urgent:       #e26461;
+  --urgent-soft:  #3a1b1b;
+
+  --high:         #db7f38;
+  --high-soft:    #38260f;
+
+  --medium:       #6f92e6;
+  --medium-soft:  #1d2740;
+
+  --low:          #93939a;
+  --low-soft:     #26262c;
+
+  --info:         #33a3b5;
+  --info-soft:    #10303a;
+
+  --hold:         #c2872f;
+  --hold-soft:    #362713;
+
+  --success:      #40a866;
+  --success-soft: #12311f;
+
+  --pending:      #93939a;
+  --pending-soft: #26262c;
+
+  /* -- Glass — dark-based translucency -- */
+  --glass-bg:       rgba(28, 28, 33, 0.55);
+  --glass-bg-solid: rgba(24, 24, 29, 0.94);
+  --glass-border:   rgba(255, 255, 255, 0.08);
+  --glass-shadow:   0 12px 40px -14px rgba(0, 0, 0, 0.7), 0 2px 10px -4px rgba(0, 0, 0, 0.5);
+
+  /* -- Elevation — deeper on dark so cards separate from the page -- */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.6);
+  --shadow-2: 0 2px 10px rgba(0, 0, 0, 0.6);
 }

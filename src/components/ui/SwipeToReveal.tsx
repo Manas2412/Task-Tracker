@@ -41,9 +41,9 @@ type SwipeToRevealProps = {
 
 const TONE_BG: Record<ActionTone, string> = {
   danger: 'bg-urgent text-white',
-  primary: 'bg-primary text-white',
+  primary: 'bg-primary text-onink',
   info: 'bg-info text-white',
-  neutral: 'bg-ink text-white',
+  neutral: 'bg-ink text-onink',
 };
 
 export function SwipeToReveal({ action, children, className }: SwipeToRevealProps) {

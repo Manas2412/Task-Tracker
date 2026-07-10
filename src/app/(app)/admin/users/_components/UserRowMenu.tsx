@@ -465,7 +465,7 @@ function ChangeDivisionOverlay({
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+            className="flex-1 py-2.5 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-60"
           >
             {saving ? 'Saving…' : 'Save'}
           </button>

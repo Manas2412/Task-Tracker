@@ -58,7 +58,7 @@ function Tab({
       className={cn(
         'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-medium transition-colors',
         active
-          ? 'bg-ink text-white'
+          ? 'bg-ink text-onink'
           : 'text-ink-2 hover:text-ink hover:bg-line-2',
       )}
     >

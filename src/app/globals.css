@@ -412,3 +412,25 @@ body.sortable-dragging .pb-accordion-body {
   .glass-ambient { opacity: 0.5; }
 }
 .hover-pop { animation: hoverPop 0.13s ease-out; transform-origin: top left; }
+
+/* ============================================================
+   Theme transition — a brief, premium cross-fade of colours when the
+   user flips light ↔ dark. ThemeToggle adds `.theme-transition` to
+   <html> for ~450ms around the swap; scoping the transition to that
+   class keeps ordinary hovers/presses on their own timings. Gated on
+   `no-preference` so reduced-motion users get an instant swap instead.
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference) {
+  html.theme-transition,
+  html.theme-transition *,
+  html.theme-transition *::before,
+  html.theme-transition *::after {
+    transition:
+      background-color 0.4s var(--ease-standard),
+      border-color 0.4s var(--ease-standard),
+      color 0.4s var(--ease-standard),
+      fill 0.4s var(--ease-standard),
+      stroke 0.4s var(--ease-standard),
+      box-shadow 0.4s var(--ease-standard) !important;
+  }
+}

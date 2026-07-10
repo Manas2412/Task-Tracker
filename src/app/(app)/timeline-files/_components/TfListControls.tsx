@@ -115,7 +115,7 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
   const triggerClass = (active: boolean) =>
     cn(
       'inline-flex items-center gap-1.5 px-3 py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
-      active ? 'bg-ink text-white border-ink' : 'bg-panel text-ink-2 border-line hover:border-ink-4',
+      active ? 'bg-ink text-onink border-ink' : 'bg-panel text-ink-2 border-line hover:border-ink-4',
     );
 
   return (

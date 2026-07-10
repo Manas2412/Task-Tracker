@@ -156,7 +156,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
               className={cn(
                 'whitespace-nowrap px-3 py-1.5 rounded-[14px] text-[12px] font-medium border transition-colors',
                 active
-                  ? 'bg-ink text-white border-ink'
+                  ? 'bg-ink text-onink border-ink'
                   : 'bg-panel text-ink-2 border-line hover:border-ink-4',
               )}
             >
@@ -184,7 +184,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
               className={cn(
                 'whitespace-nowrap px-3 py-1.5 rounded-[14px] text-[12px] font-medium border transition-colors',
                 active
-                  ? 'bg-ink text-white border-ink'
+                  ? 'bg-ink text-onink border-ink'
                   : 'bg-panel text-ink-2 border-line hover:border-ink-4',
               )}
             >

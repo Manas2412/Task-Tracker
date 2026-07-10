@@ -25,7 +25,7 @@ export function CreateTagDialog() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-white text-[13px] font-medium hover:bg-ink-2 transition-colors"
+        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-onink text-[13px] font-medium hover:bg-ink-2 transition-colors"
       >
         <i className="ti ti-tag-plus text-[14px]" aria-hidden="true" />
         New tag
@@ -92,7 +92,7 @@ function CreateButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+      className="flex-1 py-2.5 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-60"
     >
       {pending ? 'Creating…' : 'Create tag'}
     </button>

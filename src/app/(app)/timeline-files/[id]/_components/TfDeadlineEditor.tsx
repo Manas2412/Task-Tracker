@@ -131,7 +131,7 @@ function SaveBtn() {
     <button
       type="submit"
       disabled={pending}
-      className="flex-1 py-2 rounded-md bg-ink text-white text-[12px] font-medium disabled:opacity-60"
+      className="flex-1 py-2 rounded-md bg-ink text-onink text-[12px] font-medium disabled:opacity-60"
     >
       {pending ? 'Saving…' : 'Save'}
     </button>

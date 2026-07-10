@@ -334,7 +334,7 @@ function AttachmentRowCard({
         {/* File type badge */}
         <span
           className={cn(
-            'w-9 h-10 rounded-[5px] grid place-items-end justify-center pb-1 text-white text-[9px] font-medium shrink-0',
+            'w-9 h-10 rounded-[5px] grid place-items-end justify-center pb-1 text-onink text-[9px] font-medium shrink-0',
             TONE_BG[badge.tone],
           )}
           aria-hidden="true"
@@ -591,7 +591,7 @@ function SaveButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+      className="flex-1 py-2.5 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-60"
     >
       {pending ? 'Adding…' : 'Add link'}
     </button>

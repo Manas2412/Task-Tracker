@@ -267,7 +267,7 @@ function ParseButton() {
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-60"
     >
       {pending ? 'Parsing…' : 'Parse & preview'}
     </button>
@@ -280,7 +280,7 @@ function CommitButton({ count }: { count: number }) {
     <button
       type="submit"
       disabled={pending || count === 0}
-      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-60"
     >
       {pending
         ? 'Creating tasks…'

@@ -329,7 +329,7 @@ function CreateButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60 transition-opacity"
+      className="flex-1 py-2.5 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-60 transition-opacity"
     >
       {pending ? 'Creating…' : 'Create'}
     </button>

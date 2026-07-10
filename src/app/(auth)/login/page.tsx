@@ -20,7 +20,7 @@ export default function LoginPage() {
           Tasks
         </h1>
         <p className="text-[11px] tracking-[0.12em] uppercase text-ink-3 font-medium">
-          Ministry of Y. A. &amp; Sports
+          Department of Sports
         </p>
       </header>
 
@@ -117,7 +117,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="w-full py-3 rounded-lg bg-ink text-white text-[14px] font-medium transition-opacity disabled:opacity-60"
+      className="w-full py-3 rounded-lg bg-ink text-onink text-[14px] font-medium transition-opacity disabled:opacity-60"
     >
       {pending ? 'Signing in…' : 'Sign in'}
     </button>

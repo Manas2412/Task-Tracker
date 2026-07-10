@@ -177,7 +177,7 @@ function FilterSelect<T extends string>({
               aria-current={isActive ? 'page' : undefined}
               className={
                 isActive
-                  ? 'px-2.5 py-1 rounded-[14px] text-[11px] font-medium bg-ink text-white border border-ink'
+                  ? 'px-2.5 py-1 rounded-[14px] text-[11px] font-medium bg-ink text-onink border border-ink'
                   : 'px-2.5 py-1 rounded-[14px] text-[11px] font-medium bg-panel text-ink-2 border border-line hover:border-ink-4'
               }
             >
