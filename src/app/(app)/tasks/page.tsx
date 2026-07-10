@@ -7,7 +7,6 @@ import { auth } from '@/lib/auth';
 import { isMediaAndIt } from '@/lib/divisions';
 import { prisma } from '@/lib/db';
 import { formatDue, initialsOf } from '@/lib/format';
-import { canManageTask, getHeadedDivisionIds } from '@/lib/rbac';
 import { fetchTaskCounts, fetchVisibleTasks, getPmuParentDivisionHeadId, type TaskFilter, type TaskSort } from '@/lib/visibility';
 
 import { DivisionControls } from './_components/DivisionControls';
@@ -61,7 +60,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
     me.isSuperAdmin || me.hierarchySlot === 'osd' || me.hierarchySlot === 'js';
   const groupByDivision = canGroupByDivision && requestedGroupByDivision;
 
-  const [taskResult, counts, divisions, pmuParentHeadId, headedDivisionIds] = await Promise.all([
+  const [taskResult, counts, divisions, pmuParentHeadId] = await Promise.all([
     fetchVisibleTasks({ callerId: me.id, filter, divisionId: divisionFilter || undefined, sort }),
     fetchTaskCounts(me.id),
     prisma.division.findMany({
@@ -73,23 +72,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
     me.isPmu && me.pmuId
       ? getPmuParentDivisionHeadId(me.pmuId)
       : Promise.resolve<string | null>(null),
-    // Head/delegate divisions — powers the per-card "change status" gate for
-    // the mobile long-press action modal (mirrors the server canEditTask rule).
-    getHeadedDivisionIds(me.id),
   ]);
-
-  // Mobile task-card action permissions. `canWatchlist` (Add to Priority Board
-  // Watchlist) is OSD / Super Admin only; `canChangeStatus` is decided per card
-  // via canManageTask below. Both only gate what the UI offers — the server
-  // actions re-authorize independently.
-  const canWatchlist = me.isSuperAdmin || me.hierarchySlot === 'osd';
-  const permCaller = {
-    id: me.id,
-    isSuperAdmin: me.isSuperAdmin,
-    hierarchySlot: me.hierarchySlot,
-    divisionId: me.divisionId,
-    headedDivisionIds,
-  };
 
   // The PMU's home-division head is not treated as a whole-team share
   // recipient, so a task shared with the PMU team is not lifted into their
@@ -153,7 +136,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
                   >
                     <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
                       {group.tasks.map((t) => (
-                        <TaskRow key={t.id} task={t} caller={permCaller} canWatchlist={canWatchlist} />
+                        <TaskRow key={t.id} task={t} />
                       ))}
                     </ul>
                   </DivisionAccordion>
@@ -190,7 +173,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
                   ) : (
                     <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
                       {segment.tasks.map((t) => (
-                        <TaskRow key={t.id} task={t} caller={permCaller} canWatchlist={canWatchlist} />
+                        <TaskRow key={t.id} task={t} />
                       ))}
                     </ul>
                   )}
@@ -207,36 +190,10 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
 type VisibleTask = Awaited<ReturnType<typeof fetchVisibleTasks>>['tasks'][number];
 
-/** Caller shape for canManageTask — computed once in TasksPage, reused per row. */
-type PermCaller = {
-  id: string;
-  isSuperAdmin: boolean;
-  hierarchySlot: string;
-  divisionId: string;
-  headedDivisionIds: string[];
-};
-
-function TaskRow({
-  task: t,
-  caller,
-  canWatchlist,
-}: {
-  task: VisibleTask;
-  caller: PermCaller;
-  canWatchlist: boolean;
-}) {
+function TaskRow({ task: t }: { task: VisibleTask }) {
   const subtaskTotal = t.subtasks.length;
   const subtaskDone = t.subtasks.filter((s) => s.status === 'completed').length;
   const due = formatDue(t.dueDate);
-
-  // Whether this caller may change THIS task's status — the same rule the
-  // server enforces in canEditTask/updateTaskStatusAction. Gates the mobile
-  // long-press action modal's status options.
-  const canChangeStatus = canManageTask(caller, {
-    ownerId: t.ownerId,
-    createdById: t.createdById,
-    divisionId: t.divisionId,
-  });
 
   return (
     <li>
@@ -265,8 +222,6 @@ function TaskRow({
         }
         mobileSplit
         href={`/tasks/${t.id}`}
-        canChangeStatus={canChangeStatus}
-        canWatchlist={canWatchlist}
       />
     </li>
   );
