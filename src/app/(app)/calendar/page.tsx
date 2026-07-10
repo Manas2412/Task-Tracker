@@ -17,14 +17,21 @@ import {
   shiftMonth,
   weekBounds,
   type CalendarEvent,
+  type CalendarFilters as CalendarFiltersState,
 } from '@/lib/calendar';
 import { prisma } from '@/lib/db';
 import { canAccessEngagements, getOfficeOfJsDivisionId } from '@/lib/engagements';
+import { cn } from '@/lib/utils';
 
 import { CalendarProvider } from './_components/CalendarProvider';
 import { CalendarFilters } from './_components/CalendarFilters';
 import { NewButton } from './_components/DateControls';
-import { parseCalendarFilters, buildCalendarHref, type RawParams } from './_components/filter-params';
+import {
+  parseCalendarFilters,
+  buildCalendarHref,
+  toggleKindParam,
+  type RawParams,
+} from './_components/filter-params';
 import { KIND_META, KIND_ORDER } from './_components/kind-style';
 import { ListView } from './_components/ListView';
 import { MobileListDefault } from './_components/MobileListDefault';
@@ -127,12 +134,7 @@ export default async function CalendarPage({ searchParams }: PageProps) {
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <CalendarFilters
-                sp={sp}
-                filters={filters}
-                showEngagements={canManageEngagements}
-                divisions={divisions}
-              />
+              <CalendarFilters sp={sp} filters={filters} divisions={divisions} />
               <NewButton />
             </div>
           </div>
@@ -159,7 +161,7 @@ export default async function CalendarPage({ searchParams }: PageProps) {
           <ViewTabs active={view} sp={sp} />
         </div>
 
-        <Legend showEngagements={canManageEngagements} />
+        <KindFilterBar sp={sp} filters={filters} showEngagements={canManageEngagements} />
 
         {view === 'month' ? (
           <MonthView grid={win.monthGrid!} events={events} />
@@ -306,16 +308,48 @@ function NavStrip({
   );
 }
 
-function Legend({ showEngagements }: { showEngagements: boolean }) {
+/**
+ * Kind filter buttons — the calendar's legend doubles as its item-type filter.
+ * Each button toggles its kind in the `?types=` param (server-rendered, no
+ * client JS); the active state glows in that kind's hue. Replaces the static
+ * legend and the old "Show" section inside the Filters sheet.
+ */
+function KindFilterBar({
+  sp,
+  filters,
+  showEngagements,
+}: {
+  sp: RawParams;
+  filters: CalendarFiltersState;
+  showEngagements: boolean;
+}) {
   const kinds = KIND_ORDER.filter((k) => k !== 'engagement' || showEngagements);
   return (
-    <div className="flex flex-wrap items-center gap-3 text-[11px] text-ink-3 mb-3">
-      {kinds.map((k) => (
-        <span key={k} className="inline-flex items-center gap-1.5">
-          <span className={`w-2.5 h-2.5 rounded-full ${KIND_META[k].dot}`} />
-          {KIND_META[k].label}
-        </span>
-      ))}
+    <div className="flex flex-wrap items-center gap-2 mb-3">
+      {kinds.map((k) => {
+        const meta = KIND_META[k];
+        const active = filters.kinds.has(k);
+        return (
+          <Link
+            key={k}
+            href={buildCalendarHref(sp, { types: toggleKindParam(filters.kinds, k, kinds) })}
+            scroll={false}
+            aria-label={active ? `Hide ${meta.label}` : `Show ${meta.label}`}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[12px] font-medium transition-all',
+              active
+                ? meta.activeBtn
+                : 'border-line bg-panel text-ink-3 hover:text-ink-2 hover:border-ink-4',
+            )}
+          >
+            <span
+              className={cn('w-2.5 h-2.5 rounded-full transition-colors', active ? meta.dot : 'bg-ink-4/40')}
+              aria-hidden="true"
+            />
+            {meta.label}
+          </Link>
+        );
+      })}
     </div>
   );
 }

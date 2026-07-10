@@ -54,9 +54,20 @@ describe('toggleKindParam', () => {
     expect(toggleKindParam(two, 'engagement')).toBeNull();
   });
 
-  it('never produces an empty selection — it resets to all', () => {
+  it('never produces an empty selection — turning off the last kind resets to all (null)', () => {
     const one = new Set<'task' | 'tf' | 'engagement'>(['task']);
-    expect(toggleKindParam(one, 'task')).toBe(ALL_KINDS.join(','));
+    // null (param dropped) is equivalent to all kinds selected.
+    expect(toggleKindParam(one, 'task')).toBeNull();
+  });
+
+  it('respects the viewer-available kinds so a non-OJS user cannot strand on engagement', () => {
+    const available: CalendarKind[] = ['task', 'tf'];
+    // Non-OJS default set carries engagement (they cannot toggle it); turning off
+    // task leaves only tf among the available kinds.
+    expect(toggleKindParam(new Set<CalendarKind>(['engagement', 'task', 'tf']), 'task', available)).toBe('tf');
+    // Turning off the last AVAILABLE kind (tf) leaves no visible kind → reset to all (null),
+    // never a blank calendar stuck on the unseeable engagement kind.
+    expect(toggleKindParam(new Set<CalendarKind>(['engagement', 'tf']), 'tf', available)).toBeNull();
   });
 });
 
