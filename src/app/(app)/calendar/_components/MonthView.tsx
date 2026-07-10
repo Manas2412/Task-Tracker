@@ -50,7 +50,7 @@ export function MonthView({ grid, events }: MonthViewProps) {
             <div
               key={i}
               className={cn(
-                'border-r border-b border-line-2 min-h-[92px] md:min-h-[116px] p-1 md:p-1.5 flex flex-col gap-1',
+                'border-r border-b border-line-2 min-h-[104px] md:min-h-[132px] p-1 md:p-1.5 flex flex-col gap-1',
                 (i + 1) % 7 === 0 && 'border-r-0',
                 i >= 35 && 'border-b-0',
                 !cell.isCurrentMonth && 'bg-bg/50',
@@ -64,24 +64,24 @@ export function MonthView({ grid, events }: MonthViewProps) {
                     ? `Open ${formatDayLong(key)}, ${count} ${count === 1 ? 'item' : 'items'}`
                     : `Open ${formatDayLong(key)}`
                 }
-                className="flex items-center justify-between gap-1 px-1 py-0.5"
+                className="flex items-center justify-between gap-0.5 px-0.5 md:px-1 py-1"
               >
                 {cell.isToday ? (
-                  <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-accent text-white text-[10px] font-medium leading-none">
+                  <span className="inline-flex items-center justify-center w-7 h-7 md:w-9 md:h-9 rounded-full bg-accent text-white text-[15px] md:text-[18px] font-medium leading-none tabular-nums shrink-0">
                     {cell.date.getDate()}
                   </span>
                 ) : (
                   <span
                     className={cn(
-                      'text-[11px] font-medium leading-none',
-                      cell.isCurrentMonth ? 'text-ink-2' : 'text-ink-4',
+                      'text-[16px] md:text-[19px] font-medium leading-none tabular-nums',
+                      cell.isCurrentMonth ? 'text-ink' : 'text-ink-4',
                     )}
                   >
                     {cell.date.getDate()}
                   </span>
                 )}
                 {count > 0 ? (
-                  <span className="min-w-[16px] h-4 px-1 grid place-items-center rounded-full bg-line-2 text-ink-3 text-[9px] font-medium leading-none tabular-nums">
+                  <span className="text-[10px] md:text-[11px] text-ink-3 font-medium leading-none tabular-nums shrink-0">
                     {count}
                   </span>
                 ) : null}

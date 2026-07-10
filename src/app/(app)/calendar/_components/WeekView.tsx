@@ -43,16 +43,16 @@ export function WeekView({ grid, events }: WeekViewProps) {
                     ? `Open ${formatDayLong(key)}, ${count} ${count === 1 ? 'item' : 'items'}`
                     : `Open ${formatDayLong(key)}`
                 }
-                className="mt-1 px-1.5 py-0.5 inline-block"
+                className="mt-1 px-1 md:px-2 py-1 inline-block"
               >
                 <span
                   className={cn(
-                    'text-[13px] font-medium leading-none inline-block',
-                    cell.isToday ? 'text-accent' : 'text-ink-2',
+                    'text-[17px] md:text-[18px] font-medium leading-none inline-block tabular-nums',
+                    cell.isToday ? 'text-accent' : 'text-ink',
                   )}
                 >
                   {cell.isToday ? (
-                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent text-white text-[11px] font-medium">
+                    <span className="inline-flex items-center justify-center w-8 h-8 md:w-9 md:h-9 rounded-full bg-accent text-white text-[15px] md:text-[17px] font-medium tabular-nums">
                       {cell.date.getDate()}
                     </span>
                   ) : (
@@ -83,12 +83,12 @@ export function WeekView({ grid, events }: WeekViewProps) {
               <DayCellButton
                 dateIso={key}
                 ariaLabel={`Open ${formatDayLong(key)}`}
-                className="md:hidden flex items-center justify-between gap-1 mb-1 px-1 py-0.5"
+                className="md:hidden flex items-center justify-between gap-1 mb-1 px-1 py-1"
               >
                 <span
                   className={cn(
-                    'text-[11px] font-medium leading-none',
-                    cell.isToday ? 'text-accent' : 'text-ink-2',
+                    'text-[16px] font-medium leading-none tabular-nums',
+                    cell.isToday ? 'text-accent' : 'text-ink',
                   )}
                 >
                   {format(cell.date, 'd MMM')}

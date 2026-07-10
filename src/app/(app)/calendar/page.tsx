@@ -22,8 +22,8 @@ import { prisma } from '@/lib/db';
 import { canAccessEngagements, getOfficeOfJsDivisionId } from '@/lib/engagements';
 
 import { CalendarProvider } from './_components/CalendarProvider';
+import { CalendarFilters } from './_components/CalendarFilters';
 import { NewButton } from './_components/DateControls';
-import { FilterBar } from './_components/FilterBar';
 import { parseCalendarFilters, buildCalendarHref, type RawParams } from './_components/filter-params';
 import { KIND_META, KIND_ORDER } from './_components/kind-style';
 import { ListView } from './_components/ListView';
@@ -115,50 +115,49 @@ export default async function CalendarPage({ searchParams }: PageProps) {
     >
       <MobileListDefault resolvedView={view} hasExplicitView={Boolean(sp.view)} />
       <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 pt-4 md:pt-6 pb-12">
-        <header className="mb-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.08em] text-ink-3 font-medium mb-1 inline-flex items-center gap-1">
-                <i className="ti ti-calendar text-[11px] text-primary" aria-hidden="true" />
+        <header className="mb-3 md:mb-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="font-serif text-[22px] md:text-[28px] leading-tight text-ink inline-flex items-center gap-2">
+                <i className="ti ti-calendar text-[19px] md:text-[24px] text-primary" aria-hidden="true" />
                 Planning calendar
-              </p>
-              <h1 className="font-serif text-[22px] md:text-[28px] leading-tight text-ink">
-                {win.title}
               </h1>
-              <p className="mt-1.5 text-[12px] text-ink-2 max-w-2xl leading-relaxed">
+              <p className="mt-1.5 text-[12px] text-ink-2 max-w-2xl leading-relaxed hidden sm:block">
                 Engagements, task deadlines, and Timeline file deadlines you can see — in one view.
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <ViewTabs active={view} sp={sp} />
+            <div className="flex items-center gap-2 shrink-0">
+              <CalendarFilters
+                sp={sp}
+                filters={filters}
+                showEngagements={canManageEngagements}
+                divisions={divisions}
+              />
               <NewButton />
             </div>
           </div>
         </header>
 
-        <FilterBar
-          sp={sp}
-          filters={filters}
-          showEngagements={canManageEngagements}
-          divisions={divisions}
-        />
-
-        {view !== 'list' ? (
-          <NavStrip
-            prevHref={buildCalendarHref(sp, { date: win.prevDate })}
-            nextHref={buildCalendarHref(sp, { date: win.nextDate })}
-            title={win.navTitle}
-            todayHref={win.isCurrent ? null : buildCalendarHref(sp, { date: null })}
-            prevLabel={view === 'week' ? 'Previous week' : 'Previous month'}
-            nextLabel={view === 'week' ? 'Next week' : 'Next month'}
-          />
-        ) : (
-          <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-[12px] text-ink-3">
-              {events.length} {events.length === 1 ? 'item' : 'items'} in the next 60 days
-            </p>
-          </div>
-        )}
+        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          {view !== 'list' ? (
+            <NavStrip
+              prevHref={buildCalendarHref(sp, { date: win.prevDate })}
+              nextHref={buildCalendarHref(sp, { date: win.nextDate })}
+              title={win.navTitle}
+              todayHref={win.isCurrent ? null : buildCalendarHref(sp, { date: null })}
+              prevLabel={view === 'week' ? 'Previous week' : 'Previous month'}
+              nextLabel={view === 'week' ? 'Next week' : 'Next month'}
+            />
+          ) : (
+            <div className="inline-flex items-baseline gap-2">
+              <span className="font-serif text-[17px] md:text-[18px] text-ink">Upcoming</span>
+              <span className="text-[12px] text-ink-3">
+                {events.length} {events.length === 1 ? 'item' : 'items'} · next 60 days
+              </span>
+            </div>
+          )}
+          <ViewTabs active={view} sp={sp} />
+        </div>
 
         <Legend showEngagements={canManageEngagements} />
 
@@ -181,7 +180,6 @@ export default async function CalendarPage({ searchParams }: PageProps) {
 type Window = {
   from: Date;
   to: Date;
-  title: string;
   navTitle: string;
   prevDate: string;
   nextDate: string;
@@ -201,7 +199,6 @@ function resolveWindow(view: 'month' | 'week' | 'list', dateParam: string | unde
     return {
       from,
       to,
-      title: label,
       navTitle: label,
       prevDate: dayParam(prev.year, prev.month, prev.day),
       nextDate: dayParam(next.year, next.month, next.day),
@@ -220,7 +217,6 @@ function resolveWindow(view: 'month' | 'week' | 'list', dateParam: string | unde
     return {
       from,
       to,
-      title: 'Upcoming',
       navTitle: 'Upcoming',
       prevDate: '',
       nextDate: '',
@@ -239,7 +235,6 @@ function resolveWindow(view: 'month' | 'week' | 'list', dateParam: string | unde
   return {
     from,
     to,
-    title: label,
     navTitle: label,
     prevDate: monthParam(prev.year, prev.monthIndex),
     nextDate: monthParam(next.year, next.monthIndex),
@@ -277,34 +272,34 @@ function NavStrip({
   nextLabel: string;
 }) {
   return (
-    <div className="flex items-center justify-between mb-3 gap-3">
-      <div className="inline-flex items-center gap-1">
-        <Link
-          href={prevHref}
-          scroll={false}
-          aria-label={prevLabel}
-          className="w-8 h-8 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 transition-colors"
-        >
-          <i className="ti ti-chevron-left text-[16px]" aria-hidden="true" />
-        </Link>
-        <span className="font-serif text-[16px] text-ink min-w-[140px] text-center">{title}</span>
-        <Link
-          href={nextHref}
-          scroll={false}
-          aria-label={nextLabel}
-          className="w-8 h-8 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 transition-colors"
-        >
-          <i className="ti ti-chevron-right text-[16px]" aria-hidden="true" />
-        </Link>
-      </div>
+    <div className="inline-flex items-center gap-1">
+      <Link
+        href={prevHref}
+        scroll={false}
+        aria-label={prevLabel}
+        className="w-9 h-9 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 transition-colors"
+      >
+        <i className="ti ti-chevron-left text-[18px]" aria-hidden="true" />
+      </Link>
+      <span className="font-serif text-[17px] md:text-[18px] text-ink min-w-[132px] md:min-w-[150px] text-center">
+        {title}
+      </span>
+      <Link
+        href={nextHref}
+        scroll={false}
+        aria-label={nextLabel}
+        className="w-9 h-9 grid place-items-center rounded-md text-ink-2 hover:bg-line-2 transition-colors"
+      >
+        <i className="ti ti-chevron-right text-[18px]" aria-hidden="true" />
+      </Link>
       {todayHref ? (
         <Link
           href={todayHref}
           scroll={false}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-line text-[12px] font-medium text-ink-2 hover:bg-line-2 transition-colors"
+          className="ml-1 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-line text-[12px] font-medium text-ink-2 hover:bg-line-2 transition-colors"
         >
           <i className="ti ti-calendar-event text-[13px]" aria-hidden="true" />
-          Today
+          <span className="hidden sm:inline">Today</span>
         </Link>
       ) : null}
     </div>
