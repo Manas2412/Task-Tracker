@@ -89,26 +89,32 @@ export function TasksQuickSearch({ children }: { children: ReactNode }) {
 
   return (
     <>
-      {/* Search bar — directly below the Summary panel */}
+      {/* Compact search bar — a small, fixed-width field below the Summary
+          panel. Capped at the same width on every breakpoint (never full-bleed
+          on mobile / tablet / desktop). The very-light yellow tint is the
+          sanctioned pale-yellow token `--accent-soft` mixed toward transparent
+          (a translucent wash), paired with the amber border so the field keeps a
+          defined edge; both are tokens, so they adapt to dark mode. */}
       <div className="px-4 md:px-6 lg:px-8 mt-4">
-        <div className="relative">
+        <div className="relative w-full max-w-xs">
           <i
-            className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[16px] text-ink-3 pointer-events-none"
+            className="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-[15px] text-ink-3 pointer-events-none"
             aria-hidden="true"
           />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Quick search — title, context, discussion, documents, subtasks…"
+            placeholder="Search tasks…"
             autoComplete="off"
             enterKeyHint="search"
             aria-label="Quick search tasks"
-            className="w-full pl-10 pr-11 py-3 rounded-xl border border-line bg-panel text-[14px] text-ink placeholder:text-ink-3 outline-none focus:border-ink transition-colors [&::-webkit-search-cancel-button]:hidden"
+            style={{ backgroundColor: 'color-mix(in srgb, var(--accent-soft) 55%, transparent)' }}
+            className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-accent-line text-[13px] text-ink placeholder:text-ink-3 outline-none focus:border-ink transition-colors [&::-webkit-search-cancel-button]:hidden"
           />
           {loading ? (
             <i
-              className="ti ti-loader-2 animate-spin absolute right-10 top-1/2 -translate-y-1/2 text-[15px] text-ink-3"
+              className="ti ti-loader-2 animate-spin absolute right-9 top-1/2 -translate-y-1/2 text-[14px] text-ink-3"
               aria-hidden="true"
             />
           ) : null}
@@ -117,9 +123,9 @@ export function TasksQuickSearch({ children }: { children: ReactNode }) {
               type="button"
               onClick={() => setQuery('')}
               aria-label="Clear search"
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 grid place-items-center rounded-full text-urgent hover:bg-urgent-soft active:scale-95 transition-transform"
+              className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 grid place-items-center rounded-full text-urgent hover:bg-urgent-soft active:scale-95 transition-transform"
             >
-              <i className="ti ti-x text-[17px]" aria-hidden="true" />
+              <i className="ti ti-x text-[16px]" aria-hidden="true" />
             </button>
           ) : null}
         </div>
