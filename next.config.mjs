@@ -51,6 +51,22 @@ const nextConfig = {
           },
         ],
       },
+      // The service worker must never be served stale — updates to sw.js are
+      // how every cached client eventually converges on new behaviour.
+      {
+        source: '/sw.js',
+        headers: [{ key: 'Cache-Control', value: 'no-cache, max-age=0, must-revalidate' }],
+      },
+      // PWA imagery is content-addressed by convention: if the artwork ever
+      // changes, the filenames change with it (see docs/PWA.md).
+      {
+        source: '/icons/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
+      {
+        source: '/splash/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
     ];
   },
 };

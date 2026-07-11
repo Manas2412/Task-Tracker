@@ -434,3 +434,15 @@ body.sortable-dragging .pb-accordion-body {
       box-shadow 0.4s var(--ease-standard) !important;
   }
 }
+
+/* ============================================================
+   PWA install prompt — slide-up entrance for the mobile card
+   ============================================================ */
+@keyframes pwaPromptIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.pwa-prompt-in { animation: pwaPromptIn var(--dur-slow) var(--ease-emphasis); }
+@media (prefers-reduced-motion: reduce) {
+  .pwa-prompt-in { animation: none; }
+}
