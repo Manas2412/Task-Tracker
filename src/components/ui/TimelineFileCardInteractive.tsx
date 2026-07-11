@@ -10,7 +10,7 @@ import type { SlideOverDoc } from '@/components/ui/SlideOverShell';
 /**
  * Mobile gesture layer around a Timeline File card.
  *
- *   - swipe left → right-side read-only slide-over (subject/status/docs)
+ *   - swipe left → right-side read-only slide-over (subject/comments/docs)
  *   - tap        → navigates to the file (unchanged)
  *
  * Swipe-only: unlike task cards there is no long-press action modal (a Timeline
@@ -32,6 +32,10 @@ export type TimelineFileCardInteractiveProps = {
   href: string;
   sourceDocs: SlideOverDoc[];
   actionDocs: SlideOverDoc[];
+  // Slide-over preview content (the card face itself ignores these).
+  secretaryComments: string | null;
+  deskComments: string | null;
+  discussion: { count: number; latest: { author: string; body: string } | null };
 };
 
 export function TimelineFileCardInteractive(props: TimelineFileCardInteractiveProps) {
@@ -42,7 +46,15 @@ export function TimelineFileCardInteractive(props: TimelineFileCardInteractivePr
   // transform, never re-render the card itself. The destructure lives inside so
   // `props` is the sole dependency.
   const card = useMemo(() => {
-    const { sourceDocs: _s, actionDocs: _a, ...cardProps } = props;
+    // Strip the slide-over-only props; the card face renders the rest.
+    const {
+      sourceDocs: _s,
+      actionDocs: _a,
+      secretaryComments: _sc,
+      deskComments: _dc,
+      discussion: _disc,
+      ...cardProps
+    } = props;
     return <TimelineFileCard {...cardProps} variant="full" />;
   }, [props]);
 
@@ -93,13 +105,11 @@ export function TimelineFileCardInteractive(props: TimelineFileCardInteractivePr
         href={props.href}
         refNo={props.refNo}
         subject={props.subject}
-        fromWhom={props.fromWhom}
-        receivedDate={props.receivedDate}
         deadlineDate={props.deadlineDate}
         status={props.status}
-        priority={props.priority}
-        markedTo={props.markedTo}
-        taskLinkCount={props.taskLinkCount}
+        secretaryComments={props.secretaryComments}
+        deskComments={props.deskComments}
+        discussion={props.discussion}
         sourceDocs={props.sourceDocs}
         actionDocs={props.actionDocs}
       />

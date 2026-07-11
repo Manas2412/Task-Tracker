@@ -241,6 +241,9 @@ function TfGrid({ items }: { items: VisibleTimelineFile[] }) {
             href={`/timeline-files/${tf.id}`}
             sourceDocs={tf.sourceDocs}
             actionDocs={tf.actionDocs}
+            secretaryComments={tf.secretaryComments}
+            deskComments={tf.deskComments}
+            discussion={{ count: tf._count.comments, latest: tf.latestComment }}
           />
         </li>
       ))}

@@ -77,12 +77,15 @@ export type VisibleTimelineFile = TimelineFile & {
   markedTo: Array<{
     division: { id: string; name: string; avatarColour: string };
   }>;
-  _count: { taskLinks: number };
+  _count: { taskLinks: number; comments: number };
   /** Source correspondence files (id + name), oldest first — the tappable
    *  document list in the mobile swipe-left slide-over. */
   sourceDocs: { id: string; fileName: string }[];
   /** Action / response files (id + name), oldest first. */
   actionDocs: { id: string; fileName: string }[];
+  /** Most recent discussion comment (author + body), for the mobile
+   *  slide-over preview; null when the file has no comments. */
+  latestComment: { author: string; body: string } | null;
 };
 
 export async function fetchVisibleTimelineFiles(opts: {
@@ -121,7 +124,7 @@ export async function fetchVisibleTimelineFiles(opts: {
       markedTo: {
         include: { division: { select: { id: true, name: true, avatarColour: true } } },
       },
-      _count: { select: { taskLinks: true } },
+      _count: { select: { taskLinks: true, comments: true } },
     },
     orderBy,
   });
@@ -149,10 +152,29 @@ export async function fetchVisibleTimelineFiles(opts: {
     }
   }
 
+  // Latest discussion comment per file — the preview line in the mobile
+  // slide-over. `distinct` on the file id with a matching leading orderBy has
+  // Postgres return a single newest row per file (DISTINCT ON), so a long
+  // thread never pulls more than its latest comment. Files with no comments
+  // are simply absent (the _count above drives the "N comments" total).
+  const latestCommentByTf = new Map<string, { author: string; body: string }>();
+  if (tfIds.length > 0) {
+    const commentRows = await prisma.timelineFileComment.findMany({
+      where: { timelineFileId: { in: tfIds } },
+      distinct: ['timelineFileId'],
+      orderBy: [{ timelineFileId: 'asc' }, { createdAt: 'desc' }],
+      select: { timelineFileId: true, body: true, user: { select: { name: true } } },
+    });
+    for (const c of commentRows) {
+      latestCommentByTf.set(c.timelineFileId, { author: c.user.name, body: c.body });
+    }
+  }
+
   return tfs.map((t) => ({
     ...t,
     sourceDocs: sourceByTf.get(t.id) ?? [],
     actionDocs: actionByTf.get(t.id) ?? [],
+    latestComment: latestCommentByTf.get(t.id) ?? null,
   }));
 }
 

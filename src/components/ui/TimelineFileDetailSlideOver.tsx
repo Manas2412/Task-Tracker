@@ -2,25 +2,25 @@
 
 import Link from 'next/link';
 
-import { MarkedToChip } from '@/components/ui/MarkedToChip';
-import { Pill, type PillPriorityTone } from '@/components/ui/Pill';
+import { QuoteCard } from '@/components/ui/QuoteCard';
 import {
   SlideOverShell,
   SlideOverSection,
   SlideOverDocs,
   type SlideOverDoc,
 } from '@/components/ui/SlideOverShell';
-import { TF_STATUS_LABEL, TF_STATUS_TONE } from '@/components/ui/TimelineFileCard';
 import { istDayDiff } from '@/lib/date';
-import { TASK_PRIORITY_LABEL } from '@/lib/labels';
 
 /**
  * Right-side read-only slide-over for a Timeline File card (mobile only).
  *
- * Opened by swiping a file card left. Shows the file's ref/subject, status,
- * priority, deadline, sender, marked-to divisions, and — tappable, opening on
- * mobile — its source and action documents. "Open full file" links to the
- * detail page. All popup chrome lives in SlideOverShell.
+ * Opened by swiping a file card left. Focused on the file's substance rather
+ * than its desk metadata: the subject, then — each only when it has content —
+ * the Secretary's comments, the desk comment, and the latest discussion, plus
+ * the tappable source/action documents. When none of the three comment fields
+ * carry anything yet, a short overview (with the deadline, if any) stands in.
+ * "Open full file" links to the detail page. All popup chrome lives in
+ * SlideOverShell.
  */
 
 export type TimelineFileDetailSlideOverProps = {
@@ -29,13 +29,11 @@ export type TimelineFileDetailSlideOverProps = {
   href: string;
   refNo: string;
   subject: string;
-  fromWhom: string;
-  receivedDate: Date;
   deadlineDate: Date | null;
   status: string;
-  priority: string;
-  markedTo: Array<{ id: string; name: string; avatarColour: string }>;
-  taskLinkCount: number;
+  secretaryComments: string | null;
+  deskComments: string | null;
+  discussion: { count: number; latest: { author: string; body: string } | null };
   sourceDocs: SlideOverDoc[];
   actionDocs: SlideOverDoc[];
 };
@@ -46,16 +44,19 @@ export function TimelineFileDetailSlideOver({
   href,
   refNo,
   subject,
-  fromWhom,
-  receivedDate,
   deadlineDate,
   status,
-  priority,
-  markedTo,
-  taskLinkCount,
+  secretaryComments,
+  deskComments,
+  discussion,
   sourceDocs,
   actionDocs,
 }: TimelineFileDetailSlideOverProps) {
+  const hasSecretary = Boolean(secretaryComments && secretaryComments.trim());
+  const hasDesk = Boolean(deskComments && deskComments.trim());
+  const hasDiscussion = discussion.count > 0;
+  const hasAnyComment = hasSecretary || hasDesk || hasDiscussion;
+
   const isClosed = status === 'closed';
   const days = deadlineDate ? daysUntil(deadlineDate) : null;
   const isOverdue = days !== null && days < 0;
@@ -69,48 +70,62 @@ export function TimelineFileDetailSlideOver({
       labelledById="tf-drawer-title"
       closeLabel="Close file preview"
     >
-      <div className="px-3.5 pt-3 pb-2">
-        <h2 id="tf-drawer-title" className="font-serif text-[17px] text-ink leading-tight tracking-tight-title">
+      <div className="px-3.5 pt-3 pb-1.5">
+        <h2
+          id="tf-drawer-title"
+          className="font-serif text-[17px] text-ink leading-tight tracking-tight-title"
+        >
           {subject}
         </h2>
-        <p className="mt-1.5 text-[11px] text-ink-3">
-          From <span className="text-ink-2 font-medium">{fromWhom}</span>
-          <span className="mx-1.5 text-ink-4">·</span>
-          Received {formatShort(receivedDate)}
-        </p>
       </div>
 
-      <SlideOverSection label="Status">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Pill
-            variant="priority"
-            tone={(priority as PillPriorityTone) ?? 'medium'}
-            label={TASK_PRIORITY_LABEL[priority] ?? priority}
+      {hasSecretary ? (
+        <SlideOverSection label="Secretary's comments">
+          <QuoteCard
+            text={secretaryComments as string}
+            tone="primary"
+            textClassName="text-[13px] line-clamp-5"
           />
-          <Pill
-            variant="status"
-            tone={TF_STATUS_TONE[status] ?? 'pending_action'}
-            label={TF_STATUS_LABEL[status] ?? status}
-          />
-          {deadlineDate && !isClosed && days !== null ? (
-            <Pill variant="deadline" daysLeft={days} overdue={isOverdue} />
-          ) : null}
-          {taskLinkCount > 0 ? (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-ink-3 px-1.5 py-0.5 rounded-md bg-line-2">
-              <i className="ti ti-link text-[11px]" aria-hidden="true" />
-              {taskLinkCount} {taskLinkCount === 1 ? 'task' : 'tasks'}
-            </span>
-          ) : null}
-        </div>
-      </SlideOverSection>
+        </SlideOverSection>
+      ) : null}
 
-      {markedTo.length > 0 ? (
-        <SlideOverSection label="Marked to">
-          <div className="flex flex-wrap gap-1.5">
-            {markedTo.map((d) => (
-              <MarkedToChip key={d.id} name={d.name} colour={d.avatarColour} />
-            ))}
-          </div>
+      {hasDesk ? (
+        <SlideOverSection label="Desk comment">
+          <QuoteCard
+            text={deskComments as string}
+            tone="primary"
+            textClassName="text-[13px] line-clamp-5"
+          />
+        </SlideOverSection>
+      ) : null}
+
+      {hasDiscussion ? (
+        <SlideOverSection label="Discussion">
+          <p className="text-[11px] font-medium text-primary/70">
+            {discussion.count} {discussion.count === 1 ? 'comment' : 'comments'}
+          </p>
+          {discussion.latest ? (
+            <div className="mt-1.5 rounded-lg bg-panel border border-primary-line/40 px-3 py-2">
+              <p className="text-[11px] font-medium text-ink-2">{discussion.latest.author}</p>
+              <p className="mt-0.5 text-[12.5px] text-ink leading-snug line-clamp-3 whitespace-pre-wrap">
+                {discussion.latest.body}
+              </p>
+            </div>
+          ) : null}
+        </SlideOverSection>
+      ) : null}
+
+      {/* Improvised stand-in when the file carries no notes or discussion yet —
+          keeps the preview intentional rather than empty. */}
+      {!hasAnyComment ? (
+        <SlideOverSection label="Overview">
+          <p className="text-[12px] italic text-ink-3">No comments or discussion yet.</p>
+          {deadlineDate && !isClosed ? (
+            <p className="mt-1 text-[11.5px] text-ink-2">
+              {isOverdue ? 'Deadline passed ' : 'Due '}
+              <span className="font-medium">{formatShort(deadlineDate)}</span>
+            </p>
+          ) : null}
         </SlideOverSection>
       ) : null}
 
@@ -135,8 +150,8 @@ export function TimelineFileDetailSlideOver({
   );
 }
 
-// IST-explicit (this is a client component) so the deadline pill agrees with
-// the server render — see TimelineFileCard for the rationale.
+// IST-explicit (this is a client component) so the deadline agrees with the
+// server render — see TimelineFileCard for the rationale.
 function daysUntil(d: Date): number {
   return istDayDiff(d, new Date());
 }
