@@ -11,7 +11,7 @@ import { formatDue, initialsOf } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import {
   canManageTask,
-  canTransferTaskTo,
+  canTransferTaskToOrLinked,
   fetchTransferTargets,
   getHeadedDivisionsByUser,
   getRbacActor,
@@ -431,7 +431,10 @@ export default async function TaskDetailPage({ params }: PageProps) {
         reassignAnywhere ||
         subordinateIds.has(u.id) ||
         (actor !== null &&
-          canTransferTaskTo(actor, {
+          // OrLinked so a cross-division allocation link (e.g. KI head → NSDF)
+          // surfaces those members in the reassign picker too — the same reach
+          // the server's free-assign check now allows.
+          canTransferTaskToOrLinked(actor, {
             id: u.id,
             divisionId: u.divisionId,
             isSuperAdmin: u.isSuperAdmin,

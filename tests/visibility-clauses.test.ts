@@ -64,6 +64,35 @@ describe('buildVisibilityClausesFrom — base clauses', () => {
   });
 });
 
+describe('buildVisibilityClausesFrom — cross-division allocation link', () => {
+  it('sees own creations in the linked division, but not its board', () => {
+    // KI head (home KI, heads KI) with an NSDF allocation link.
+    const clauses = buildVisibilityClausesFrom(
+      caller({ hierarchySlot: 'director', divisionId: KI }),
+      [KI],
+      [],
+      { allocatableDivisionIds: [NSDF] },
+    );
+    // Division tasks the KI head CREATED in NSDF are visible…
+    expect(clauses).toContainEqual({
+      createdById: 'me',
+      visibility: 'division',
+      divisionId: { in: [NSDF] },
+    });
+    // …but the (createdById-free) division-board clause covers only KI, not NSDF —
+    // the link never exposes NSDF's board at large.
+    const board = clauses.find((c) => 'divisionId' in c && !('createdById' in c)) as
+      | { divisionId?: { in?: string[] } }
+      | undefined;
+    expect(board?.divisionId?.in).toEqual([KI]);
+  });
+
+  it('adds no allocation clause when the caller holds no links', () => {
+    const clauses = buildVisibilityClausesFrom(caller({ hierarchySlot: 'director' }), [KI], []);
+    expect(clauses.some((c) => 'createdById' in c && c.visibility === 'division')).toBe(false);
+  });
+});
+
 describe('buildVisibilityClausesFrom — roles', () => {
   it('super admin and OSD see everything non-personal, division-unfiltered', () => {
     for (const me of [caller({ isSuperAdmin: true }), caller({ hierarchySlot: 'osd' })]) {

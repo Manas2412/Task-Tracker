@@ -138,7 +138,7 @@ describe('canTransferTaskTo — super admin', () => {
 
 describe('canTransferTaskToOrLinked — cross-division links (Khelo India → NSDF)', () => {
   // Chanchal: home + head of KI, granted the KI→NSDF transfer link.
-  const kiHead = actor({ id: 'chanchal', divisionId: KI, headedDivisionIds: [KI], transferableDivisionIds: [NSDF] });
+  const kiHead = actor({ id: 'chanchal', divisionId: KI, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
 
   it('lets a Khelo India head transfer to an NSDF member (beyond the base matrix)', () => {
     // The base matrix alone forbids it — a plain NSDF member is neither in KI nor a head.
@@ -148,7 +148,7 @@ describe('canTransferTaskToOrLinked — cross-division links (Khelo India → NS
 
   it('works the same for a KI delegate (headship via delegation)', () => {
     // A user whose home is elsewhere but who holds the KI headship + link.
-    const delegate = actor({ id: 'deleg', divisionId: MEDIA, headedDivisionIds: [KI], transferableDivisionIds: [NSDF] });
+    const delegate = actor({ id: 'deleg', divisionId: MEDIA, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
     expect(canTransferTaskToOrLinked(delegate, target({ divisionId: NSDF }))).toBe(true);
   });
 
@@ -202,6 +202,26 @@ describe('canAssignTaskTo', () => {
     const sa = actor({ isSuperAdmin: true });
     expect(canAssignTaskTo(sa, target({ isActive: false }))).toBe(false);
   });
+
+  it('honours a cross-division allocation link (KI head → NSDF)', () => {
+    const kiHead = actor({ divisionId: KI, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
+    expect(canAssignTaskTo(kiHead, target({ divisionId: NSDF }))).toBe(true);
+    // link is scoped: no reach to unlinked divisions, and never to inactive.
+    expect(canAssignTaskTo(kiHead, target({ divisionId: MEDIA }))).toBe(false);
+    expect(canAssignTaskTo(kiHead, target({ divisionId: NSDF, isActive: false }))).toBe(false);
+  });
+
+  it('a KI delegate (home elsewhere) also assigns to NSDF via the link', () => {
+    const delegate = actor({ divisionId: MEDIA, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
+    expect(canAssignTaskTo(delegate, target({ divisionId: NSDF }))).toBe(true);
+  });
+
+  it('a non-head with a stray link still cannot assign (assignment is head-only)', () => {
+    // Links are derived from headship, so this never occurs in practice; the
+    // head-only guard keeps it fail-safe regardless.
+    const plain = actor({ divisionId: KI, headedDivisionIds: [], allocatableDivisionIds: [NSDF] });
+    expect(canAssignTaskTo(plain, target({ divisionId: NSDF }))).toBe(false);
+  });
 });
 
 describe('canActAsHeadOf', () => {
@@ -210,6 +230,13 @@ describe('canActAsHeadOf', () => {
     expect(canActAsHeadOf(head, NSDF)).toBe(true);
     expect(canActAsHeadOf(head, KI)).toBe(false);
     expect(canActAsHeadOf(actor({ isSuperAdmin: true }), KI)).toBe(true);
+  });
+
+  it('a cross-division allocation link does NOT confer head powers', () => {
+    // KI head may ALLOCATE to NSDF, but is not a head of NSDF — no delete,
+    // no free reassignment of NSDF's own tasks, no delegation.
+    const kiHead = actor({ headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
+    expect(canActAsHeadOf(kiHead, NSDF)).toBe(false);
   });
 });
 
@@ -245,6 +272,19 @@ describe('canCreateDivisionTask', () => {
     const user = actor({ divisionId: KI });
     expect(canCreateDivisionTask(user, KI)).toBe(false);
     expect(canCreateDivisionTask(user, SGM)).toBe(false);
+  });
+
+  it('honours a cross-division allocation link (KI head → NSDF)', () => {
+    const kiHead = actor({ divisionId: KI, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
+    expect(canCreateDivisionTask(kiHead, NSDF)).toBe(true);
+    expect(canCreateDivisionTask(kiHead, KI)).toBe(true);
+    // scoped: no reach to divisions outside the link.
+    expect(canCreateDivisionTask(kiHead, MEDIA)).toBe(false);
+  });
+
+  it('a KI delegate (home elsewhere) also creates NSDF tasks via the link', () => {
+    const delegate = actor({ divisionId: MEDIA, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
+    expect(canCreateDivisionTask(delegate, NSDF)).toBe(true);
   });
 });
 
