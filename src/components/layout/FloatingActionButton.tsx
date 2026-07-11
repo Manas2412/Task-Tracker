@@ -28,7 +28,7 @@ export function FloatingActionButton({
       aria-label={ariaLabel}
       onClick={onClick}
       className={cn(
-        'fixed bottom-20 md:bottom-6 right-5 z-30 w-14 h-14 rounded-full bg-ink text-white text-2xl',
+        'fixed bottom-20 md:bottom-6 right-5 z-30 w-14 h-14 rounded-full bg-ink text-onink text-2xl',
         'grid place-items-center shadow-fab transition-transform',
         'hover:scale-105 active:scale-95 focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2',
         className,

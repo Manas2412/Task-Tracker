@@ -84,7 +84,7 @@ export function TfMoreMenu({ tfId, refNo, canViewAudit, canDelete }: TfMoreMenuP
       </button>
 
       {copied ? (
-        <span className="absolute right-0 top-full mt-2 px-3 py-1.5 rounded-lg bg-ink text-white text-[12px] whitespace-nowrap z-40">
+        <span className="absolute right-0 top-full mt-2 px-3 py-1.5 rounded-lg bg-ink text-onink text-[12px] whitespace-nowrap z-40">
           Link copied
         </span>
       ) : null}

@@ -26,7 +26,7 @@ export function PrimaryAction({
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-white text-[13px] font-medium',
+        'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-onink text-[13px] font-medium',
         'hover:bg-ink-2 transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2',
         className,
       )}

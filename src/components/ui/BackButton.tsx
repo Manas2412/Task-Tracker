@@ -19,7 +19,7 @@ type BackButtonProps = {
 const VARIANT_CLASS: Record<'header' | 'button', string> = {
   header: 'text-[13px] font-medium text-ink-2 hover:text-ink',
   button:
-    'px-3.5 py-2 rounded-lg bg-ink text-white text-[13px] font-medium hover:bg-ink-2',
+    'px-3.5 py-2 rounded-lg bg-ink text-onink text-[13px] font-medium hover:bg-ink-2',
 };
 
 /**

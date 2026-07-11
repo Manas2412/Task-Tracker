@@ -56,7 +56,10 @@ export function Switch({
         disabled={disabled}
         className={cn(
           'relative w-9 h-5 rounded-full transition-colors shrink-0',
-          value ? 'bg-ink' : 'bg-line',
+          // On = primary (near-black deep indigo in light, so visually
+          // unchanged there; a legible indigo in dark where `bg-ink` would
+          // invert to near-white and swallow the white knob).
+          value ? 'bg-primary' : 'bg-line',
           disabled && 'opacity-50 cursor-not-allowed',
           className,
         )}

@@ -12,6 +12,10 @@ import type { Config } from 'tailwindcss';
  */
 const config: Config = {
   content: ['./src/**/*.{ts,tsx,mdx}'],
+  // Dark mode is a token swap under [data-theme="dark"] (see styles/tokens.css).
+  // Registered here so `dark:` variants resolve against the same selector when
+  // an occasional component needs one beyond the automatic token flip.
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
@@ -24,6 +28,7 @@ const config: Config = {
           3: 'var(--ink-3)',
           4: 'var(--ink-4)',
         },
+        onink: 'var(--on-ink)',
         line: {
           DEFAULT: 'var(--line)',
           2: 'var(--line-2)',

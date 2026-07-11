@@ -100,7 +100,7 @@ export function SearchAdvancedFilters({ divisions }: { divisions: Division[] }) 
           onClick={() => navigate({ jsP: jsP ? '' : '1' })}
           className={cn(
             'text-[12px] px-2.5 py-1.5 rounded-lg border transition-colors font-medium',
-            jsP ? 'bg-ink text-white border-ink' : 'bg-panel text-ink-2 border-line hover:border-ink-4',
+            jsP ? 'bg-ink text-onink border-ink' : 'bg-panel text-ink-2 border-line hover:border-ink-4',
           )}
         >
           JS Priority

@@ -67,7 +67,7 @@ export function TransferTaskButton({ taskId, candidates }: TransferTaskButtonPro
         onClick={() => setOpen(true)}
         className="group w-full flex items-center gap-3 rounded-xl border border-line bg-panel px-4 py-3.5 text-left transition-colors hover:border-ink-4 hover:bg-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
       >
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink text-white">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink text-onink">
           <i className="ti ti-transfer text-[18px]" aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
@@ -174,7 +174,7 @@ export function TransferTaskButton({ taskId, candidates }: TransferTaskButtonPro
                       className={cn(
                         'inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11.5px] font-medium transition-colors',
                         isActive
-                          ? 'border-ink bg-ink text-white'
+                          ? 'border-ink bg-ink text-onink'
                           : 'border-line bg-panel text-ink-2 hover:border-ink-4 hover:text-ink',
                       )}
                     >
@@ -225,7 +225,7 @@ function TransferSubmit({ disabled, targetName }: { disabled: boolean; targetNam
     <button
       type="submit"
       disabled={disabled || pending}
-      className="w-full py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-50 transition-opacity"
+      className="w-full py-2.5 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-50 transition-opacity"
     >
       {pending
         ? 'Transferring…'

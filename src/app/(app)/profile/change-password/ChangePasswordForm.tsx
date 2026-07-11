@@ -131,7 +131,7 @@ function SaveButton({ wasForced }: { wasForced: boolean }) {
     <button
       type="submit"
       disabled={pending}
-      className="mt-1 py-3 rounded-lg bg-ink text-white text-[14px] font-medium transition-opacity disabled:opacity-60"
+      className="mt-1 py-3 rounded-lg bg-ink text-onink text-[14px] font-medium transition-opacity disabled:opacity-60"
     >
       {pending ? 'Saving…' : label}
     </button>

@@ -305,7 +305,7 @@ function DelegateSubmit({ disabled }: { disabled: boolean }) {
     <button
       type="submit"
       disabled={disabled || pending}
-      className="w-full py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-50 transition-opacity"
+      className="w-full py-2.5 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-50 transition-opacity"
     >
       {pending ? 'Delegating…' : 'Delegate access'}
     </button>

@@ -109,7 +109,7 @@ export function DivisionControls({ divisions, canGroupByDivision }: DivisionCont
           className={cn(
             'inline-flex items-center gap-1.5 px-3 py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
             activeDivision
-              ? 'bg-ink text-white border-ink'
+              ? 'bg-ink text-onink border-ink'
               : 'bg-panel text-ink-2 border-line hover:border-ink-4',
           )}
         >
@@ -173,7 +173,7 @@ export function DivisionControls({ divisions, canGroupByDivision }: DivisionCont
           className={cn(
             'inline-flex items-center gap-1.5 px-3 py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
             groupBy
-              ? 'bg-ink text-white border-ink'
+              ? 'bg-ink text-onink border-ink'
               : 'bg-panel text-ink-2 border-line hover:border-ink-4',
           )}
         >
@@ -192,7 +192,7 @@ export function DivisionControls({ divisions, canGroupByDivision }: DivisionCont
           className={cn(
             'inline-flex items-center gap-1.5 px-3 py-[5px] rounded-[14px] text-[12px] font-medium border transition-colors',
             sortActive
-              ? 'bg-ink text-white border-ink'
+              ? 'bg-ink text-onink border-ink'
               : 'bg-panel text-ink-2 border-line hover:border-ink-4',
           )}
         >

@@ -34,7 +34,7 @@ export function ViewTabs({ active, sp }: ViewTabsProps) {
             aria-selected={isActive}
             className={cn(
               'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-medium transition-colors',
-              isActive ? 'bg-ink text-white' : 'text-ink-2 hover:text-ink hover:bg-line-2',
+              isActive ? 'bg-ink text-onink' : 'text-ink-2 hover:text-ink hover:bg-line-2',
             )}
           >
             <i className={cn('ti', t.icon, 'text-[13px]')} aria-hidden="true" />

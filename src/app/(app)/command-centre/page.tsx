@@ -446,7 +446,7 @@ function Stat({
       href={href}
       className={cn(
         'block bg-panel border border-line rounded-xl p-4 md:p-5 transition-shadow hover:shadow-sm',
-        tone === 'accent' && 'bg-gradient-to-b from-[#fffdf7] to-white border-accent-line',
+        tone === 'accent' && 'bg-gradient-to-b from-accent-tint to-panel border-accent-line',
       )}
     >
       <div className="flex items-center justify-between">

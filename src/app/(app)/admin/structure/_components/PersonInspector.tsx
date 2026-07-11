@@ -359,7 +359,7 @@ function SupervisorRow({
               type="button"
               onClick={save}
               disabled={pending || choice === (user.supervisor?.id ?? '')}
-              className="self-start px-2.5 py-1 rounded-md bg-ink text-white text-[11px] font-medium disabled:opacity-50 transition-opacity"
+              className="self-start px-2.5 py-1 rounded-md bg-ink text-onink text-[11px] font-medium disabled:opacity-50 transition-opacity"
             >
               {pending ? 'Saving…' : 'Save'}
             </button>

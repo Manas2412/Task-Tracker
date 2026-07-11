@@ -408,7 +408,7 @@ function OfficerCard({
     >
       {officer.contractRole ? (
         <span
-          className="absolute -top-2 right-2 text-[8px] uppercase tracking-[0.06em] font-medium text-white bg-accent px-1.5 py-0.5 rounded"
+          className="absolute -top-2 right-2 text-[8px] uppercase tracking-[0.06em] font-medium text-onink bg-accent px-1.5 py-0.5 rounded"
           aria-label={CONTRACT_ROLE_LABEL[officer.contractRole]}
         >
           {officer.contractRole}

@@ -44,7 +44,7 @@ export function CreateUserDialog({ divisions, supervisors }: CreateUserDialogPro
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-white text-[13px] font-medium',
+          'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-onink text-[13px] font-medium',
           'hover:bg-ink-2 transition-colors',
         )}
       >
@@ -99,7 +99,7 @@ function SaveButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+      className="flex-1 py-2.5 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-60"
     >
       {pending ? 'Creating…' : 'Create user'}
     </button>

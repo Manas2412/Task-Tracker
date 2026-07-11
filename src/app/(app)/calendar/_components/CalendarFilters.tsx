@@ -96,7 +96,7 @@ export function CalendarFilters({ sp, filters, divisions }: Props) {
         <i className="ti ti-adjustments-horizontal text-[16px]" aria-hidden="true" />
         <span className="hidden sm:inline">Filters</span>
         {appliedCount > 0 ? (
-          <span className="min-w-[18px] h-[18px] px-1 grid place-items-center rounded-full bg-ink text-white text-[10px] font-medium leading-none tabular-nums">
+          <span className="min-w-[18px] h-[18px] px-1 grid place-items-center rounded-full bg-ink text-onink text-[10px] font-medium leading-none tabular-nums">
             {appliedCount}
           </span>
         ) : null}
@@ -152,7 +152,7 @@ export function CalendarFilters({ sp, filters, divisions }: Props) {
             <button
               type="button"
               onClick={apply}
-              className="flex-1 py-3 rounded-lg bg-ink text-white text-[14px] font-medium hover:bg-ink-2 transition-colors"
+              className="flex-1 py-3 rounded-lg bg-ink text-onink text-[14px] font-medium hover:bg-ink-2 transition-colors"
             >
               Apply
             </button>

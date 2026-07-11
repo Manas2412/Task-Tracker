@@ -46,7 +46,7 @@ export function NewButton() {
     <button
       type="button"
       onClick={() => openDay(todayIsoIST(), true)}
-      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-ink text-white text-[13px] font-medium hover:bg-ink-2 transition-colors"
+      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-ink text-onink text-[13px] font-medium hover:bg-ink-2 transition-colors"
     >
       <i className="ti ti-plus text-[15px]" aria-hidden="true" />
       New

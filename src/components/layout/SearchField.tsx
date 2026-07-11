@@ -591,7 +591,7 @@ function TfRow({
   return (
     <RowLink href={row.href} active={active} onMouseEnter={onMouseEnter} onSelect={onSelect}>
       <span
-        className="w-7 h-7 grid place-items-center rounded-md bg-primary text-white shrink-0"
+        className="w-7 h-7 grid place-items-center rounded-md bg-primary text-onink shrink-0"
         aria-hidden="true"
       >
         <i className="ti ti-file-stack text-[14px]" aria-hidden="true" />

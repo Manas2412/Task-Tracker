@@ -36,7 +36,7 @@ function PullSubmit() {
       aria-label="Pull this task — you will become its owner"
       className="group w-full flex items-center gap-3 rounded-xl border border-line bg-panel px-4 py-3.5 text-left transition-colors hover:border-ink-4 hover:bg-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:opacity-60 disabled:cursor-wait"
     >
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink text-white">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-ink text-onink">
         <i
           className="ti ti-user-plus text-[18px] transition-transform group-hover:scale-110"
           aria-hidden="true"

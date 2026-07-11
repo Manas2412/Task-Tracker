@@ -422,7 +422,7 @@ function AddButton() {
     <button
       type="submit"
       disabled={pending}
-      className="px-3 py-1.5 rounded-md bg-ink text-white text-[12px] font-medium hover:bg-ink-2 disabled:opacity-60 transition-colors"
+      className="px-3 py-1.5 rounded-md bg-ink text-onink text-[12px] font-medium hover:bg-ink-2 disabled:opacity-60 transition-colors"
     >
       {pending ? 'Adding…' : 'Add'}
     </button>
@@ -500,7 +500,7 @@ function SaveButton() {
     <button
       type="submit"
       disabled={pending}
-      className="px-3 py-1.5 rounded-md bg-ink text-white text-[12px] font-medium hover:bg-ink-2 disabled:opacity-60 transition-colors"
+      className="px-3 py-1.5 rounded-md bg-ink text-onink text-[12px] font-medium hover:bg-ink-2 disabled:opacity-60 transition-colors"
     >
       {pending ? 'Saving…' : 'Save'}
     </button>

@@ -105,7 +105,7 @@ export function RecurrencePicker({ taskId, current, trigger }: RecurrencePickerP
                     <span className="block text-[10px] text-ink-3 mt-0.5">{o.sub}</span>
                   </span>
                   {active ? (
-                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-white">
+                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-onink">
                       <i className="ti ti-check text-[12px]" aria-hidden="true" />
                     </span>
                   ) : null}
@@ -145,7 +145,7 @@ function ApplyButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+      className="flex-1 py-2.5 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-60"
     >
       {pending ? 'Saving…' : 'Apply'}
     </button>

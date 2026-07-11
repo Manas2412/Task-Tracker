@@ -390,7 +390,7 @@ function ApproveBtn() {
     <button
       type="submit"
       disabled={pending}
-      className="px-3 py-1.5 rounded-md bg-ink text-white text-[12px] font-medium disabled:opacity-60"
+      className="px-3 py-1.5 rounded-md bg-ink text-onink text-[12px] font-medium disabled:opacity-60"
     >
       {pending ? 'Approving…' : 'Approve'}
     </button>
@@ -646,7 +646,7 @@ function DivisionRow({
                     </span>
                   ) : null}
                   {active ? (
-                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-white shrink-0">
+                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-onink shrink-0">
                       <i className="ti ti-check text-[12px]" aria-hidden="true" />
                     </span>
                   ) : null}
@@ -771,7 +771,7 @@ function SubDivisionRow({
                     {s.name}
                   </span>
                   {active ? (
-                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-white shrink-0">
+                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-onink shrink-0">
                       <i className="ti ti-check text-[12px]" aria-hidden="true" />
                     </span>
                   ) : null}
@@ -882,7 +882,7 @@ function VisibilityRow({
                     <div className="text-[12px] text-ink-3 mt-0.5">{v.hint}</div>
                   </div>
                   {active ? (
-                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-white shrink-0">
+                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-onink shrink-0">
                       <i className="ti ti-check text-[12px]" aria-hidden="true" />
                     </span>
                   ) : null}
@@ -916,7 +916,7 @@ function SaveBtn() {
     <button
       type="submit"
       disabled={pending}
-      className="flex-1 py-2 px-3 rounded-md bg-ink text-white text-[12px] font-medium disabled:opacity-60"
+      className="flex-1 py-2 px-3 rounded-md bg-ink text-onink text-[12px] font-medium disabled:opacity-60"
     >
       {pending ? 'Saving…' : 'Save'}
     </button>

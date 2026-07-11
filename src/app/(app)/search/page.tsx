@@ -141,7 +141,7 @@ export default async function SearchPage({ searchParams }: PageProps) {
               className={cn(
                 'whitespace-nowrap px-3 py-1.5 rounded-[14px] text-[12px] font-medium border transition-colors inline-flex items-center gap-1.5',
                 active
-                  ? 'bg-ink text-white border-ink'
+                  ? 'bg-ink text-onink border-ink'
                   : 'bg-panel text-ink-2 border-line hover:border-ink-4',
               )}
             >
@@ -149,7 +149,7 @@ export default async function SearchPage({ searchParams }: PageProps) {
               <span
                 className={cn(
                   'text-[10px] font-medium',
-                  active ? 'text-white/80' : 'text-ink-3',
+                  active ? 'text-onink/80' : 'text-ink-3',
                 )}
               >
                 {totals}
@@ -214,7 +214,7 @@ export default async function SearchPage({ searchParams }: PageProps) {
                   className="flex items-start gap-3 p-3.5 bg-panel border border-line rounded-xl hover:border-ink-4 transition-colors"
                 >
                   <span
-                    className="w-9 h-9 grid place-items-center rounded-md bg-primary text-white shrink-0"
+                    className="w-9 h-9 grid place-items-center rounded-md bg-primary text-onink shrink-0"
                     aria-hidden="true"
                   >
                     <i className="ti ti-file-stack text-[16px]" aria-hidden="true" />

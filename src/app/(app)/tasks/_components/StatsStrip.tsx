@@ -152,7 +152,7 @@ function StatButton({
         'group text-left transition-[background-color,border-color,box-shadow] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink',
         variant === 'card'
           ? 'rounded-2xl border border-line bg-panel p-3.5 shadow-card hover:border-ink-4 hover:shadow-card-hover'
-          : '-m-1 rounded-xl p-1 hover:bg-white/40',
+          : '-m-1 rounded-xl p-1 hover:bg-line-2',
       )}
     >
       <div

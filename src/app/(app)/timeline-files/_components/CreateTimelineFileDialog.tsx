@@ -210,7 +210,7 @@ export function CreateTimelineFileDialog({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-white text-[13px] font-medium hover:bg-ink-2 transition-colors"
+        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-ink text-onink text-[13px] font-medium hover:bg-ink-2 transition-colors"
       >
         <i className="ti ti-file-plus text-[14px]" aria-hidden="true" />
         New timeline file
@@ -342,7 +342,7 @@ export function CreateTimelineFileDialog({
                         className={cn(
                           'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-pill text-[11px] font-medium border transition-colors',
                           active
-                            ? 'bg-primary text-white border-primary'
+                            ? 'bg-primary text-onink border-primary'
                             : 'bg-panel text-ink-2 border-line hover:border-ink-4',
                         )}
                       >
@@ -483,7 +483,7 @@ export function CreateTimelineFileDialog({
                       type="button"
                       onClick={addDriveLink}
                       disabled={!linkName.trim() || !linkUrl.trim()}
-                      className="flex-1 py-1.5 rounded-md bg-ink text-white text-[11px] font-medium disabled:opacity-40"
+                      className="flex-1 py-1.5 rounded-md bg-ink text-onink text-[11px] font-medium disabled:opacity-40"
                     >
                       Add
                     </button>
@@ -626,7 +626,7 @@ function SaveButton({ disabled, uploading, hasAttachments }: { disabled: boolean
     <button
       type="submit"
       disabled={busy || disabled}
-      className="flex-1 py-2.5 rounded-lg bg-ink text-white text-[13px] font-medium disabled:opacity-60"
+      className="flex-1 py-2.5 rounded-lg bg-ink text-onink text-[13px] font-medium disabled:opacity-60"
     >
       {label}
     </button>

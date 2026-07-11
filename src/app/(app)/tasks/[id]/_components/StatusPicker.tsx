@@ -93,7 +93,7 @@ export function StatusPicker({ taskId, current, canEdit }: StatusPickerProps) {
                   </span>
                   <span className="flex-1 text-[14px] font-medium text-ink">{o.label}</span>
                   {active ? (
-                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-white">
+                    <span className="w-5 h-5 grid place-items-center rounded-full bg-ink text-onink">
                       <i className="ti ti-check text-[12px]" aria-hidden="true" />
                     </span>
                   ) : null}
@@ -150,7 +150,7 @@ function ApplyButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex-1 py-3 rounded-lg bg-ink text-white text-[14px] font-medium disabled:opacity-60"
+      className="flex-1 py-3 rounded-lg bg-ink text-onink text-[14px] font-medium disabled:opacity-60"
     >
       {pending ? 'Saving…' : 'Apply'}
     </button>

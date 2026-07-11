@@ -4,6 +4,7 @@ import { AnalyticsBadge } from '../AnalyticsBadge';
 import { NotificationsBell, type BellNotification } from './NotificationsBell';
 import { RoleSwitcher } from './RoleSwitcher';
 import { SearchField } from './SearchField';
+import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 
 type AppHeaderProps = {
@@ -41,7 +42,7 @@ export function AppHeader({ onOpenDrawer, notifications, user }: AppHeaderProps)
             Tasks
           </h1>
           <span className="hidden md:inline text-[10px] tracking-[0.12em] uppercase text-ink-3 font-medium border-l border-line pl-3">
-            Ministry of Y. A. &amp; Sports
+            Department of Sports
           </span>
         </div>
 
@@ -53,6 +54,8 @@ export function AppHeader({ onOpenDrawer, notifications, user }: AppHeaderProps)
         <div className="hidden md:block">
           <AnalyticsBadge />
         </div>
+
+        <ThemeToggle />
 
         <NotificationsBell
           unreadCount={notifications.unreadCount}
