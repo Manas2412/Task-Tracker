@@ -18,5 +18,10 @@ export default middleware((req) => {
 });
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|robots.txt).*)'],
+  // PWA assets (manifest, service worker, icons, splash screens, offline
+  // fallback) must stay reachable before login — browsers fetch them without
+  // a session when installing or launching the app.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|robots.txt|manifest.webmanifest|sw.js|offline.html|icons/|splash/).*)',
+  ],
 };

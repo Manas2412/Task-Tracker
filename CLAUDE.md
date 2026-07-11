@@ -129,6 +129,7 @@ verification never persists test rows.
 - Performance hardening — `loading.tsx` skeletons on `/tasks`, `/timeline-files`, `/admin/audit`, `/search`; index audit complete (see [docs/PERF_NOTES.md](docs/PERF_NOTES.md))
 - Subtask user assignment with datetime deadline — assignees from same division, deadline validated against parent task — done
 - Task transfer — owner can hand off a task to another same-division user; activity trail + creator notification — done
+- PWA install — manifest, icons/splash from the brand logo, conservative service worker (offline fallback only, NOT offline mode), phone-only install prompt card — done (see [docs/PWA.md](docs/PWA.md))
 - **Deferred infrastructure work** — automated tests (visibility scoper, role-based view tests, server-action contract tests). Requires Vitest setup + a CI workflow; track as a separate epic.
 
 ## The two-font system
@@ -256,6 +257,7 @@ Anything in this list gets a `// TODO: Phase N` comment if encountered and nothi
 | Data model | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) |
 | Permissions matrix | [docs/PERMISSIONS.md](docs/PERMISSIONS.md) |
 | Component catalogue | [docs/COMPONENTS.md](docs/COMPONENTS.md) |
+| PWA (manifest, service worker, install prompt) | [docs/PWA.md](docs/PWA.md) |
 | Colour tokens (CSS) | [docs/COLOUR_TOKENS.css](docs/COLOUR_TOKENS.css) |
 | Mock data spec | [docs/MOCK_DATA.md](docs/MOCK_DATA.md) |
 | Prototype 1 — task list + JS Priority Board (mobile) | [prototypes/myas_task_tracker_prototype.html](prototypes/myas_task_tracker_prototype.html) |

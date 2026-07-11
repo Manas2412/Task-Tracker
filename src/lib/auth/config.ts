@@ -36,6 +36,13 @@ export const authConfig = {
         pathname.startsWith('/_next') ||
         pathname.startsWith('/favicon') ||
         pathname === '/robots.txt' ||
+        // PWA assets — fetched by the browser without a session when
+        // installing or launching the app (mirrors the middleware matcher).
+        pathname === '/manifest.webmanifest' ||
+        pathname === '/sw.js' ||
+        pathname === '/offline.html' ||
+        pathname.startsWith('/icons/') ||
+        pathname.startsWith('/splash/') ||
         pathname.startsWith('/api/auth') ||
         pathname.startsWith('/api/cron');
 
