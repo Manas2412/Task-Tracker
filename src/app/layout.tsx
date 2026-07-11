@@ -58,11 +58,13 @@ export const viewport: Viewport = {
   themeColor: '#f5f4f0',
 };
 
-// Runs before first paint: resolves the saved theme (or the OS preference on a
-// first visit) and applies it to <html> so there is no light flash in dark.
-// The localStorage read is isolated in its own try so that, if storage access
-// throws, the OS-preference fallback and the attribute writes still run.
-const THEME_INIT = `(function(){var d=document.documentElement,t;try{t=localStorage.getItem('theme')}catch(e){}if(t!=='light'&&t!=='dark'){try{t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}catch(e){t='light'}}d.setAttribute('data-theme',t);d.style.colorScheme=t;try{var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',t==='dark'?'#0e0e11':'#f5f4f0')}catch(e){}})();`;
+// Runs before first paint. The default is ALWAYS light — dark applies only when
+// the user has explicitly toggled it this session (stored as theme='dark'). We
+// deliberately do NOT fall back to the OS `prefers-color-scheme`, so every login
+// starts in light mode (the auth layout clears the stored preference on the way
+// in). Isolated try around the storage read keeps the attribute writes running
+// even if storage access throws.
+const THEME_INIT = `(function(){var d=document.documentElement,t;try{t=localStorage.getItem('theme')}catch(e){}if(t!=='dark')t='light';d.setAttribute('data-theme',t);d.style.colorScheme=t;try{var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',t==='dark'?'#0e0e11':'#f5f4f0')}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
