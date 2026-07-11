@@ -29,14 +29,19 @@ export type RbacActor = {
   /** Divisions where the actor holds head powers — direct + delegated. */
   headedDivisionIds: string[];
   /**
-   * Extra divisions this actor may TRANSFER tasks into, beyond the base
-   * matrix — configured cross-division links (see CROSS_DIVISION_TRANSFER_LINKS
-   * in `src/lib/rbac/index.ts`, e.g. a Khelo India head/delegate may hand tasks
-   * to NSDF members). Only consulted by `canTransferTaskToOrLinked` — the base
-   * matrix and the reassignment approval path are unaffected. Populated by
+   * Extra divisions this actor may ALLOCATE tasks to, beyond the base matrix —
+   * configured cross-division links (see CROSS_DIVISION_ALLOCATION_LINKS in
+   * `src/lib/rbac/index.ts`, e.g. a Khelo India head/delegate may give work to
+   * NSDF members). "Allocate" covers all three ways of putting work on a user:
+   * CREATING a division task in the linked division (`canCreateDivisionTask`),
+   * directly ASSIGNING/reassigning its owner (`canAssignTaskTo`), and
+   * TRANSFERRING to it (`canTransferTaskToOrLinked`). It grants only that reach
+   * — NOT full head powers over the linked division (no delete, no visibility
+   * of its board, no managing its existing tasks, no delegation). The
+   * reassignment APPROVAL path stays on the base matrix. Populated by
    * `getRbacActor`; absent when there are no links for the actor.
    */
-  transferableDivisionIds?: string[];
+  allocatableDivisionIds?: string[];
 };
 
 export type RbacTarget = {
@@ -97,24 +102,26 @@ export function canTransferTaskTo(actor: RbacActor, target: RbacTarget): boolean
 
 /**
  * Transfer target check for the Transfer-task flow: the base matrix
- * (`canTransferTaskTo`) PLUS any configured cross-division links carried on
- * `actor.transferableDivisionIds` (e.g. a Khelo India head/delegate may hand
- * tasks to NSDF members). The reassignment approval matrix deliberately stays
- * on the base rule, so cross-division owner *proposals* remain blocked and all
- * other transfer logic is unchanged.
+ * (`canTransferTaskTo`) PLUS any configured cross-division allocation links
+ * carried on `actor.allocatableDivisionIds` (e.g. a Khelo India head/delegate
+ * may hand tasks to NSDF members). The reassignment APPROVAL matrix deliberately
+ * stays on the base rule, so cross-division owner *proposals* remain blocked;
+ * all other transfer logic is unchanged.
  */
 export function canTransferTaskToOrLinked(actor: RbacActor, target: RbacTarget): boolean {
   if (canTransferTaskTo(actor, target)) return true;
   if (!target.isActive || target.id === actor.id) return false;
-  return (actor.transferableDivisionIds ?? []).includes(target.divisionId);
+  return (actor.allocatableDivisionIds ?? []).includes(target.divisionId);
 }
 
 /**
  * Assignment matrix (setting a task's owner directly, without the
- * target's consent): Super Admin assigns anywhere; a Division Head only
- * within divisions they head (their home division counts while they hold
- * any headship). Division users cannot assign directly — they go through
- * transfer (with a mandatory comment) or the approval flow.
+ * target's consent): Super Admin assigns anywhere; a Division Head within
+ * divisions they head (their home division counts while they hold any
+ * headship) OR a cross-division allocation link (e.g. a Khelo India
+ * head/delegate may assign to NSDF members). Division users cannot assign
+ * directly — they go through transfer (with a mandatory comment) or the
+ * approval flow.
  */
 export function canAssignTaskTo(actor: RbacActor, target: RbacTarget): boolean {
   if (!target.isActive) return false;
@@ -122,7 +129,8 @@ export function canAssignTaskTo(actor: RbacActor, target: RbacTarget): boolean {
   if (actor.headedDivisionIds.length === 0) return false;
   return (
     actor.headedDivisionIds.includes(target.divisionId) ||
-    target.divisionId === actor.divisionId
+    target.divisionId === actor.divisionId ||
+    (actor.allocatableDivisionIds ?? []).includes(target.divisionId)
   );
 }
 
@@ -134,14 +142,20 @@ export function canActAsHeadOf(actor: RbacActor, divisionId: string): boolean {
 
 /**
  * Division-level task creation (visibility: 'division') — giving work on a
- * division's board is reserved for Super Admin, OSD, the division's head,
- * or an active delegate (`headedDivisionIds` covers direct + delegated).
- * Everyone else creates personal tasks only. The same rule gates changing
- * an existing task's visibility.
+ * division's board is reserved for Super Admin, OSD, the division's head or an
+ * active delegate (`headedDivisionIds` covers direct + delegated), OR a head
+ * with a cross-division allocation link into that division (e.g. a Khelo India
+ * head/delegate may create division tasks for NSDF). Everyone else creates
+ * personal tasks only. The same rule also gates changing an existing task's
+ * visibility. (Moving a task into a different division is a separate,
+ * Super-Admin/OSD-only gate in `updateTaskFieldsAction` — not this rule.)
  */
 export function canCreateDivisionTask(actor: RbacActor, divisionId: string): boolean {
   if (actor.isSuperAdmin || actor.isOsd) return true;
-  return actor.headedDivisionIds.includes(divisionId);
+  return (
+    actor.headedDivisionIds.includes(divisionId) ||
+    (actor.allocatableDivisionIds ?? []).includes(divisionId)
+  );
 }
 
 /**

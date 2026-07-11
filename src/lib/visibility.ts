@@ -3,7 +3,7 @@ import type { Prisma, Task } from '@prisma/client';
 import { startOfDayIST, endOfDayIST } from '@/lib/date';
 import { prisma } from '@/lib/db';
 import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
-import { getHeadedDivisionIds } from '@/lib/rbac';
+import { getAllocatableDivisionIds, getHeadedDivisionIds } from '@/lib/rbac';
 import {
   buildVisibilityClausesFrom,
   type CallerSummary,
@@ -118,8 +118,13 @@ export async function buildVisibilityClauses(me: CallerSummary): Promise<Prisma.
       ? getPmuParentDivisionHeadId(me.pmuId)
       : Promise.resolve<string | null>(null),
   ]);
+  // Cheap for the common case: no-ops (no query) unless the caller heads a
+  // division. Lets a cross-division allocator see the tasks they created in the
+  // linked division (e.g. KI head → NSDF) without exposing its board.
+  const allocatableDivisionIds = await getAllocatableDivisionIds(headedDivisionIds);
   return buildVisibilityClausesFrom(me, headedDivisionIds, pmuMemberIds, {
     isPmuParentDivisionHead: pmuParentHeadId !== null && pmuParentHeadId === me.id,
+    allocatableDivisionIds,
   });
 }
 

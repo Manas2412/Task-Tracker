@@ -26,6 +26,13 @@ export type VisibilityOptions = {
    * surfaced to them as a whole-team share.
    */
   isPmuParentDivisionHead?: boolean;
+  /**
+   * Divisions the caller holds a cross-division ALLOCATION link into (e.g. a
+   * Khelo India head → NSDF). Grants sight of the DIVISION tasks the caller
+   * themselves CREATED there, so they can track work they allocated — it does
+   * NOT expose that division's board, only their own creations in it.
+   */
+  allocatableDivisionIds?: string[];
 };
 
 /**
@@ -56,6 +63,19 @@ export function buildVisibilityClausesFrom(
     // are already covered by the role clauses below).
     { createdById: me.id, visibility: 'personal' },
   ];
+
+  // Division tasks I CREATED in a division I hold a cross-division allocation
+  // link into (e.g. a Khelo India head tracking work they gave to NSDF). Scoped
+  // to my own creations in the linked division — it never exposes that
+  // division's board, only the tasks I put there. Without this, a head who
+  // allocates a task to a linked-division owner instantly loses sight of it.
+  if (opts.allocatableDivisionIds && opts.allocatableDivisionIds.length > 0) {
+    clauses.push({
+      createdById: me.id,
+      visibility: 'division',
+      divisionId: { in: opts.allocatableDivisionIds },
+    });
+  }
 
   if (me.isSuperAdmin || me.hierarchySlot === 'osd') {
     // Super Admin + OSD see all non-personal tasks across the ministry.

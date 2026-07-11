@@ -9,19 +9,25 @@ import {
 export * from './rules';
 
 /**
- * Configured cross-division transfer links. A head/delegate of the KEY
- * division may TRANSFER (hand off) tasks to members of the listed divisions,
- * on top of the normal transfer matrix. Divisions are keyed by their
- * ABBREVIATION (e.g. 'KI', 'NSDF') — unlike the display name, an abbreviation
- * is set once at creation and has no admin edit path, so a division rename in
- * Structure & Hierarchy cannot silently break the link. If no division carries
- * the abbreviation, the link is simply skipped — fail-closed: it only ever adds
- * the extra reach, never removes a base-matrix permission.
+ * Configured cross-division ALLOCATION links. A head/delegate of the KEY
+ * division may allocate tasks to members of the listed divisions on top of the
+ * normal matrix — where "allocate" means all three ways of putting work on a
+ * user: creating a division task there (`canCreateDivisionTask`), assigning /
+ * reassigning its owner (`canAssignTaskTo`), and transferring to it
+ * (`canTransferTaskToOrLinked`). It grants only that reach, NOT full head
+ * powers over the linked division.
  *
- * Product rule: the Khelo India (KI) division head/delegate may transfer to
- * NSDF members. Everything else stays on the base transfer matrix.
+ * Divisions are keyed by their ABBREVIATION (e.g. 'KI', 'NSDF') — unlike the
+ * display name, an abbreviation is set once at creation and has no admin edit
+ * path, so a division rename in Structure & Hierarchy cannot silently break the
+ * link. If no division carries the abbreviation, the link is simply skipped —
+ * fail-closed: it only ever adds the extra reach, never removes a base-matrix
+ * permission.
+ *
+ * Product rule: the Khelo India (KI) division head/delegate may allocate tasks
+ * to NSDF members. Everything else stays on the base matrix.
  */
-const CROSS_DIVISION_TRANSFER_LINKS: Record<string, string[]> = {
+const CROSS_DIVISION_ALLOCATION_LINKS: Record<string, string[]> = {
   KI: ['NSDF'],
 };
 
@@ -63,16 +69,16 @@ export async function getHeadedDivisionIds(
 }
 
 /**
- * Extra divisions the actor may TRANSFER tasks into via
- * `CROSS_DIVISION_TRANSFER_LINKS`, resolved from the divisions they currently
- * head (direct + delegated). Returns [] for non-heads (the common case)
- * without touching the database.
+ * Extra divisions the actor may ALLOCATE tasks to (create / assign / transfer)
+ * via `CROSS_DIVISION_ALLOCATION_LINKS`, resolved from the divisions they
+ * currently head (direct + delegated). Returns [] for non-heads (the common
+ * case) without touching the database.
  */
-export async function getTransferableDivisionIds(headedDivisionIds: string[]): Promise<string[]> {
+export async function getAllocatableDivisionIds(headedDivisionIds: string[]): Promise<string[]> {
   if (headedDivisionIds.length === 0) return [];
 
   const abbreviations = new Set<string>();
-  for (const [head, targets] of Object.entries(CROSS_DIVISION_TRANSFER_LINKS)) {
+  for (const [head, targets] of Object.entries(CROSS_DIVISION_ALLOCATION_LINKS)) {
     abbreviations.add(head);
     for (const t of targets) abbreviations.add(t);
   }
@@ -81,16 +87,25 @@ export async function getTransferableDivisionIds(headedDivisionIds: string[]): P
     where: { abbreviation: { in: [...abbreviations] } },
     select: { id: true, abbreviation: true },
   });
-  const idByAbbr = new Map(divisions.map((d) => [d.abbreviation, d.id]));
+  // Group ALL ids per abbreviation. `abbreviation` is not DB-unique (no
+  // @unique / admin uniqueness check), so a misconfigured duplicate must be
+  // handled deterministically — resolve the link to every division carrying
+  // the abbreviation rather than a scan-order-dependent last-write-wins single.
+  const idsByAbbr = new Map<string, string[]>();
+  for (const d of divisions) {
+    const list = idsByAbbr.get(d.abbreviation) ?? [];
+    list.push(d.id);
+    idsByAbbr.set(d.abbreviation, list);
+  }
   const headed = new Set(headedDivisionIds);
 
   const extra = new Set<string>();
-  for (const [headAbbr, targetAbbrs] of Object.entries(CROSS_DIVISION_TRANSFER_LINKS)) {
-    const headId = idByAbbr.get(headAbbr);
-    if (!headId || !headed.has(headId)) continue;
+  for (const [headAbbr, targetAbbrs] of Object.entries(CROSS_DIVISION_ALLOCATION_LINKS)) {
+    // Grant only when the actor heads a division carrying the KEY abbreviation.
+    const headsKey = (idsByAbbr.get(headAbbr) ?? []).some((id) => headed.has(id));
+    if (!headsKey) continue;
     for (const ta of targetAbbrs) {
-      const tid = idByAbbr.get(ta);
-      if (tid) extra.add(tid);
+      for (const tid of idsByAbbr.get(ta) ?? []) extra.add(tid);
     }
   }
   return [...extra];
@@ -110,14 +125,14 @@ export async function getRbacActor(userId: string): Promise<RbacActor | null> {
   });
   if (!user || !user.isActive) return null;
   const headedDivisionIds = await getHeadedDivisionIds(userId);
-  const transferableDivisionIds = await getTransferableDivisionIds(headedDivisionIds);
+  const allocatableDivisionIds = await getAllocatableDivisionIds(headedDivisionIds);
   return {
     id: user.id,
     divisionId: user.divisionId,
     isSuperAdmin: user.isSuperAdmin,
     isOsd: user.hierarchySlot === 'osd',
     headedDivisionIds,
-    transferableDivisionIds,
+    allocatableDivisionIds,
   };
 }
 
