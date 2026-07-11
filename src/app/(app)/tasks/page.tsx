@@ -14,6 +14,7 @@ import { DivisionControls } from './_components/DivisionControls';
 import { FilterChips } from './_components/FilterChips';
 import { StatsStrip } from './_components/StatsStrip';
 import { TaskListItem } from './_components/TaskListItem';
+import { TasksQuickSearch } from './_components/TasksQuickSearch';
 import { QuickCreatePrimary } from './_components/QuickCreate';
 
 import type { PillJsLane, PillPriorityTone, PillStatusTone } from '@/components/ui/Pill';
@@ -129,8 +130,9 @@ export default async function TasksPage({ searchParams }: PageProps) {
           <StatsStrip counts={counts} />
         </div>
 
-        {/* Task list */}
-        <div className="px-4 md:px-6 lg:px-8 mt-5">
+        {/* Task list — Quick Search overlays matching cards in this panel while
+            a query is active, and the normal list returns when it is cleared. */}
+        <TasksQuickSearch>
           <div className="flex items-center justify-between mb-2">
             <h2 className="section-label">Tasks</h2>
             <span className="text-[11px] text-ink-3">
@@ -198,7 +200,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
               ))}
             </div>
           )}
-        </div>
+        </TasksQuickSearch>
 
       </div>
       </PullToRefresh>

@@ -1,6 +1,7 @@
 import type { Prisma, TaskPriority, TaskStatus } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
+import { formatDue, initialsOf } from '@/lib/format';
 import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
 import { buildVisibilityClauses } from '@/lib/visibility';
@@ -408,6 +409,160 @@ export async function searchPreview(
       tags: tags.total,
     },
   };
+}
+
+// ============================================================
+// Tasks-page Quick Search — full task-card data, deep field coverage
+// ============================================================
+
+/**
+ * A search result shaped for the tasks-list `TaskCard`. Serialisable, so the
+ * `/api/tasks/search` route can hand it straight to the client, which renders
+ * it with the same card the list uses (identical look; opens the task on tap).
+ */
+export type QuickSearchTaskCard = {
+  taskId: string;
+  refNumber: string | null;
+  name: string;
+  division: { name: string };
+  status: string;
+  priority: string;
+  jsPriorityLane: string | null;
+  due: { label: string; tone: 'today' | 'overdue' | 'soon' | 'future' | 'none' };
+  owner: { initials: string; colour: string; name: string };
+  subtasks: { done: number; total: number } | null;
+  hasAttachment: boolean;
+  primaryDivisionName: string | null;
+  href: string;
+};
+
+const QUICK_SEARCH_LIMIT = 50;
+const QUICK_SEARCH_ATTACHMENT_SCAN = 500;
+
+/**
+ * Deep quick-search for the tasks page. Matches a task when the query hits any
+ * of: title, description/context, ref number, owner name, a subtask's name or
+ * description, a discussion comment, an attached document's name, or (Super
+ * Admin only) a tag — then returns full card data for every match the caller
+ * may see. Visibility-scoped through the same `buildVisibilityClauses` as the
+ * list, so it can never surface a task the caller couldn't already open, and it
+ * is independent of the list's active filters.
+ */
+export async function quickSearchTasks(
+  callerId: string,
+  query: string,
+): Promise<{ rows: QuickSearchTaskCard[]; total: number; capped: boolean }> {
+  const q = normaliseQuery(query);
+  if (!isQuerySearchable(q)) return { rows: [], total: 0, capped: false };
+
+  const me = await prisma.user.findUnique({
+    where: { id: callerId },
+    select: {
+      id: true,
+      hierarchySlot: true,
+      isSuperAdmin: true,
+      divisionId: true,
+      isPmu: true,
+      pmuId: true,
+    },
+  });
+  if (!me) return { rows: [], total: 0, capped: false };
+
+  const visibility = await buildVisibilityClauses(me);
+
+  // Document-name matches: task-scope attachments whose file name hits the
+  // query. Attachments are polymorphic (no Task relation), so we resolve the
+  // owning task ids first, then fold them into the OR. Visibility is still
+  // enforced by the outer clause, so this never leaks a hidden task's doc.
+  const attachmentTaskIds = (
+    await prisma.attachment.findMany({
+      where: { ownerType: 'task', fileName: { contains: q, mode: 'insensitive' } },
+      // Distinct on the owning task so the cap counts distinct tasks, not raw
+      // attachment rows (a task with many matching docs consumes one slot).
+      distinct: ['ownerId'],
+      select: { ownerId: true },
+      take: QUICK_SEARCH_ATTACHMENT_SCAN,
+    })
+  ).map((a) => a.ownerId);
+
+  const orClauses: Prisma.TaskWhereInput[] = [
+    { name: { contains: q, mode: 'insensitive' } },
+    { refNumber: { contains: q, mode: 'insensitive' } },
+    // description IS the task's "Context" field (see SectionContext).
+    { description: { contains: q, mode: 'insensitive' } },
+    { owner: { name: { contains: q, mode: 'insensitive' } } },
+    { subtasks: { some: { name: { contains: q, mode: 'insensitive' } } } },
+    { subtasks: { some: { description: { contains: q, mode: 'insensitive' } } } },
+    // discussions
+    { comments: { some: { body: { contains: q, mode: 'insensitive' } } } },
+  ];
+  if (attachmentTaskIds.length > 0) orClauses.push({ id: { in: attachmentTaskIds } });
+  // Tags are a Super Admin-only feature — mirror searchTasksFor's gate.
+  if (me.isSuperAdmin) {
+    orClauses.push({ tags: { some: { tag: { name: { contains: q, mode: 'insensitive' } } } } });
+  }
+
+  const where: Prisma.TaskWhereInput = {
+    archivedAt: null,
+    parentTaskId: null,
+    AND: [{ OR: visibility }, { OR: orClauses }],
+  };
+
+  const [tasks, total] = await Promise.all([
+    prisma.task.findMany({
+      where,
+      include: {
+        owner: { select: USER_SUMMARY_SELECT },
+        division: { select: { name: true } },
+        subtasks: { select: { status: true } },
+        collaborators: { select: { role: true } },
+      },
+      // Most-recently-active first — the same relevance the "Recently modified"
+      // sort uses.
+      orderBy: [{ lastActivityAt: 'desc' }],
+      take: QUICK_SEARCH_LIMIT,
+    }),
+    prisma.task.count({ where }),
+  ]);
+
+  // Batched paperclip indicator for the shown tasks.
+  const ids = tasks.map((t) => t.id);
+  const withAttachment = new Set<string>();
+  if (ids.length > 0) {
+    const rows = await prisma.attachment.findMany({
+      where: { ownerType: 'task', ownerId: { in: ids } },
+      select: { ownerId: true },
+    });
+    for (const r of rows) withAttachment.add(r.ownerId);
+  }
+
+  const rows: QuickSearchTaskCard[] = tasks.map((t) => {
+    const subtaskTotal = t.subtasks.length;
+    const subtaskDone = t.subtasks.filter((s) => s.status === 'completed').length;
+    return {
+      taskId: t.id,
+      refNumber: t.refNumber,
+      name: t.name,
+      division: { name: t.division.name },
+      status: t.status,
+      priority: t.priority,
+      jsPriorityLane: t.jsPriorityLane,
+      due: formatDue(t.dueDate),
+      owner: {
+        initials: initialsOf(t.owner.name),
+        colour: t.owner.division.avatarColour,
+        name: t.owner.name,
+      },
+      subtasks: subtaskTotal > 0 ? { done: subtaskDone, total: subtaskTotal } : null,
+      hasAttachment: withAttachment.has(t.id),
+      primaryDivisionName: t.collaborators.some((c) => c.role === 'division_lead')
+        ? t.division.name
+        : null,
+      href: `/tasks/${t.id}`,
+    };
+  });
+
+  return { rows, total, capped: total > QUICK_SEARCH_LIMIT };
 }
 
 export async function searchFull(
