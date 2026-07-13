@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { DocumentCard } from '@/components/ui/DocumentCard';
+import { DocumentCardInteractive } from '@/components/ui/DocumentCardInteractive';
 import { auth } from '@/lib/auth';
 import { canAccessDocumentCentre } from '@/lib/document-centre-shared';
 import { fetchDocumentCounts, fetchVisibleDocuments } from '@/lib/document-centre';
@@ -40,6 +40,11 @@ export default async function DocumentCentrePage({ searchParams }: PageProps) {
     fetchVisibleDocuments({ callerId: session.user.id, filter, sort }),
     fetchDocumentCounts(session.user.id),
   ]);
+
+  // Everyone who reaches this page passed the Document Centre access gate above,
+  // and every record action (review / awaiting input / status) re-checks that
+  // same access server-side — so all viewers may run the long-press actions.
+  const canActOnRecords = true;
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-6 lg:px-8 pt-4 md:pt-6 pb-24 md:pb-10">
@@ -86,7 +91,7 @@ export default async function DocumentCentrePage({ searchParams }: PageProps) {
             <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
               {records.map((r) => (
                 <li key={r.id}>
-                  <DocumentCard
+                  <DocumentCardInteractive
                     id={r.id}
                     subject={r.subject}
                     urgency={r.urgency}
@@ -97,6 +102,7 @@ export default async function DocumentCentrePage({ searchParams }: PageProps) {
                     createdAt={r.createdAt}
                     hasAttachment={r.hasAttachment}
                     href={`/document-centre/${r.id}`}
+                    canAct={canActOnRecords}
                   />
                 </li>
               ))}
