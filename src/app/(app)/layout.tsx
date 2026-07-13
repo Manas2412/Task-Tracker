@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db';
 import { getOfficeOfJsDivisionId } from '@/lib/engagements';
 import { initialsOf } from '@/lib/format';
 import { buildNotificationTaskContext } from '@/lib/notification-context';
+import { canAccessDocumentCentre as canAccessDocumentCentreShared } from '@/lib/document-centre-shared';
 import { getAllocatableDivisionIds, getHeadedDivisionIds } from '@/lib/rbac';
 import { isS3Configured } from '@/lib/s3';
 
@@ -191,6 +192,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Tour report (external platform) — Super Admins plus the osd.myas
   // account specifically, which is narrower than the OSD-slot gate.
   const showTourReport = me.isSuperAdmin || me.username === 'osd.myas';
+  // Document Centre — Super Admins plus the three OSD desk accounts. An
+  // explicit username allowlist (see src/lib/document-centre-shared.ts).
+  const canAccessDocumentCentre = canAccessDocumentCentreShared({
+    isSuperAdmin: me.isSuperAdmin,
+    username: me.username,
+  });
 
   return (
     <AppShell
@@ -203,6 +210,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         isOsd,
         isJs,
         showTourReport,
+        canAccessDocumentCentre,
         canSwitchRole,
       }}
       notifications={{ unreadCount, recent }}

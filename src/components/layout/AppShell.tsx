@@ -22,6 +22,8 @@ type AppShellProps = {
     isJs: boolean;
     /** Super Admins + the osd.myas account — gates the Tour report link */
     showTourReport: boolean;
+    /** Super Admins + the OSD desks — gates the Document Centre */
+    canAccessDocumentCentre: boolean;
     /** Show RoleSwitcher when the caller has both Command Centre and Super Admin */
     canSwitchRole: boolean;
   };
@@ -75,6 +77,7 @@ export function AppShell({
         isOsd={user.isOsd}
         isJs={user.isJs}
         showTourReport={user.showTourReport}
+        canAccessDocumentCentre={user.canAccessDocumentCentre}
       />
 
       <div className="flex-1 grid md:grid-cols-[64px_1fr] lg:grid-cols-[240px_1fr]">
@@ -89,6 +92,7 @@ export function AppShell({
               isOsd={user.isOsd}
               isJs={user.isJs}
               showTourReport={user.showTourReport}
+              canAccessDocumentCentre={user.canAccessDocumentCentre}
             />
           </div>
         </aside>
@@ -108,6 +112,7 @@ export function AppShell({
         isSuperAdmin={user.isSuperAdmin}
         isOsd={user.isOsd}
         isJs={user.isJs}
+        canAccessDocumentCentre={user.canAccessDocumentCentre}
         unreadCount={notifications.unreadCount}
       />
 

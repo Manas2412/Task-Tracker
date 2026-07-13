@@ -104,6 +104,13 @@ export type TimelineFileState = Base & { id?: string; refNo?: string };
 export const INITIAL_TF_STATE: TimelineFileState = { ...ZERO };
 
 // ------------------------------------------------------------
+// Document Centre (src/app/actions/documents.ts)
+// ------------------------------------------------------------
+
+export type CreateDocumentState = Base & { documentId?: string };
+export const INITIAL_CREATE_DOCUMENT_STATE: CreateDocumentState = { ...ZERO };
+
+// ------------------------------------------------------------
 // Division access delegations (src/app/actions/delegations.ts)
 // ------------------------------------------------------------
 

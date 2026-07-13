@@ -6,7 +6,16 @@ import { z } from 'zod';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { touchTaskActivity, touchTimelineFileActivity } from '@/lib/activity';
+import {
+  touchDocumentActivity,
+  touchTaskActivity,
+  touchTimelineFileActivity,
+} from '@/lib/activity';
+import {
+  canAccessDocumentCentreById,
+  notifyDocumentAudience,
+  writeDocumentAudit,
+} from '@/lib/document-centre';
 import { isTaskCollaborator } from '@/lib/task-participants';
 import {
   deleteObject as deleteS3Object,
@@ -124,6 +133,28 @@ export async function canEditTfAttachments(
   return !!marked;
 }
 
+/** Who may add a file / drive link, by scope. */
+async function canAddAttachmentForScope(
+  callerId: string,
+  scope: 'task' | 'tf_source' | 'tf_action' | 'document',
+  parentId: string,
+): Promise<boolean> {
+  if (scope === 'task') return canAddTaskAttachments(callerId, parentId);
+  if (scope === 'document') return canAccessDocumentCentreById(callerId);
+  return canEditTfAttachments(callerId, parentId);
+}
+
+/** Who may rename / delete another user's attachment, by owner type. */
+async function canManageAttachmentRow(
+  callerId: string,
+  ownerType: string,
+  ownerId: string,
+): Promise<boolean> {
+  if (ownerType === 'task') return canEditTaskAttachments(callerId, ownerId);
+  if (ownerType === 'document_record') return canAccessDocumentCentreById(callerId);
+  return canEditTfAttachments(callerId, ownerId);
+}
+
 // ============================================================
 // registerAttachmentAction
 //   Called after the browser successfully PUTs the file to S3.
@@ -131,7 +162,7 @@ export async function canEditTfAttachments(
 // ============================================================
 
 const registerSchema = z.object({
-  scope: z.enum(['task', 'tf_source', 'tf_action']),
+  scope: z.enum(['task', 'tf_source', 'tf_action', 'document']),
   parentId: z.string().uuid(),
   source: z.literal('uploaded'),
   key: z.string().min(1).max(500),
@@ -171,14 +202,12 @@ export async function registerAttachmentAction(
     (parsed.data.scope === 'tf_source' &&
       keyMatchesScope(parsed.data.key, { kind: 'tf_source', tfId: parsed.data.parentId })) ||
     (parsed.data.scope === 'tf_action' &&
-      keyMatchesScope(parsed.data.key, { kind: 'tf_action', tfId: parsed.data.parentId }));
+      keyMatchesScope(parsed.data.key, { kind: 'tf_action', tfId: parsed.data.parentId })) ||
+    (parsed.data.scope === 'document' &&
+      keyMatchesScope(parsed.data.key, { kind: 'document', documentId: parsed.data.parentId }));
   if (!matches) return fail('Key does not match the declared parent.', epoch);
 
-  // Permission check — adding a task document is open to collaborators too.
-  const allowed =
-    parsed.data.scope === 'task'
-      ? await canAddTaskAttachments(me.id, parsed.data.parentId)
-      : await canEditTfAttachments(me.id, parsed.data.parentId);
+  const allowed = await canAddAttachmentForScope(me.id, parsed.data.scope, parsed.data.parentId);
   if (!allowed) return fail('You do not have permission.', epoch);
 
   return writeAttachment({
@@ -199,7 +228,7 @@ export async function registerAttachmentAction(
 // ============================================================
 
 const driveSchema = z.object({
-  scope: z.enum(['task', 'tf_source', 'tf_action']),
+  scope: z.enum(['task', 'tf_source', 'tf_action', 'document']),
   parentId: z.string().uuid(),
   fileName: z.string().trim().min(1).max(200),
   driveUrl: z
@@ -231,10 +260,7 @@ export async function addDriveLinkAttachmentAction(
     return { ok: false, fieldErrors, epoch };
   }
 
-  const allowed =
-    parsed.data.scope === 'task'
-      ? await canAddTaskAttachments(me.id, parsed.data.parentId)
-      : await canEditTfAttachments(me.id, parsed.data.parentId);
+  const allowed = await canAddAttachmentForScope(me.id, parsed.data.scope, parsed.data.parentId);
   if (!allowed) return fail('You do not have permission.', epoch);
 
   return writeAttachment({
@@ -255,8 +281,8 @@ export async function addDriveLinkAttachmentAction(
 // ============================================================
 
 async function writeAttachment(args: {
-  me: { id: string };
-  scope: 'task' | 'tf_source' | 'tf_action';
+  me: { id: string; name?: string | null };
+  scope: 'task' | 'tf_source' | 'tf_action' | 'document';
   parentId: string;
   source: 'uploaded' | 'drive_link';
   fileName: string;
@@ -270,7 +296,9 @@ async function writeAttachment(args: {
       ? 'task'
       : args.scope === 'tf_source'
         ? 'timeline_file_source'
-        : 'timeline_file_action';
+        : args.scope === 'tf_action'
+          ? 'timeline_file_action'
+          : 'document_record';
 
   try {
     const created = await prisma.attachment.create({
@@ -286,7 +314,34 @@ async function writeAttachment(args: {
       },
     });
 
-    if (args.scope === 'task') {
+    if (args.scope === 'document') {
+      // A document upload / drive link is a meaningful update. Notify the
+      // executive audience and record an immutable audit row, mirroring how
+      // the document actions themselves fan out.
+      const record = await prisma.documentRecord.findUnique({
+        where: { id: args.parentId },
+        select: { subject: true },
+      });
+      await touchDocumentActivity(prisma, args.parentId);
+      await notifyDocumentAudience(prisma, {
+        actorId: args.me.id,
+        actorName: args.me.name ?? null,
+        type: args.source === 'drive_link' ? 'document_drive_link_added' : 'document_attachment_added',
+        documentId: args.parentId,
+        documentSubject: record?.subject ?? 'Document',
+        extra: { fileName: args.fileName },
+      });
+      await writeDocumentAudit(prisma, {
+        actorId: args.me.id,
+        action: 'update',
+        documentId: args.parentId,
+        after: {
+          [args.source === 'drive_link' ? 'driveLinkAdded' : 'attachmentAdded']: args.fileName,
+        },
+      });
+      revalidatePath(`/document-centre/${args.parentId}`);
+      revalidatePath('/document-centre');
+    } else if (args.scope === 'task') {
       await prisma.taskActivity.create({
         data: {
           taskId: args.parentId,
@@ -373,13 +428,7 @@ export async function renameAttachmentAction(
   if (!att) return fail('Attachment not found.', epoch);
 
   let editor = att.uploadedById === me.id;
-  if (!editor) {
-    if (att.ownerType === 'task') {
-      editor = await canEditTaskAttachments(me.id, att.ownerId);
-    } else {
-      editor = await canEditTfAttachments(me.id, att.ownerId);
-    }
-  }
+  if (!editor) editor = await canManageAttachmentRow(me.id, att.ownerType, att.ownerId);
   if (!editor) return fail('You do not have permission.', epoch);
 
   const oldName = att.fileName;
@@ -389,7 +438,17 @@ export async function renameAttachmentAction(
       data: { fileName: parsed.data.fileName },
     });
 
-    if (att.ownerType === 'task') {
+    if (att.ownerType === 'document_record') {
+      await touchDocumentActivity(prisma, att.ownerId);
+      await writeDocumentAudit(prisma, {
+        actorId: me.id,
+        action: 'update',
+        documentId: att.ownerId,
+        before: { attachmentName: oldName },
+        after: { attachmentName: parsed.data.fileName },
+      });
+      revalidatePath(`/document-centre/${att.ownerId}`);
+    } else if (att.ownerType === 'task') {
       await prisma.taskActivity.create({
         data: {
           taskId: att.ownerId,
@@ -453,13 +512,7 @@ export async function deleteAttachmentAction(
 
   // Permission: uploader or someone with edit rights on the parent
   let editor = att.uploadedById === me.id;
-  if (!editor) {
-    if (att.ownerType === 'task') {
-      editor = await canEditTaskAttachments(me.id, att.ownerId);
-    } else {
-      editor = await canEditTfAttachments(me.id, att.ownerId);
-    }
-  }
+  if (!editor) editor = await canManageAttachmentRow(me.id, att.ownerType, att.ownerId);
   if (!editor) return fail('You do not have permission.', epoch);
 
   try {
@@ -472,7 +525,15 @@ export async function deleteAttachmentAction(
         });
       }
       await tx.attachment.delete({ where: { id: att.id } });
-      if (att.ownerType === 'task') {
+      if (att.ownerType === 'document_record') {
+        await touchDocumentActivity(tx, att.ownerId);
+        await writeDocumentAudit(tx, {
+          actorId: me.id,
+          action: 'update',
+          documentId: att.ownerId,
+          before: { attachmentRemoved: att.fileName },
+        });
+      } else if (att.ownerType === 'task') {
         await tx.taskActivity.create({
           data: {
             taskId: att.ownerId,
@@ -504,7 +565,10 @@ export async function deleteAttachmentAction(
       }
     }
 
-    if (att.ownerType === 'task') {
+    if (att.ownerType === 'document_record') {
+      revalidatePath(`/document-centre/${att.ownerId}`);
+      revalidatePath('/document-centre');
+    } else if (att.ownerType === 'task') {
       revalidatePath(`/tasks/${att.ownerId}`);
     } else {
       revalidatePath(`/timeline-files/${att.ownerId}`);

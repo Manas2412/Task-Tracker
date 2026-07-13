@@ -41,3 +41,8 @@ export function touchTaskActivity(client: RawExecutor, taskId: string) {
 export function touchTimelineFileActivity(client: RawExecutor, timelineFileId: string) {
   return client.$executeRaw`UPDATE "timeline_files" SET "last_activity_at" = now() WHERE "id" = ${timelineFileId}::uuid`;
 }
+
+/** Stamp a document record's `last_activity_at` to now(). */
+export function touchDocumentActivity(client: RawExecutor, documentRecordId: string) {
+  return client.$executeRaw`UPDATE "document_records" SET "last_activity_at" = now() WHERE "id" = ${documentRecordId}::uuid`;
+}

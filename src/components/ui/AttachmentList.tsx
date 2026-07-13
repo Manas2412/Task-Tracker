@@ -28,7 +28,7 @@ export type AttachmentRow = {
 };
 
 type AttachmentListProps = {
-  scope: 'task' | 'tf_source' | 'tf_action';
+  scope: 'task' | 'tf_source' | 'tf_action' | 'document';
   parentId: string;
   attachments: AttachmentRow[];
   canEdit: boolean;
@@ -504,7 +504,7 @@ function DriveLinkDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  scope: 'task' | 'tf_source' | 'tf_action';
+  scope: 'task' | 'tf_source' | 'tf_action' | 'document';
   parentId: string;
 }) {
   const formRef = useRef<HTMLFormElement>(null);

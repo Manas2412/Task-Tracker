@@ -71,7 +71,8 @@ function s3Client(): S3Client {
 export type AttachmentScope =
   | { kind: 'task'; taskId: string }
   | { kind: 'tf_source'; tfId: string }
-  | { kind: 'tf_action'; tfId: string };
+  | { kind: 'tf_action'; tfId: string }
+  | { kind: 'document'; documentId: string };
 
 export function objectKeyPrefix(scope: AttachmentScope): string {
   switch (scope.kind) {
@@ -81,6 +82,8 @@ export function objectKeyPrefix(scope: AttachmentScope): string {
       return `timeline-files/${scope.tfId}/source`;
     case 'tf_action':
       return `timeline-files/${scope.tfId}/action`;
+    case 'document':
+      return `document-records/${scope.documentId}`;
   }
 }
 

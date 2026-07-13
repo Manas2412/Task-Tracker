@@ -258,6 +258,7 @@ Anything in this list gets a `// TODO: Phase N` comment if encountered and nothi
 | Permissions matrix | [docs/PERMISSIONS.md](docs/PERMISSIONS.md) |
 | Component catalogue | [docs/COMPONENTS.md](docs/COMPONENTS.md) |
 | PWA (manifest, service worker, install prompt) | [docs/PWA.md](docs/PWA.md) |
+| Document Centre (executive records module) | [docs/DOCUMENT_CENTRE.md](docs/DOCUMENT_CENTRE.md) |
 | Colour tokens (CSS) | [docs/COLOUR_TOKENS.css](docs/COLOUR_TOKENS.css) |
 | Mock data spec | [docs/MOCK_DATA.md](docs/MOCK_DATA.md) |
 | Prototype 1 — task list + JS Priority Board (mobile) | [prototypes/myas_task_tracker_prototype.html](prototypes/myas_task_tracker_prototype.html) |
