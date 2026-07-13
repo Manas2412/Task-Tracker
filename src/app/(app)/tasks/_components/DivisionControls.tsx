@@ -17,12 +17,14 @@ type DivisionControlsProps = {
 };
 
 /**
- * Sort options for the tasks list. The empty value is the default order and is
- * cleared from the URL. Kept in sync with TaskSort / VALID_SORTS on the server.
+ * Sort options for the tasks list. "Recently modified" is the default and is
+ * cleared from the URL (empty value); the smart order is the explicit
+ * `?sort=default`. Kept in sync with TaskSort / VALID_SORTS on the server, where
+ * an absent sort resolves to "Recently modified" (latest).
  */
-const SORT_OPTIONS: { value: '' | 'latest' | 'alpha'; label: string; hint: string }[] = [
-  { value: '', label: 'Default order', hint: 'JS Priority, due date, priority' },
-  { value: 'latest', label: 'Recently modified', hint: 'Most recent activity on top' },
+const SORT_OPTIONS: { value: '' | 'default' | 'alpha'; label: string; hint: string }[] = [
+  { value: '', label: 'Recently modified', hint: 'Most recent activity on top' },
+  { value: 'default', label: 'Default order', hint: 'JS Priority, due date, priority' },
   { value: 'alpha', label: 'A–Z', hint: 'Alphabetical by task name' },
 ];
 
@@ -31,7 +33,7 @@ export function DivisionControls({ divisions, canGroupByDivision }: DivisionCont
   const searchParams = useSearchParams();
   const activeDivision = searchParams.get('division') ?? '';
   const groupBy = searchParams.get('group') === 'division';
-  const activeSort = (searchParams.get('sort') ?? '') as '' | 'latest' | 'alpha';
+  const activeSort = (searchParams.get('sort') ?? '') as '' | 'default' | 'alpha';
   const sortActive = activeSort !== '';
   const activeSortLabel = SORT_OPTIONS.find((o) => o.value === activeSort)?.label;
 
@@ -92,7 +94,7 @@ export function DivisionControls({ divisions, canGroupByDivision }: DivisionCont
     router.push(buildHref({ group: groupBy ? '' : 'division' }), { scroll: false });
   };
 
-  const onSelectSort = (sort: '' | 'latest' | 'alpha') => {
+  const onSelectSort = (sort: '' | 'default' | 'alpha') => {
     setSortOpen(false);
     router.push(buildHref({ sort }), { scroll: false });
   };

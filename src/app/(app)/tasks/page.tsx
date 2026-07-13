@@ -38,9 +38,13 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
   const divisionFilter = searchParams?.division ?? '';
   const requestedGroupByDivision = searchParams?.group === 'division';
-  const sort: TaskSort = VALID_SORTS.includes((searchParams?.sort as TaskSort) ?? 'default')
-    ? ((searchParams?.sort as TaskSort) ?? 'default')
-    : 'default';
+  // Default sort is "Recently modified" (latest) when the user has not chosen
+  // one — the list opens most-recently-active first across the platform, and
+  // only changes when the user picks another sort. The smart order is still
+  // available explicitly via ?sort=default.
+  const sort: TaskSort = VALID_SORTS.includes((searchParams?.sort as TaskSort) ?? 'latest')
+    ? ((searchParams?.sort as TaskSort) ?? 'latest')
+    : 'latest';
 
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },

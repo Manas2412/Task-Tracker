@@ -96,9 +96,12 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
     ? ((searchParams?.filter as TfFilter) ?? 'all')
     : 'all';
 
-  const sort: TfSort = VALID_SORTS.includes((searchParams?.sort as TfSort) ?? 'default')
-    ? ((searchParams?.sort as TfSort) ?? 'default')
-    : 'default';
+  // Default sort is "Recently modified" (latest) until the user picks another —
+  // the files list opens most-recently-active first, matching the tasks and
+  // document lists. The default order is still available via ?sort=default.
+  const sort: TfSort = VALID_SORTS.includes((searchParams?.sort as TfSort) ?? 'latest')
+    ? ((searchParams?.sort as TfSort) ?? 'latest')
+    : 'latest';
 
   // Group-by-division is a cross-division (leadership) view. Normal users only
   // ever see their own division, so the control is hidden and a manually-set
