@@ -64,6 +64,8 @@ Each row is a permission. Each column is a role acting on a task they can see (e
 
 Timeline Files are visible only to divisions they are marked to, plus OSD/JS via the master view.
 
+**Barred slots.** The **PMU Consultant** hierarchy slot (`consultant`) is excluded from the Timeline Files module entirely — it sees no Timeline File in any list, detail, count, calendar deadline, search result, or attachment, regardless of marked-to division, and the Timeline Files nav link is hidden for it. Enforced by `canAccessTimelineFiles` (`src/lib/timeline-files-access.ts`), which `buildTfVisibilityClause` checks first (a match-nothing clause that no role grant can widen); the linked-Timeline-File card on a task is gated by the same rule. Add more barred slots in `TIMELINE_FILES_HIDDEN_SLOTS`.
+
 | | JS | OSD | Director of marked division | Other officers of marked division | Officers of unmarked divisions | PMU member of marked division | Super Admin |
 |---|---|---|---|---|---|---|---|
 | **See Timeline File** | ✓ (master) | ✓ (master) | ✓ | ✓ (per their chain) |  |  | ✓ |
