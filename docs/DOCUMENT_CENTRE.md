@@ -18,15 +18,15 @@ Two **orthogonal** rules — this is the key to the design:
    existing `showTourReport` username gate. All four authorized users see
    **every** record — it is a shared confidential workspace.
 
-2. **HMAYS division isolation** is separate and needs **no visibility-engine
+2. **HMYAS division isolation** is separate and needs **no visibility-engine
    change**. `osd.ss` and `osd.dgsai` are provisioned as ordinary
-   HMAYS-division heads (not Super Admin, not the `osd` slot), so the existing
-   ministry-officer visibility rules already scope them to HMAYS data across
+   HMYAS-division heads (not Super Admin, not the `osd` slot), so the existing
+   ministry-officer visibility rules already scope them to HMYAS data across
    Tasks, Timeline Files, Calendar, Priority Board, and Search. Super Admins
    are unaffected (they see everything).
 
 Because Document Centre records are gated by the allowlist rather than the
-division-scoped visibility engine, HMAYS isolation and the shared workspace do
+division-scoped visibility engine, HMYAS isolation and the shared workspace do
 not conflict.
 
 ### Enforcement (defence in depth)
@@ -83,9 +83,9 @@ rest of the codebase.
   descriptive `before`/`after` for review, workflow, attachment, and drive-link
   changes. Appears on `/admin/audit` automatically.
 
-## Provisioning HMAYS + the OSD desk accounts
+## Provisioning HMYAS + the OSD desk accounts
 
-`osd.ss` / `osd.dgsai` and the HMAYS division are created by an **idempotent,
+`osd.ss` / `osd.dgsai` and the HMYAS division are created by an **idempotent,
 non-destructive** script (the main `seed.ts` wipes data, so it is not used for
 production provisioning):
 
