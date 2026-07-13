@@ -628,6 +628,12 @@ function QuickCreateForm({
               />
             </div>
 
+            {!s3Configured ? (
+              <p className="text-[11px] text-ink-3 mt-1.5">
+                File storage isn&rsquo;t set up on this server. Paste a link below instead.
+              </p>
+            ) : null}
+
             {pendingFile ? (
               <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-bg border border-line rounded-lg">
                 <i className="ti ti-file text-[14px] text-ink-2" aria-hidden="true" />

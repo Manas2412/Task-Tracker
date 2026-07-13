@@ -532,6 +532,12 @@ export function CreateTimelineFileDialog({
                   />
                 </div>
               ) : null}
+
+              {!s3Configured ? (
+                <p className="text-[11px] text-ink-3 mt-1">
+                  File storage isn&rsquo;t set up on this server. Add a Drive link instead.
+                </p>
+              ) : null}
             </div>
 
             {/* Upload progress */}
