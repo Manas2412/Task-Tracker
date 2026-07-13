@@ -29,13 +29,15 @@ const STATUS_OPTIONS: { value: TfFilter; label: string; dot: string }[] = [
 ];
 
 /**
- * Sort options for the files list. The empty value is the default order and is
- * cleared from the URL. Kept in sync with TfSort / VALID_SORTS on the server,
- * and mirrors the tasks-page sort menu so the two lists feel identical.
+ * Sort options for the files list. "Recently modified" is the default and is
+ * cleared from the URL (empty value); the default order is the explicit
+ * `?sort=default`. Kept in sync with TfSort / VALID_SORTS on the server, where
+ * an absent sort resolves to "Recently modified" (latest), and mirrors the
+ * tasks-page sort menu so the two lists feel identical.
  */
-const SORT_OPTIONS: { value: '' | 'latest' | 'alpha'; label: string; hint: string }[] = [
-  { value: '', label: 'Default order', hint: 'Open first, soonest deadline' },
-  { value: 'latest', label: 'Recently modified', hint: 'Most recent activity on top' },
+const SORT_OPTIONS: { value: '' | 'default' | 'alpha'; label: string; hint: string }[] = [
+  { value: '', label: 'Recently modified', hint: 'Most recent activity on top' },
+  { value: 'default', label: 'Default order', hint: 'Open first, soonest deadline' },
   { value: 'alpha', label: 'A–Z', hint: 'Alphabetical by subject' },
 ];
 
@@ -52,7 +54,7 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
 
   const activeStatus = (searchParams.get('filter') as TfFilter | null) ?? 'all';
   const activeDivision = searchParams.get('division') ?? '';
-  const activeSort = (searchParams.get('sort') ?? '') as '' | 'latest' | 'alpha';
+  const activeSort = (searchParams.get('sort') ?? '') as '' | 'default' | 'alpha';
   const sortActive = activeSort !== '';
   const activeSortLabel = SORT_OPTIONS.find((o) => o.value === activeSort)?.label;
   const groupBy = searchParams.get('group') === 'division';
@@ -100,7 +102,7 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
     setDivisionOpen(false);
     router.push(buildHref({ division: divId || '' }), { scroll: false });
   };
-  const onSelectSort = (sort: '' | 'latest' | 'alpha') => {
+  const onSelectSort = (sort: '' | 'default' | 'alpha') => {
     setSortOpen(false);
     router.push(buildHref({ sort }), { scroll: false });
   };
