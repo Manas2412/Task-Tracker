@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
 import { getOfficeOfJsDivisionId } from '@/lib/engagements';
-import { getSubtaskLinkedDivisionIds } from '@/lib/rbac';
+import { getLinkedParticipantDivisionIds } from '@/lib/rbac';
 import { getPmuParentDivisionHeadId } from '@/lib/visibility';
 
 /**
@@ -14,6 +14,13 @@ import { getPmuParentDivisionHeadId } from '@/lib/visibility';
  * task, its PMU team), that division's head, and the always-relevant
  * oversight roles (OSD + Super Admin). The seeded "Office of JS" division is
  * a coordinating office, so its tasks may involve any active user.
+ *
+ * On top of that, members of any division cross-linked for participation
+ * (`CROSS_DIVISION_PARTICIPANT_LINKS` in src/lib/rbac — e.g. Khelo India / Khelo
+ * India Mission ↔ NSDF, both directions) are folded in, so the cross-division
+ * reach applies uniformly to collaborators, subtask assignees, and @mentions in
+ * the discussion. The link grants participant reach only — no head powers, no
+ * visibility of the other division's board. See PERMISSIONS §5.17.
  *
  * The task OWNER is deliberately stricter (same division only — see
  * createTaskAction) and is not built from this rule.
@@ -53,17 +60,29 @@ export function buildTaskParticipantWhereFrom(
   return { isActive: true, OR: or };
 }
 
-/** DB-backed wrapper: resolves the head + Office-of-JS ids, then delegates. */
+/**
+ * DB-backed wrapper: resolves the head + Office-of-JS ids to build the base
+ * participant set, then folds in members of any cross-linked division
+ * (`CROSS_DIVISION_PARTICIPANT_LINKS`, e.g. Khelo India / Khelo India Mission ↔
+ * NSDF). The single source every task user-picker and guard reads, so the
+ * cross-division reach lands on collaborators, subtask assignees, and @mentions
+ * alike.
+ */
 export async function buildTaskParticipantWhere(
   task: ParticipantTask,
 ): Promise<Prisma.UserWhereInput> {
-  const officeOfJsDivisionId = await getOfficeOfJsDivisionId();
+  const [officeOfJsDivisionId, linkedDivisionIds] = await Promise.all([
+    getOfficeOfJsDivisionId(),
+    getLinkedParticipantDivisionIds(task.divisionId),
+  ]);
   const headId =
     task.division.headUserId ??
     (task.division.kind === 'pmu'
       ? await getPmuParentDivisionHeadId(task.divisionId)
       : null);
-  return buildTaskParticipantWhereFrom(task, headId, officeOfJsDivisionId);
+  const base = buildTaskParticipantWhereFrom(task, headId, officeOfJsDivisionId);
+  if (linkedDivisionIds.length === 0) return base;
+  return { OR: [base, { isActive: true, divisionId: { in: linkedDivisionIds } }] };
 }
 
 /** Whether a user is allowed to take part in a task (server-side guard). */
@@ -72,33 +91,6 @@ export async function isTaskParticipant(
   task: ParticipantTask,
 ): Promise<boolean> {
   const where = await buildTaskParticipantWhere(task);
-  const count = await prisma.user.count({ where: { AND: [{ id: userId }, where] } });
-  return count > 0;
-}
-
-/**
- * Who may be a SUBTASK assignee — the task's participants PLUS members of any
- * division cross-linked for subtask collaboration (e.g. Khelo India / Khelo
- * India Mission ↔ NSDF, both directions; see CROSS_DIVISION_SUBTASK_LINKS in
- * src/lib/rbac and PERMISSIONS §5.17). This deliberately widens ONLY the subtask
- * assignee picker and its guard — collaborators and @mentions keep the stricter
- * base participant rule, so the cross-division reach cannot leak into them.
- */
-export async function buildSubtaskAssigneeWhere(
-  task: ParticipantTask,
-): Promise<Prisma.UserWhereInput> {
-  const base = await buildTaskParticipantWhere(task);
-  const linkedDivisionIds = await getSubtaskLinkedDivisionIds(task.divisionId);
-  if (linkedDivisionIds.length === 0) return base;
-  return { OR: [base, { isActive: true, divisionId: { in: linkedDivisionIds } }] };
-}
-
-/** Whether a user may be assigned a subtask on this task (server-side guard). */
-export async function isSubtaskAssigneeAllowed(
-  userId: string,
-  task: ParticipantTask,
-): Promise<boolean> {
-  const where = await buildSubtaskAssigneeWhere(task);
   const count = await prisma.user.count({ where: { AND: [{ id: userId }, where] } });
   return count > 0;
 }

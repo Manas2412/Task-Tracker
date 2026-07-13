@@ -9,7 +9,7 @@ import {
   canTransferTaskTo,
   canTransferTaskToOrLinked,
   isEligibleDelegate,
-  linkedSubtaskAbbreviations,
+  linkedParticipantAbbreviations,
   roleOf,
   type RbacActor,
   type RbacTarget,
@@ -396,36 +396,37 @@ describe('isEligibleDelegate', () => {
   });
 });
 
-// The configured cross-division subtask links for the ministry: Khelo India (KI)
-// and Khelo India Mission (KIM) are each symmetrically linked with NSDF.
-const SUBTASK_LINKS: readonly (readonly [string, string])[] = [
+// The configured cross-division participant links for the ministry: Khelo India
+// (KI) and Khelo India Mission (KIM) are each symmetrically linked with NSDF.
+// These govern subtask assignees, collaborators, and @mentions alike.
+const PARTICIPANT_LINKS: readonly (readonly [string, string])[] = [
   ['KI', 'NSDF'],
   ['KIM', 'NSDF'],
 ];
 
-describe('linkedSubtaskAbbreviations', () => {
+describe('linkedParticipantAbbreviations', () => {
   it('KI and KIM both link out to NSDF', () => {
-    expect(linkedSubtaskAbbreviations('KI', SUBTASK_LINKS)).toEqual(['NSDF']);
-    expect(linkedSubtaskAbbreviations('KIM', SUBTASK_LINKS)).toEqual(['NSDF']);
+    expect(linkedParticipantAbbreviations('KI', PARTICIPANT_LINKS)).toEqual(['NSDF']);
+    expect(linkedParticipantAbbreviations('KIM', PARTICIPANT_LINKS)).toEqual(['NSDF']);
   });
 
   it('is symmetric — NSDF links back to both KI and KIM', () => {
-    const linked = linkedSubtaskAbbreviations('NSDF', SUBTASK_LINKS);
+    const linked = linkedParticipantAbbreviations('NSDF', PARTICIPANT_LINKS);
     expect(new Set(linked)).toEqual(new Set(['KI', 'KIM']));
   });
 
   it('an unlinked division gets nothing', () => {
-    expect(linkedSubtaskAbbreviations('SGM', SUBTASK_LINKS)).toEqual([]);
-    expect(linkedSubtaskAbbreviations('OJS', SUBTASK_LINKS)).toEqual([]);
+    expect(linkedParticipantAbbreviations('SGM', PARTICIPANT_LINKS)).toEqual([]);
+    expect(linkedParticipantAbbreviations('OJS', PARTICIPANT_LINKS)).toEqual([]);
   });
 
   it('never links a division to itself', () => {
-    expect(linkedSubtaskAbbreviations('KI', [['KI', 'KI']])).toEqual([]);
+    expect(linkedParticipantAbbreviations('KI', [['KI', 'KI']])).toEqual([]);
   });
 
   it('does not bridge KI and KIM through their shared NSDF link', () => {
     // KI links to NSDF, KIM links to NSDF, but KI must not reach KIM.
-    expect(linkedSubtaskAbbreviations('KI', SUBTASK_LINKS)).not.toContain('KIM');
-    expect(linkedSubtaskAbbreviations('KIM', SUBTASK_LINKS)).not.toContain('KI');
+    expect(linkedParticipantAbbreviations('KI', PARTICIPANT_LINKS)).not.toContain('KIM');
+    expect(linkedParticipantAbbreviations('KIM', PARTICIPANT_LINKS)).not.toContain('KI');
   });
 });
