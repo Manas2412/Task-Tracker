@@ -115,6 +115,37 @@ export function canTransferTaskToOrLinked(actor: RbacActor, target: RbacTarget):
 }
 
 /**
+ * Symmetric cross-division SUBTASK links. Given a task division's abbreviation
+ * and the configured unordered pairs, return the OTHER division abbreviations
+ * whose members may be assigned subtasks on that task — and, because the link
+ * is symmetric, whose tasks that division's members may be assigned subtasks on
+ * in return. e.g. with `[['KI','NSDF'], ['KIM','NSDF']]`, a Khelo India or
+ * Khelo India Mission task may hand a subtask to an NSDF member, and an NSDF
+ * task may hand a subtask to a Khelo India / Khelo India Mission member.
+ *
+ * Unlike the allocation link (§5.6, head-only), this reach is open to ALL
+ * members of the linked divisions, not just heads — it only widens who may be a
+ * subtask ASSIGNEE, granting no head powers or visibility of the other board.
+ *
+ * Pure (no DB) so it is unit-testable and keyed by ABBREVIATION, which has no
+ * admin edit path — a division rename cannot silently break the link. A
+ * division is never linked to itself; unknown abbreviations simply yield an
+ * empty set (fail-closed).
+ */
+export function linkedSubtaskAbbreviations(
+  divisionAbbr: string,
+  links: readonly (readonly [string, string])[],
+): string[] {
+  const out = new Set<string>();
+  for (const [a, b] of links) {
+    if (a === divisionAbbr) out.add(b);
+    if (b === divisionAbbr) out.add(a);
+  }
+  out.delete(divisionAbbr);
+  return [...out];
+}
+
+/**
  * Assignment matrix (setting a task's owner directly, without the
  * target's consent): Super Admin assigns anywhere; a Division Head within
  * divisions they head (their home division counts while they hold any

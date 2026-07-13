@@ -19,7 +19,7 @@ import {
 } from '@/lib/rbac';
 import { ACTOR_SUMMARY_SELECT, USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { buildVisibilityClauses } from '@/lib/visibility';
-import { buildTaskParticipantWhere } from '@/lib/task-participants';
+import { buildSubtaskAssigneeWhere, buildTaskParticipantWhere } from '@/lib/task-participants';
 import { CollaboratorsSection, type Candidate, type CollaboratorRow, type SubtaskScope } from './_components/CollaboratorsSection';
 import { JsLanePicker } from './_components/JsLanePicker';
 import { TagsSection, type TaskTagRow } from './_components/TagsSection';
@@ -29,7 +29,7 @@ import { SectionActivity } from './_components/SectionActivity';
 import { SectionComments, type Mentionable } from './_components/SectionComments';
 import { SectionContext } from './_components/SectionContext';
 import { SectionDetails } from './_components/SectionDetails';
-import { SectionSubtasks } from './_components/SectionSubtasks';
+import { SectionSubtasks, type SubtaskDocument } from './_components/SectionSubtasks';
 import { StatusPicker } from './_components/StatusPicker';
 import { TaskTitleEditor } from './_components/TaskTitleEditor';
 import { PullTaskButton } from './_components/PullTaskButton';
@@ -284,11 +284,13 @@ export default async function TaskDetailPage({ params }: PageProps) {
     name: s.name,
   }));
 
-  // Subtask assignee candidates: task participants (same set as above).
+  // Subtask assignee candidates: task participants PLUS members of any division
+  // cross-linked for subtasks (Khelo India / Khelo India Mission ↔ NSDF). Wider
+  // than the collaborator/@mention set, which stays on `participantWhere`.
   // Collaborators can create subtasks too, so they need the picker options.
   const subtaskAssigneeRows = canEditFields || isCollaborator
     ? await prisma.user.findMany({
-        where: participantWhere,
+        where: await buildSubtaskAssigneeWhere(task),
         select: {
           id: true,
           name: true,
@@ -304,6 +306,38 @@ export default async function TaskDetailPage({ params }: PageProps) {
     designation: u.designation,
     divisionName: u.division.name,
     divisionColour: u.division.avatarColour,
+  }));
+
+  // Documents attached to each subtask — surfaced on the parent panel for a
+  // quick view without opening the subtask. Attachments are polymorphic
+  // (ownerType 'task', ownerId = the subtask), so this is a single grouped read.
+  const subtaskIds = task.subtasks.map((s) => s.id);
+  const subtaskAttachmentRows =
+    subtaskIds.length > 0
+      ? await prisma.attachment.findMany({
+          where: { ownerType: 'task', ownerId: { in: subtaskIds } },
+          select: { id: true, ownerId: true, fileName: true, source: true, fileUrl: true },
+          orderBy: { uploadedAt: 'asc' },
+        })
+      : [];
+  const docsBySubtask = new Map<string, SubtaskDocument[]>();
+  for (const a of subtaskAttachmentRows) {
+    const list = docsBySubtask.get(a.ownerId) ?? [];
+    list.push({
+      id: a.id,
+      fileName: a.fileName,
+      source: a.source as 'uploaded' | 'drive_link',
+      fileUrl: a.fileUrl,
+    });
+    docsBySubtask.set(a.ownerId, list);
+  }
+  const subtasksForPanel = task.subtasks.map((s) => ({
+    id: s.id,
+    name: s.name,
+    status: s.status,
+    dueDate: s.dueDate,
+    owner: s.owner,
+    documents: docsBySubtask.get(s.id) ?? [],
   }));
 
   // Transfer targets follow the RBAC matrix: own division, division
@@ -581,11 +615,12 @@ export default async function TaskDetailPage({ params }: PageProps) {
       {!isSubtask || task.subtasks.length > 0 ? (
         <SectionSubtasks
           taskId={task.id}
-          subtasks={task.subtasks}
+          subtasks={subtasksForPanel}
           canEdit={canEditFields}
           canAdd={!isSubtask && (canEditFields || isCollaborator)}
           assignees={subtaskAssignees}
           parentDueDate={task.dueDate}
+          s3Ready={s3Ready}
         />
       ) : null}
 

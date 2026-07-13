@@ -2,12 +2,24 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useFormState, useFormStatus } from 'react-dom';
 
 import { Avatar, UserPicker, type UserPickerOption } from '@/components/ui';
 import { addSubtaskAction, toggleSubtaskAction, updateSubtaskAction } from '@/app/actions/tasks';
+import { registerAttachmentAction } from '@/app/actions/attachments';
 import { initialsOf, formatDue } from '@/lib/format';
+import { guessContentType } from '@/lib/mime';
+import { formatBytes, MAX_UPLOAD_BYTES } from '@/lib/s3';
 import { cn } from '@/lib/utils';
+
+/** A document attached to a subtask, surfaced on the parent panel for quick view. */
+export type SubtaskDocument = {
+  id: string;
+  fileName: string;
+  source: 'uploaded' | 'drive_link';
+  fileUrl: string;
+};
 
 type Subtask = {
   id: string;
@@ -15,6 +27,7 @@ type Subtask = {
   status: string;
   dueDate: Date | null;
   owner: { id: string; name: string; division: { avatarColour: string } };
+  documents: SubtaskDocument[];
 };
 
 type AssigneeOption = {
@@ -38,6 +51,8 @@ type SectionSubtasksProps = {
   canAdd?: boolean;
   assignees: AssigneeOption[];
   parentDueDate: Date | null;
+  /** Whether object storage is configured — gates the document upload option. */
+  s3Ready: boolean;
 };
 
 export function SectionSubtasks({
@@ -47,6 +62,7 @@ export function SectionSubtasks({
   canAdd = canEdit,
   assignees,
   parentDueDate,
+  s3Ready,
 }: SectionSubtasksProps) {
   const [showAdd, setShowAdd] = useState(false);
   const total = subtasks.length;
@@ -109,6 +125,7 @@ export function SectionSubtasks({
           taskId={taskId}
           assignees={assignees}
           parentDueDate={parentDueDate}
+          s3Ready={s3Ready}
           onDone={() => setShowAdd(false)}
         />
       ) : total === 0 ? (
@@ -195,15 +212,20 @@ function SubtaskRow({
       >
         <SubtaskCheckbox isDone={isDone} disabled={pending} onToggle={toggle} />
 
-        <Link
-          href={`/tasks/${subtask.id}`}
-          className={cn(
-            'flex-1 text-[13.5px] leading-snug min-w-0 truncate transition-colors',
-            isDone ? 'text-ink-3 line-through' : 'text-ink hover:text-primary',
-          )}
-        >
-          {subtask.name}
-        </Link>
+        <div className="flex-1 min-w-0">
+          <Link
+            href={`/tasks/${subtask.id}`}
+            className={cn(
+              'block text-[13.5px] leading-snug truncate transition-colors',
+              isDone ? 'text-ink-3 line-through' : 'text-ink hover:text-primary',
+            )}
+          >
+            {subtask.name}
+          </Link>
+          {subtask.documents.length > 0 ? (
+            <SubtaskDocuments documents={subtask.documents} />
+          ) : null}
+        </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
           {due.tone !== 'none' ? (
@@ -247,6 +269,38 @@ function SubtaskRow({
         />
       ) : null}
     </li>
+  );
+}
+
+/**
+ * Documents attached to a subtask, shown inline on the parent panel for a quick
+ * view. Each name links straight to the file (view route for uploads, the raw
+ * URL for a Drive link); full management stays on the subtask's own page.
+ */
+function SubtaskDocuments({ documents }: { documents: SubtaskDocument[] }) {
+  return (
+    <ul className="mt-0.5 flex flex-col gap-0.5">
+      {documents.map((doc) => (
+        <li key={doc.id}>
+          <a
+            href={doc.source === 'drive_link' ? doc.fileUrl : `/api/attachments/${doc.id}/view`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 max-w-full text-[11px] text-ink-3 hover:text-primary transition-colors"
+            title={`Open ${doc.fileName}`}
+          >
+            <i
+              className={cn(
+                'text-[12px] shrink-0',
+                doc.source === 'drive_link' ? 'ti ti-link' : 'ti ti-paperclip',
+              )}
+              aria-hidden="true"
+            />
+            <span className="truncate">{doc.fileName}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -334,31 +388,148 @@ function DeadlineFields({
   );
 }
 
+/**
+ * Combine an optional display name with the file's own extension — so a name
+ * like "Cabinet note" still opens as "Cabinet note.pdf". Falls back to the raw
+ * file name when no display name is given.
+ */
+function subtaskDocumentName(displayName: string, originalName: string): string {
+  const trimmed = displayName.trim();
+  if (!trimmed) return originalName;
+  const dot = originalName.lastIndexOf('.');
+  const ext = dot > 0 ? originalName.slice(dot) : '';
+  if (!ext || trimmed.toLowerCase().endsWith(ext.toLowerCase())) return trimmed;
+  return trimmed + ext;
+}
+
+/**
+ * Upload one document to a freshly created subtask, reusing the standard
+ * presign → PUT → register flow (scope 'task', parentId = the subtask id).
+ * Throws with a user-facing message on any step failing.
+ */
+async function uploadSubtaskDocument(
+  subtaskId: string,
+  file: File,
+  displayName: string,
+): Promise<void> {
+  const contentType = guessContentType(file.name, file.type);
+  const presignRes = await fetch('/api/attachments/upload-url', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      scope: 'task',
+      parentId: subtaskId,
+      filename: file.name,
+      contentType,
+      sizeBytes: file.size,
+    }),
+  });
+  if (!presignRes.ok) {
+    const body = await presignRes.json().catch(() => ({}));
+    throw new Error(body.error ?? 'Could not start the upload.');
+  }
+  const { key, url } = (await presignRes.json()) as { key: string; url: string };
+
+  const putRes = await fetch(url, {
+    method: 'PUT',
+    headers: { 'content-type': contentType },
+    body: file,
+  });
+  if (!putRes.ok) throw new Error(`Storage rejected the upload (${putRes.status}).`);
+
+  const fd = new FormData();
+  fd.set('scope', 'task');
+  fd.set('parentId', subtaskId);
+  fd.set('source', 'uploaded');
+  fd.set('key', key);
+  fd.set('fileName', subtaskDocumentName(displayName, file.name));
+  fd.set('mimeType', contentType);
+  fd.set('sizeBytes', String(file.size));
+  const registered = await registerAttachmentAction(undefined, fd);
+  if (!registered.ok) throw new Error(registered.error ?? 'Could not save the document.');
+}
+
 function AddSubtaskForm({
   taskId,
   assignees,
   parentDueDate,
+  s3Ready,
   onDone,
 }: {
   taskId: string;
   assignees: AssigneeOption[];
   parentDueDate: Date | null;
+  s3Ready: boolean;
   onDone: () => void;
 }) {
   const ref = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
   const [state, formAction] = useFormState(addSubtaskAction, { ok: false, epoch: 0 });
   const [assigneeId, setAssigneeId] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [docName, setDocName] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const onFileChosen = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const chosen = e.target.files?.[0] ?? null;
+    e.target.value = '';
+    if (chosen && chosen.size > MAX_UPLOAD_BYTES) {
+      setUploadError(`${chosen.name} is over ${formatBytes(MAX_UPLOAD_BYTES)}.`);
+      return;
+    }
+    setUploadError(null);
+    setFile(chosen);
+  };
 
   useEffect(() => {
-    if (state.ok) {
+    if (!state.ok) return;
+    let cancelled = false;
+    const reset = () => {
       ref.current?.reset();
       setAssigneeId('');
       setDate('');
       setTime('');
+      setFile(null);
+      setDocName('');
+      setUploadError(null);
+    };
+    // A document was queued — attach it to the new subtask, then refresh so it
+    // shows on the panel. The subtask itself was already created and the parent
+    // revalidated server-side, so on upload failure we still close (re-submitting
+    // would duplicate the subtask) and surface the error.
+    if (file && state.subtaskId) {
+      setUploading(true);
+      uploadSubtaskDocument(state.subtaskId, file, docName)
+        .then(() => {
+          if (cancelled) return;
+          setUploading(false);
+          reset();
+          router.refresh();
+          onDone();
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setUploading(false);
+          reset();
+          router.refresh();
+          onDone();
+          alert(
+            err instanceof Error
+              ? `Subtask added, but the document did not upload: ${err.message}`
+              : 'Subtask added, but the document did not upload.',
+          );
+        });
+    } else {
+      reset();
       onDone();
     }
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, state.epoch]);
 
@@ -395,36 +566,97 @@ function AddSubtaskForm({
         maxDate={parentDueMaxDate(parentDueDate)}
       />
 
+      {/* Optional document — uploaded to the subtask and shown on this panel. */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[10px] font-medium text-ink-3">
+          Document <span className="font-normal text-ink-4">· optional</span>
+        </span>
+        {file ? (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-bg">
+              <i className="ti ti-paperclip text-[13px] text-ink-3 shrink-0" aria-hidden="true" />
+              <span className="flex-1 min-w-0 truncate text-[12px] text-ink">{file.name}</span>
+              <span className="text-[10px] text-ink-4 shrink-0">{formatBytes(file.size)}</span>
+              <button
+                type="button"
+                onClick={() => setFile(null)}
+                className="shrink-0 text-ink-3 hover:text-urgent transition-colors"
+                aria-label="Remove document"
+              >
+                <i className="ti ti-x text-[13px]" aria-hidden="true" />
+              </button>
+            </div>
+            <input
+              value={docName}
+              onChange={(e) => setDocName(e.target.value)}
+              maxLength={196}
+              placeholder="Display name · optional"
+              className={fieldCn}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!s3Ready}
+            title={
+              s3Ready
+                ? undefined
+                : 'Storage is not configured on this server. Add the document from the subtask page instead.'
+            }
+            className={cn(
+              'inline-flex items-center gap-1.5 self-start px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-colors',
+              s3Ready
+                ? 'border-line bg-panel text-ink-2 hover:border-ink-4 hover:text-ink'
+                : 'border-line bg-bg text-ink-4 cursor-not-allowed',
+            )}
+          >
+            <i className="ti ti-cloud-upload text-[14px]" aria-hidden="true" />
+            Attach document
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          onChange={onFileChosen}
+          className="sr-only"
+          aria-hidden="true"
+        />
+      </div>
+
       {state.fieldErrors?.name ? (
         <p className="text-[11px] text-urgent">{state.fieldErrors.name}</p>
       ) : null}
       {state.fieldErrors?.dueDate ? (
         <p className="text-[11px] text-urgent">{state.fieldErrors.dueDate}</p>
       ) : null}
+      {uploadError ? <p className="text-[11px] text-urgent">{uploadError}</p> : null}
 
       <div className="flex gap-2 justify-end pt-0.5">
         <button
           type="button"
           onClick={onDone}
-          className="px-3 py-1.5 rounded-md border border-line text-[12px] font-medium text-ink-2 hover:bg-line-2 transition-colors"
+          disabled={uploading}
+          className="px-3 py-1.5 rounded-md border border-line text-[12px] font-medium text-ink-2 hover:bg-line-2 disabled:opacity-60 transition-colors"
         >
           Cancel
         </button>
-        <AddButton />
+        <AddButton uploading={uploading} />
       </div>
     </form>
   );
 }
 
-function AddButton() {
+function AddButton({ uploading }: { uploading: boolean }) {
   const { pending } = useFormStatus();
+  const busy = pending || uploading;
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={busy}
       className="px-3 py-1.5 rounded-md bg-ink text-onink text-[12px] font-medium hover:bg-ink-2 disabled:opacity-60 transition-colors"
     >
-      {pending ? 'Adding…' : 'Add'}
+      {uploading ? 'Uploading…' : pending ? 'Adding…' : 'Add'}
     </button>
   );
 }

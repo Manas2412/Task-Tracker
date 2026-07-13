@@ -23,7 +23,12 @@ import {
   resolveDivisionOwner,
 } from '@/lib/rbac';
 import { buildVisibilityClauses, getPmuParentDivisionHeadId } from '@/lib/visibility';
-import { buildTaskParticipantWhere, isTaskCollaborator, isTaskParticipant } from '@/lib/task-participants';
+import {
+  buildTaskParticipantWhere,
+  isSubtaskAssigneeAllowed,
+  isTaskCollaborator,
+  isTaskParticipant,
+} from '@/lib/task-participants';
 import { nextSubtaskRefNumber, nextTaskRefNumber } from '@/lib/task-ref';
 
 /**
@@ -51,6 +56,12 @@ type ActionState = {
   fieldErrors?: Record<string, string>;
   /** Counter so identical successive successes are observable in useEffect. */
   epoch?: number;
+  /**
+   * Id of the row a create action just produced — currently the new subtask
+   * from addSubtaskAction, so the client can attach a document to it before
+   * refreshing. Absent on every other action.
+   */
+  subtaskId?: string;
 };
 
 function bump(prev: ActionState | undefined): number {
@@ -1095,11 +1106,14 @@ export async function addSubtaskAction(
     if (!assignee || !assignee.isActive) {
       return fail('Assignee not found or inactive.', epoch);
     }
-    if (!(await isTaskParticipant(assigneeId, parent))) {
-      return fail('Subtask assignee must be from the task division.', epoch);
+    // Subtask assignees may come from the task's division OR a division
+    // cross-linked for subtasks (e.g. Khelo India / Khelo India Mission ↔ NSDF).
+    if (!(await isSubtaskAssigneeAllowed(assigneeId, parent))) {
+      return fail('Subtask assignee is not eligible for this task.', epoch);
     }
   }
 
+  let newSubtaskId = '';
   try {
     const subtask = await prisma.$transaction(async (tx) => {
       // Subtasks are numbered relative to their parent: <parent ref>-NN,
@@ -1121,6 +1135,7 @@ export async function addSubtaskAction(
         },
       });
     });
+    newSubtaskId = subtask.id;
     await prisma.taskActivity.create({
       data: {
         taskId: parent.id,
@@ -1153,7 +1168,8 @@ export async function addSubtaskAction(
   }
 
   revalidateTask(parent.id);
-  return ok(epoch);
+  // Return the new subtask id so the client can attach a document to it.
+  return { ok: true, epoch, subtaskId: newSubtaskId };
 }
 
 const toggleSubtaskSchema = z.object({ subtaskId: z.string().uuid() });
@@ -1293,8 +1309,8 @@ export async function updateSubtaskAction(
   } = {};
 
   if (parsed.data.assigneeId && parsed.data.assigneeId !== subtask.ownerId) {
-    if (!(await isTaskParticipant(parsed.data.assigneeId, parent))) {
-      return fail('Subtask assignee must be from the task division.', epoch);
+    if (!(await isSubtaskAssigneeAllowed(parsed.data.assigneeId, parent))) {
+      return fail('Subtask assignee is not eligible for this task.', epoch);
     }
     updates.ownerId = parsed.data.assigneeId;
     activityChanges.push('reassigned');
