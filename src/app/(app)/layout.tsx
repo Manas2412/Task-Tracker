@@ -7,6 +7,7 @@ import { getOfficeOfJsDivisionId } from '@/lib/engagements';
 import { initialsOf } from '@/lib/format';
 import { buildNotificationTaskContext } from '@/lib/notification-context';
 import { canAccessDocumentCentre as canAccessDocumentCentreShared } from '@/lib/document-centre-shared';
+import { canAccessTimelineFiles } from '@/lib/timeline-files-access';
 import { getAllocatableDivisionIds, getHeadedDivisionIds } from '@/lib/rbac';
 import { isS3Configured } from '@/lib/s3';
 
@@ -198,6 +199,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     isSuperAdmin: me.isSuperAdmin,
     username: me.username,
   });
+  // Timeline Files are hidden from barred slots (PMU Consultant) — drop the nav
+  // link so it does not lead to an empty list. Enforcement is server-side in
+  // buildTfVisibilityClause; this is the matching UI gate.
+  const canAccessTf = canAccessTimelineFiles(me.hierarchySlot);
 
   return (
     <AppShell
@@ -211,6 +216,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         isJs,
         showTourReport,
         canAccessDocumentCentre,
+        canAccessTimelineFiles: canAccessTf,
         canSwitchRole,
       }}
       notifications={{ unreadCount, recent }}

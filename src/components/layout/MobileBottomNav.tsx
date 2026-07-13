@@ -11,6 +11,7 @@ type MobileBottomNavProps = {
   isOsd: boolean;
   isJs: boolean;
   canAccessDocumentCentre: boolean;
+  canAccessTimelineFiles: boolean;
   unreadCount: number;
 };
 
@@ -39,9 +40,15 @@ export function MobileBottomNav({
   isOsd,
   isJs,
   canAccessDocumentCentre,
+  canAccessTimelineFiles,
   unreadCount,
 }: MobileBottomNavProps) {
   const pathname = usePathname();
+
+  // Hide the Files tab for barred slots (PMU Consultant); the row shrinks by one.
+  const primaryTabs = canAccessTimelineFiles
+    ? PRIMARY_TABS
+    : PRIMARY_TABS.filter((tab) => tab.href !== '/timeline-files');
   const [moreOpen, setMoreOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -76,8 +83,11 @@ export function MobileBottomNav({
       aria-label="Mobile navigation"
       className="fixed bottom-0 inset-x-0 z-30 md:hidden bg-panel border-t border-line safe-bottom"
     >
-      <div className="grid grid-cols-5 h-14">
-        {PRIMARY_TABS.map((tab) => {
+      <div
+        className="grid h-14"
+        style={{ gridTemplateColumns: `repeat(${primaryTabs.length + 1}, minmax(0, 1fr))` }}
+      >
+        {primaryTabs.map((tab) => {
           const active = isActive(pathname, tab.href);
           const showBadge = tab.href === '/notifications' && unreadCount > 0;
           return (

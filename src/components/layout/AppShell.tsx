@@ -24,6 +24,8 @@ type AppShellProps = {
     showTourReport: boolean;
     /** Super Admins + the OSD desks — gates the Document Centre */
     canAccessDocumentCentre: boolean;
+    /** False for barred slots (PMU Consultant) — gates the Timeline Files link */
+    canAccessTimelineFiles: boolean;
     /** Show RoleSwitcher when the caller has both Command Centre and Super Admin */
     canSwitchRole: boolean;
   };
@@ -78,6 +80,7 @@ export function AppShell({
         isJs={user.isJs}
         showTourReport={user.showTourReport}
         canAccessDocumentCentre={user.canAccessDocumentCentre}
+        canAccessTimelineFiles={user.canAccessTimelineFiles}
       />
 
       <div className="flex-1 grid md:grid-cols-[64px_1fr] lg:grid-cols-[240px_1fr]">
@@ -93,6 +96,7 @@ export function AppShell({
               isJs={user.isJs}
               showTourReport={user.showTourReport}
               canAccessDocumentCentre={user.canAccessDocumentCentre}
+              canAccessTimelineFiles={user.canAccessTimelineFiles}
             />
           </div>
         </aside>
@@ -113,6 +117,7 @@ export function AppShell({
         isOsd={user.isOsd}
         isJs={user.isJs}
         canAccessDocumentCentre={user.canAccessDocumentCentre}
+        canAccessTimelineFiles={user.canAccessTimelineFiles}
         unreadCount={notifications.unreadCount}
       />
 

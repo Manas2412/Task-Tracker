@@ -2,6 +2,7 @@ import type { Prisma, TimelineFile } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
 import { startOfDayIST, endOfDayIST } from '@/lib/date';
+import { canAccessTimelineFiles } from '@/lib/timeline-files-access';
 
 /**
  * Server-side scoper + ref-number generator for Timeline Files.
@@ -62,6 +63,13 @@ type CallerSummary = {
 export async function buildTfVisibilityClause(
   me: CallerSummary,
 ): Promise<Prisma.TimelineFileWhereInput> {
+  // Slots barred from the module (e.g. PMU Consultant) see no Timeline File at
+  // all — a match-nothing clause, checked before any role grant so it cannot be
+  // widened by a headship or marked-to division. This single gate covers every
+  // read path (list, detail, counts, stats, calendar, search, attachments).
+  if (!canAccessTimelineFiles(me.hierarchySlot)) {
+    return { id: { in: [] } };
+  }
   if (
     me.isSuperAdmin ||
     me.hierarchySlot === 'osd' ||

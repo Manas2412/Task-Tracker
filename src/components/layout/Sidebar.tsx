@@ -52,6 +52,8 @@ type SidebarProps = {
   showTourReport?: boolean;
   /** Super Admins + the OSD desks — gates the Document Centre link */
   canAccessDocumentCentre?: boolean;
+  /** False for barred slots (PMU Consultant) — hides the Timeline files link */
+  canAccessTimelineFiles?: boolean;
   /** mobile drawer mode renders labels regardless of breakpoint */
   drawerMode?: boolean;
   onNavigate?: () => void;
@@ -92,10 +94,16 @@ export function Sidebar({
   isJs,
   showTourReport = false,
   canAccessDocumentCentre = false,
+  canAccessTimelineFiles = true,
   drawerMode = false,
   onNavigate,
 }: SidebarProps) {
   const pathname = usePathname();
+
+  // Hide the Timeline files link for barred slots (PMU Consultant).
+  const primaryItems = canAccessTimelineFiles
+    ? PRIMARY_ITEMS
+    : PRIMARY_ITEMS.filter((item) => item.href !== '/timeline-files');
 
   return (
     <nav
@@ -122,7 +130,7 @@ export function Sidebar({
           onClick={onNavigate}
         />
       ) : null}
-      {PRIMARY_ITEMS.map((item) => (
+      {primaryItems.map((item) => (
         <NavItem
           key={item.href}
           item={item}

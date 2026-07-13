@@ -20,6 +20,7 @@ import {
 import { ACTOR_SUMMARY_SELECT, USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { buildVisibilityClauses } from '@/lib/visibility';
 import { buildTaskParticipantWhere } from '@/lib/task-participants';
+import { canAccessTimelineFiles } from '@/lib/timeline-files-access';
 import { CollaboratorsSection, type Candidate, type CollaboratorRow, type SubtaskScope } from './_components/CollaboratorsSection';
 import { JsLanePicker } from './_components/JsLanePicker';
 import { TagsSection, type TaskTagRow } from './_components/TagsSection';
@@ -624,7 +625,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
         />
       ) : null}
 
-      {task.linkedTimelineFile ? (
+      {task.linkedTimelineFile && canAccessTimelineFiles(me.hierarchySlot) ? (
         <DetailSection title="Linked timeline file">
           <TimelineFileCard
             variant="compact"
