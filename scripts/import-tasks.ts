@@ -22,7 +22,7 @@ const DIVISION_MAP: Record<string, string> = {
   'Media & IT': 'Media & IT',
   'Autonomous Bodies': 'Autonomous Bodies',
   'Office of JS': 'Office of JS',
-  'HMAYS': 'Office of JS',
+  'HMYAS': 'Office of JS',
 };
 
 const OWNER_MAP: Record<string, string> = {
@@ -34,7 +34,7 @@ const OWNER_MAP: Record<string, string> = {
   'Media & IT': 'ayushman',
   'Autonomous Bodies': 'zuber',
   'Office of JS': 'osd.myas',
-  'HMAYS': 'osd.myas',
+  'HMYAS': 'osd.myas',
 };
 
 interface ExportedTask {

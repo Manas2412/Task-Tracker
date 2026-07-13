@@ -181,9 +181,15 @@ export default async function ProfilePage() {
         <dl className="px-2 pb-2">
           <DetailRow icon="ti-id" label="Hierarchy slot">
             <span>{HIERARCHY_SLOT_LABEL[me.hierarchySlot]}</span>
-            <span className="ml-2 inline-flex text-[10px] font-medium text-primary bg-primary-soft border border-primary-line/40 px-1.5 py-0.5 rounded">
-              Level {HIERARCHY_SLOT_LEVEL[me.hierarchySlot]} of 7
-            </span>
+            {HIERARCHY_SLOT_LEVEL[me.hierarchySlot] != null ? (
+              <span className="ml-2 inline-flex text-[10px] font-medium text-primary bg-primary-soft border border-primary-line/40 px-1.5 py-0.5 rounded">
+                Level {HIERARCHY_SLOT_LEVEL[me.hierarchySlot]}
+              </span>
+            ) : (
+              <span className="ml-2 inline-flex text-[10px] font-medium text-ink-3 bg-line-2 border border-line px-1.5 py-0.5 rounded">
+                Support role
+              </span>
+            )}
           </DetailRow>
 
           {me.contractRole ? (

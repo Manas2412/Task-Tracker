@@ -30,6 +30,11 @@ enum HierarchySlot {
   under_secretary
   section_officer
   aso
+  // Added later; ranking is driven by HIERARCHY_SLOT_LEVEL in src/lib/labels.ts,
+  // not the enum's internal order. `hmyas` sits at the top of the ladder;
+  // `consultant` is an unranked support role.
+  consultant
+  hmyas
 }
 
 enum ContractRole {

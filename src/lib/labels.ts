@@ -5,6 +5,7 @@
  */
 
 export const HIERARCHY_SLOT_LABEL: Record<string, string> = {
+  hmyas: 'HMYAS',
   js: 'Joint Secretary',
   osd: 'Officer on Special Duty',
   director: 'Director',
@@ -12,9 +13,17 @@ export const HIERARCHY_SLOT_LABEL: Record<string, string> = {
   under_secretary: 'Under Secretary',
   section_officer: 'Section Officer',
   aso: 'Assistant Section Officer',
+  consultant: 'Consultant',
 };
 
+/**
+ * Rank of each slot (lower = higher up). `hmyas` is the apex at level 0;
+ * the officer ladder is 1–7. `consultant` is deliberately absent — it is an
+ * unranked support role, so consumers render it without a level badge
+ * (guard with `!= null`, since the apex is a falsy 0).
+ */
 export const HIERARCHY_SLOT_LEVEL: Record<string, number> = {
+  hmyas: 0,
   js: 1,
   osd: 2,
   director: 3,

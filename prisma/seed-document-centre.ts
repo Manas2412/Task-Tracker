@@ -1,7 +1,7 @@
 /**
  * Idempotent provisioning for the Document Centre org data:
- *   - the HMAYS division
- *   - the osd.ss and osd.dgsai desk accounts (HMAYS members)
+ *   - the HMYAS division
+ *   - the osd.ss and osd.dgsai desk accounts (HMYAS members)
  *
  * Safe to run against any environment, repeatedly — it upserts and never wipes
  * (unlike the main destructive `seed.ts`). Run once after applying the
@@ -11,12 +11,15 @@
  *
  * Both accounts are created with forcePasswordChange=true, so the temp
  * password must be changed on first login. They are deliberately NOT Super
- * Admins and NOT the 'osd' hierarchy slot: as ordinary HMAYS-division heads
- * the existing visibility rules isolate them to HMAYS data across Tasks,
+ * Admins and NOT the 'osd' hierarchy slot: as ordinary HMYAS-division heads
+ * the existing visibility rules isolate them to HMYAS data across Tasks,
  * Timeline Files, Calendar, Priority Board, and Search — exactly the required
- * "HMAYS users only see HMAYS data" behaviour, with no change to the
+ * "HMYAS users only see HMYAS data" behaviour, with no change to the
  * visibility engine. Their Document Centre access comes from the username
  * allowlist (src/lib/document-centre-shared.ts), independent of division.
+ *
+ * The division was historically spelled "HMAYS"; this script renames any such
+ * legacy row to "HMYAS" in place so the spelling is consistent platform-wide.
  */
 import { PrismaClient } from '@prisma/client';
 
@@ -48,23 +51,31 @@ async function main() {
     );
   }
 
-  // 1) HMAYS division (idempotent by name). Do not clobber an existing row
-  //    (e.g. one created by seed-pdf-tasks.ts).
-  let hmays = await prisma.division.findFirst({ where: { name: 'HMAYS' } });
-  if (!hmays) {
+  // 1) HMYAS division (idempotent). Handles the legacy 'HMAYS' spelling by
+  //    renaming it in place; never clobbers an existing row.
+  let hmyas = await prisma.division.findFirst({
+    where: { name: { in: ['HMYAS', 'HMAYS'] } },
+  });
+  if (hmyas && hmyas.name !== 'HMYAS') {
+    hmyas = await prisma.division.update({
+      where: { id: hmyas.id },
+      data: { name: 'HMYAS', abbreviation: 'HMYAS' },
+    });
+    console.log(`Renamed legacy HMAYS division to HMYAS (${hmyas.id}).`);
+  } else if (!hmyas) {
     const maxOrder = await prisma.division.aggregate({ _max: { displayOrder: true } });
-    hmays = await prisma.division.create({
+    hmyas = await prisma.division.create({
       data: {
-        name: 'HMAYS',
+        name: 'HMYAS',
         kind: 'division',
         avatarColour: '#854d0e',
-        abbreviation: 'HMAYS',
+        abbreviation: 'HMYAS',
         displayOrder: (maxOrder._max.displayOrder ?? 0) + 1,
       },
     });
-    console.log(`Created HMAYS division (${hmays.id}).`);
+    console.log(`Created HMYAS division (${hmyas.id}).`);
   } else {
-    console.log(`HMAYS division already exists (${hmays.id}).`);
+    console.log(`HMYAS division already exists (${hmyas.id}).`);
   }
 
   // 2) The two desk accounts (idempotent by username). Passwords are only set
@@ -76,9 +87,9 @@ async function main() {
     if (existing) {
       await prisma.user.update({
         where: { username: acct.username },
-        data: { divisionId: hmays.id, isActive: true },
+        data: { divisionId: hmyas.id, isActive: true },
       });
-      console.log(`Ensured ${acct.username} is an active HMAYS member.`);
+      console.log(`Ensured ${acct.username} is an active HMYAS member.`);
       createdUserIds.push(existing.id);
     } else {
       const user = await prisma.user.create({
@@ -88,7 +99,7 @@ async function main() {
           passwordHash,
           designation: acct.designation,
           hierarchySlot: 'director',
-          divisionId: hmays.id,
+          divisionId: hmyas.id,
           isActive: true,
           isSuperAdmin: false,
           forcePasswordChange: true,
@@ -99,14 +110,14 @@ async function main() {
     }
   }
 
-  // 3) Make osd.ss the HMAYS head if the division has none yet (so the desk can
-  //    manage HMAYS tasks/records). Never overrides an existing head.
-  if (!hmays.headUserId && createdUserIds[0]) {
+  // 3) Make osd.ss the HMYAS head if the division has none yet (so the desk can
+  //    manage HMYAS tasks/records). Never overrides an existing head.
+  if (!hmyas.headUserId && createdUserIds[0]) {
     await prisma.division.update({
-      where: { id: hmays.id },
+      where: { id: hmyas.id },
       data: { headUserId: createdUserIds[0] },
     });
-    console.log('Set osd.ss as the HMAYS division head.');
+    console.log('Set osd.ss as the HMYAS division head.');
   }
 
   console.log('Document Centre org provisioning complete.');

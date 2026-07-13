@@ -430,7 +430,9 @@ function OfficerCard({
         </span>
         <span className="text-[10px] text-ink-3 leading-tight truncate max-w-[140px]">
           {slotLabel}
-          {HIERARCHY_SLOT_LEVEL[officer.hierarchySlot]
+          {/* != null so the apex slot (hmyas, level 0) still shows a badge,
+              while unranked slots (consultant) show none. */}
+          {HIERARCHY_SLOT_LEVEL[officer.hierarchySlot] != null
             ? ` · L${HIERARCHY_SLOT_LEVEL[officer.hierarchySlot]}`
             : ''}
         </span>

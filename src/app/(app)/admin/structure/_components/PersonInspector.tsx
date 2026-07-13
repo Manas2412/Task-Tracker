@@ -142,11 +142,15 @@ export function PersonInspector({
         <dl className="px-4 py-3 flex flex-col gap-2.5">
           <Row label="Hierarchy slot">
             <span>{HIERARCHY_SLOT_LABEL[user.hierarchySlot]}</span>
-            {slotLevel ? (
+            {slotLevel != null ? (
               <span className="ml-2 inline-flex text-[10px] font-medium text-primary bg-primary-soft border border-primary-line/40 px-1.5 py-0.5 rounded">
-                Level {slotLevel} of 7
+                Level {slotLevel}
               </span>
-            ) : null}
+            ) : (
+              <span className="ml-2 inline-flex text-[10px] font-medium text-ink-3 bg-line-2 border border-line px-1.5 py-0.5 rounded">
+                Support role
+              </span>
+            )}
           </Row>
 
           <Row label="Division">

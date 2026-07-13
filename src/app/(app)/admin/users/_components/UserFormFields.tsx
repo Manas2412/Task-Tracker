@@ -56,6 +56,7 @@ type UserFormFieldsProps = {
 };
 
 const SLOTS: { value: string; label: string }[] = [
+  { value: 'hmyas', label: HIERARCHY_SLOT_LABEL.hmyas },
   { value: 'js', label: HIERARCHY_SLOT_LABEL.js },
   { value: 'osd', label: HIERARCHY_SLOT_LABEL.osd },
   { value: 'director', label: HIERARCHY_SLOT_LABEL.director },
@@ -63,6 +64,7 @@ const SLOTS: { value: string; label: string }[] = [
   { value: 'under_secretary', label: HIERARCHY_SLOT_LABEL.under_secretary },
   { value: 'section_officer', label: HIERARCHY_SLOT_LABEL.section_officer },
   { value: 'aso', label: HIERARCHY_SLOT_LABEL.aso },
+  { value: 'consultant', label: HIERARCHY_SLOT_LABEL.consultant },
 ];
 
 const CONTRACT_OPTIONS = [

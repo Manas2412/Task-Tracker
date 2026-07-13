@@ -2,7 +2,7 @@
  * MYAS Task Tracker — Seed tasks from the PDF task tracker
  *
  * 1. Cleans all existing tasks, timeline files, and related data
- * 2. Creates new divisions (NSDF, SGM, Media & IT, HMAYS, KIM sub-division)
+ * 2. Creates new divisions (NSDF, SGM, Media & IT, HMYAS, KIM sub-division)
  * 3. Creates Director-level users for each new division
  * 4. Seeds all ~93 tasks from the PDF across correct divisions with proper owners
  *
@@ -178,7 +178,7 @@ async function main() {
   );
 
   const hmaysDiv = await findOrCreateDivision(
-    'HMAYS', 'division', '#854d0e', 6, osd.id,
+    'HMYAS', 'division', '#854d0e', 6, osd.id,
   );
 
   // -------------------------------------------------------------------------
@@ -205,7 +205,7 @@ async function main() {
   );
 
   const uDirHmays = await findOrCreateUser(
-    'Vikram Singh', 'vikram.singh', 'Director, HMAYS',
+    'Vikram Singh', 'vikram.singh', 'Director, HMYAS',
     'director', hmaysDiv.id, osd.id, passwordHash,
     { supervisorId: osd.id },
   );
@@ -405,9 +405,9 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // HMAYS tasks (3) — owned by Director HMAYS
+  // HMYAS tasks (3) — owned by Director HMYAS
   // -------------------------------------------------------------------------
-  console.log('Seeding HMAYS tasks…');
+  console.log('Seeding HMYAS tasks…');
 
   const hmaysTasks = [
     'Buddh International Circuit',
@@ -440,7 +440,7 @@ async function main() {
   console.log('  priya.sharma  — Director, NSDF');
   console.log('  amit.verma    — Director, SGM');
   console.log('  neha.gupta    — Director, Media & IT');
-  console.log('  vikram.singh  — Director, HMAYS');
+  console.log('  vikram.singh  — Director, HMYAS');
   console.log('  sanjay.mehra  — Deputy Secretary, Office of JS');
   console.log('');
   console.log('Existing users from mock seed (password: Test1234!):');

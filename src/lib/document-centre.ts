@@ -17,7 +17,7 @@ import {
  * Access model: the executive allowlist (Super Admin + the three OSD desks)
  * all see EVERY record — the Document Centre is a shared confidential
  * workspace, not a division-scoped module. It is therefore deliberately
- * outside buildVisibilityClausesFrom; HMAYS division-isolation does not apply
+ * outside buildVisibilityClausesFrom; HMYAS division-isolation does not apply
  * here (it only constrains the division-scoped modules).
  */
 

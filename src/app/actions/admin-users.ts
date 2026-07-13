@@ -21,6 +21,7 @@ import { prisma } from '@/lib/db';
 // ============================================================
 
 const SLOTS = [
+  'hmyas',
   'js',
   'osd',
   'director',
@@ -28,6 +29,7 @@ const SLOTS = [
   'under_secretary',
   'section_officer',
   'aso',
+  'consultant',
 ] as const;
 
 const CONTRACT_ROLES = ['po', 'apo', 'yp'] as const;
