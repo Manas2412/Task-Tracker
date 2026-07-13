@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
 import { getOfficeOfJsDivisionId } from '@/lib/engagements';
+import { getSubtaskLinkedDivisionIds } from '@/lib/rbac';
 import { getPmuParentDivisionHeadId } from '@/lib/visibility';
 
 /**
@@ -71,6 +72,33 @@ export async function isTaskParticipant(
   task: ParticipantTask,
 ): Promise<boolean> {
   const where = await buildTaskParticipantWhere(task);
+  const count = await prisma.user.count({ where: { AND: [{ id: userId }, where] } });
+  return count > 0;
+}
+
+/**
+ * Who may be a SUBTASK assignee — the task's participants PLUS members of any
+ * division cross-linked for subtask collaboration (e.g. Khelo India / Khelo
+ * India Mission ↔ NSDF, both directions; see CROSS_DIVISION_SUBTASK_LINKS in
+ * src/lib/rbac and PERMISSIONS §5.17). This deliberately widens ONLY the subtask
+ * assignee picker and its guard — collaborators and @mentions keep the stricter
+ * base participant rule, so the cross-division reach cannot leak into them.
+ */
+export async function buildSubtaskAssigneeWhere(
+  task: ParticipantTask,
+): Promise<Prisma.UserWhereInput> {
+  const base = await buildTaskParticipantWhere(task);
+  const linkedDivisionIds = await getSubtaskLinkedDivisionIds(task.divisionId);
+  if (linkedDivisionIds.length === 0) return base;
+  return { OR: [base, { isActive: true, divisionId: { in: linkedDivisionIds } }] };
+}
+
+/** Whether a user may be assigned a subtask on this task (server-side guard). */
+export async function isSubtaskAssigneeAllowed(
+  userId: string,
+  task: ParticipantTask,
+): Promise<boolean> {
+  const where = await buildSubtaskAssigneeWhere(task);
   const count = await prisma.user.count({ where: { AND: [{ id: userId }, where] } });
   return count > 0;
 }
