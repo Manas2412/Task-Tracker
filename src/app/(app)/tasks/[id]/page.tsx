@@ -19,7 +19,7 @@ import {
 } from '@/lib/rbac';
 import { ACTOR_SUMMARY_SELECT, USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { buildVisibilityClauses } from '@/lib/visibility';
-import { buildSubtaskAssigneeWhere, buildTaskParticipantWhere } from '@/lib/task-participants';
+import { buildTaskParticipantWhere } from '@/lib/task-participants';
 import { CollaboratorsSection, type Candidate, type CollaboratorRow, type SubtaskScope } from './_components/CollaboratorsSection';
 import { JsLanePicker } from './_components/JsLanePicker';
 import { TagsSection, type TaskTagRow } from './_components/TagsSection';
@@ -213,10 +213,11 @@ export default async function TaskDetailPage({ params }: PageProps) {
       me.isSuperAdmin ||
       me.hierarchySlot === 'osd');
 
-  // Every task user-picker (collaborators, subtask assignees, @mentions)
-  // draws from the same set: the task division's members (or PMU team), its
-  // head, and the oversight roles (OSD + Super Admin) — Office of JS being
-  // the any-user exception. Centralised in buildTaskParticipantWhere.
+  // Every task user-picker (collaborators, subtask assignees, @mentions in the
+  // discussion) draws from the same set: the task division's members (or PMU
+  // team), its head, the oversight roles (OSD + Super Admin), and any
+  // cross-linked division (Khelo India / Khelo India Mission ↔ NSDF) — Office of
+  // JS being the any-user exception. Centralised in buildTaskParticipantWhere.
   const participantWhere = await buildTaskParticipantWhere(task);
 
   // Candidate collaborators: task participants, excluding the current owner.
@@ -284,13 +285,12 @@ export default async function TaskDetailPage({ params }: PageProps) {
     name: s.name,
   }));
 
-  // Subtask assignee candidates: task participants PLUS members of any division
-  // cross-linked for subtasks (Khelo India / Khelo India Mission ↔ NSDF). Wider
-  // than the collaborator/@mention set, which stays on `participantWhere`.
-  // Collaborators can create subtasks too, so they need the picker options.
+  // Subtask assignee candidates: the same participant set as collaborators and
+  // @mentions (now including any cross-linked division). Collaborators can
+  // create subtasks too, so they need the picker options.
   const subtaskAssigneeRows = canEditFields || isCollaborator
     ? await prisma.user.findMany({
-        where: await buildSubtaskAssigneeWhere(task),
+        where: participantWhere,
         select: {
           id: true,
           name: true,

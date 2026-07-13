@@ -2,7 +2,7 @@ import { prisma } from '@/lib/db';
 
 import {
   canTransferTaskToOrLinked,
-  linkedSubtaskAbbreviations,
+  linkedParticipantAbbreviations,
   type RbacActor,
   type RbacTarget,
 } from './rules';
@@ -33,39 +33,40 @@ const CROSS_DIVISION_ALLOCATION_LINKS: Record<string, string[]> = {
 };
 
 /**
- * Configured cross-division SUBTASK links — symmetric, unordered pairs keyed by
- * ABBREVIATION. Members of either division in a pair may be assigned subtasks on
- * the other division's tasks (both directions). Open to ALL members, not just
- * heads, and grants subtask-assignee reach only — no head powers, no board
- * visibility (see `linkedSubtaskAbbreviations` in ./rules and PERMISSIONS §5.17).
+ * Configured cross-division PARTICIPANT links — symmetric, unordered pairs keyed
+ * by ABBREVIATION. Members of either division in a pair may take part in the
+ * other division's tasks (both directions): as subtask assignees, collaborators,
+ * and @mentions in the discussion. Open to ALL members, not just heads, and
+ * grants participant reach only — no head powers, no board visibility (see
+ * `linkedParticipantAbbreviations` in ./rules and PERMISSIONS §5.17).
  *
  * Product rule: Khelo India (KI) and Khelo India Mission (KIM) are each linked
- * with NSDF, so their members may break work down across the boundary in either
+ * with NSDF, so their members may collaborate across the boundary in either
  * direction. Add more pairs here. Resolution is fail-closed — an abbreviation
  * that matches no division simply drops that pair.
  */
-const CROSS_DIVISION_SUBTASK_LINKS: readonly (readonly [string, string])[] = [
+const CROSS_DIVISION_PARTICIPANT_LINKS: readonly (readonly [string, string])[] = [
   ['KI', 'NSDF'],
   ['KIM', 'NSDF'],
 ];
 
 /**
- * Division ids whose members may be assigned a subtask on a task belonging to
- * `taskDivisionId`, via `CROSS_DIVISION_SUBTASK_LINKS`. Resolves the task
+ * Division ids whose members may take part in a task belonging to
+ * `taskDivisionId`, via `CROSS_DIVISION_PARTICIPANT_LINKS`. Resolves the task
  * division's abbreviation to its symmetric link targets, then those target
  * abbreviations back to division ids. Returns [] when the division is unknown,
  * carries no linked abbreviation, or no division matches a target abbreviation.
  */
-export async function getSubtaskLinkedDivisionIds(taskDivisionId: string): Promise<string[]> {
+export async function getLinkedParticipantDivisionIds(taskDivisionId: string): Promise<string[]> {
   const division = await prisma.division.findUnique({
     where: { id: taskDivisionId },
     select: { abbreviation: true },
   });
   if (!division) return [];
 
-  const targetAbbrs = linkedSubtaskAbbreviations(
+  const targetAbbrs = linkedParticipantAbbreviations(
     division.abbreviation,
-    CROSS_DIVISION_SUBTASK_LINKS,
+    CROSS_DIVISION_PARTICIPANT_LINKS,
   );
   if (targetAbbrs.length === 0) return [];
 

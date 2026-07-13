@@ -25,7 +25,6 @@ import {
 import { buildVisibilityClauses, getPmuParentDivisionHeadId } from '@/lib/visibility';
 import {
   buildTaskParticipantWhere,
-  isSubtaskAssigneeAllowed,
   isTaskCollaborator,
   isTaskParticipant,
 } from '@/lib/task-participants';
@@ -1106,9 +1105,10 @@ export async function addSubtaskAction(
     if (!assignee || !assignee.isActive) {
       return fail('Assignee not found or inactive.', epoch);
     }
-    // Subtask assignees may come from the task's division OR a division
-    // cross-linked for subtasks (e.g. Khelo India / Khelo India Mission ↔ NSDF).
-    if (!(await isSubtaskAssigneeAllowed(assigneeId, parent))) {
+    // Subtask assignees come from the task's participants — its division, its
+    // head, oversight roles, plus any cross-linked division (e.g. Khelo India /
+    // Khelo India Mission ↔ NSDF), all folded into isTaskParticipant.
+    if (!(await isTaskParticipant(assigneeId, parent))) {
       return fail('Subtask assignee is not eligible for this task.', epoch);
     }
   }
@@ -1309,7 +1309,7 @@ export async function updateSubtaskAction(
   } = {};
 
   if (parsed.data.assigneeId && parsed.data.assigneeId !== subtask.ownerId) {
-    if (!(await isSubtaskAssigneeAllowed(parsed.data.assigneeId, parent))) {
+    if (!(await isTaskParticipant(parsed.data.assigneeId, parent))) {
       return fail('Subtask assignee is not eligible for this task.', epoch);
     }
     updates.ownerId = parsed.data.assigneeId;
@@ -1943,10 +1943,11 @@ export async function addCollaboratorAction(
   });
   if (!target || !target.isActive) return fail('User not found or disabled.', epoch);
 
-  // Collaborators are drawn from the task's division (plus its head and the
-  // oversight roles) — the same rule as the picker, enforced server-side.
+  // Collaborators are drawn from the task's participants (its division plus its
+  // head, the oversight roles, and any cross-linked division) — the same rule as
+  // the picker, enforced server-side.
   if (!(await isTaskParticipant(target.id, task))) {
-    return fail('Collaborators must be from the task division.', epoch);
+    return fail('Collaborator is not eligible for this task.', epoch);
   }
 
   // Co-owner cap: max 3 per task.
