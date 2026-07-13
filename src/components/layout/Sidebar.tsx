@@ -50,6 +50,8 @@ type SidebarProps = {
   isJs: boolean;
   /** Super Admins + the osd.myas account — gates the Tour report link */
   showTourReport?: boolean;
+  /** Super Admins + the OSD desks — gates the Document Centre link */
+  canAccessDocumentCentre?: boolean;
   /** mobile drawer mode renders labels regardless of breakpoint */
   drawerMode?: boolean;
   onNavigate?: () => void;
@@ -77,11 +79,19 @@ const TOUR_REPORT_ITEM: Item = {
   external: true,
 };
 
+const DOCUMENT_CENTRE_ITEM: Item = {
+  href: '/document-centre',
+  label: 'Document Centre',
+  icon: 'ti-files',
+  phase: 1,
+};
+
 export function Sidebar({
   isSuperAdmin,
   isOsd,
   isJs,
   showTourReport = false,
+  canAccessDocumentCentre = false,
   drawerMode = false,
   onNavigate,
 }: SidebarProps) {
@@ -121,6 +131,14 @@ export function Sidebar({
           onClick={onNavigate}
         />
       ))}
+      {canAccessDocumentCentre ? (
+        <NavItem
+          item={DOCUMENT_CENTRE_ITEM}
+          active={isActive(pathname, DOCUMENT_CENTRE_ITEM.href)}
+          drawerMode={drawerMode}
+          onClick={onNavigate}
+        />
+      ) : null}
       {showTourReport ? (
         <NavItem
           item={TOUR_REPORT_ITEM}

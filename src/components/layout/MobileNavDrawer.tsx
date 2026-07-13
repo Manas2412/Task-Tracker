@@ -12,6 +12,7 @@ type MobileNavDrawerProps = {
   isOsd: boolean;
   isJs: boolean;
   showTourReport: boolean;
+  canAccessDocumentCentre: boolean;
 };
 
 /**
@@ -26,6 +27,7 @@ export function MobileNavDrawer({
   isOsd,
   isJs,
   showTourReport,
+  canAccessDocumentCentre,
 }: MobileNavDrawerProps) {
   useEffect(() => {
     if (!open) return;
@@ -74,6 +76,7 @@ export function MobileNavDrawer({
           isOsd={isOsd}
           isJs={isJs}
           showTourReport={showTourReport}
+          canAccessDocumentCentre={canAccessDocumentCentre}
           drawerMode
           onNavigate={onClose}
         />

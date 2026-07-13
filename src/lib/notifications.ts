@@ -74,21 +74,63 @@ export function describeNotification(
     }
     case 'mention': {
       const by = typeof p.actorName === 'string' ? p.actorName.trim() : '';
-      // A mention lives on a task or a Timeline File; the payload carries
-      // whichever it is, so link and title follow suit.
+      // A mention lives on a task, a Timeline File, or a document record; the
+      // payload carries whichever it is, so link and title follow suit.
       const onTf = typeof p.timelineFileId === 'string';
-      const href = onTf ? `/timeline-files/${String(p.timelineFileId)}` : taskHref;
-      const label = onTf
-        ? typeof p.tfSubject === 'string'
-          ? p.tfSubject.trim()
+      const onDoc = typeof p.documentId === 'string';
+      const href = onDoc
+        ? `/document-centre/${String(p.documentId)}`
+        : onTf
+          ? `/timeline-files/${String(p.timelineFileId)}`
+          : taskHref;
+      const label = onDoc
+        ? typeof p.documentSubject === 'string'
+          ? p.documentSubject.trim()
           : ''
-        : title;
+        : onTf
+          ? typeof p.tfSubject === 'string'
+            ? p.tfSubject.trim()
+            : ''
+          : title;
       return {
         icon: 'ti-at',
         iconClass: 'text-primary',
         text: label
           ? `${by ? `${by} mentioned` : 'Mentioned'} you on "${label}"`
           : 'Mentioned you in a comment',
+        href,
+        accent: 'primary',
+      };
+    }
+    case 'document_record_created':
+    case 'document_discussion':
+    case 'document_review_requested':
+    case 'document_review_completed':
+    case 'document_awaiting_input':
+    case 'document_attachment_added':
+    case 'document_drive_link_added': {
+      const by = typeof p.actorName === 'string' ? p.actorName.trim() : '';
+      const subject =
+        typeof p.documentSubject === 'string' && p.documentSubject.trim()
+          ? p.documentSubject.trim()
+          : 'a record';
+      const what = subject === 'a record' ? 'a record' : `"${subject}"`;
+      const href = p.documentId ? `/document-centre/${String(p.documentId)}` : '/document-centre';
+      const who = by ? `${by} ` : '';
+      const DOC: Record<string, { icon: string; verb: string }> = {
+        document_record_created: { icon: 'ti-file-plus', verb: 'added the record' },
+        document_discussion: { icon: 'ti-messages', verb: 'commented on' },
+        document_review_requested: { icon: 'ti-eye-check', verb: 'requested review of' },
+        document_review_completed: { icon: 'ti-checks', verb: 'completed review of' },
+        document_awaiting_input: { icon: 'ti-clock', verb: 'flagged input awaited on' },
+        document_attachment_added: { icon: 'ti-paperclip', verb: 'attached a file to' },
+        document_drive_link_added: { icon: 'ti-link', verb: 'added a link to' },
+      };
+      const d = DOC[type];
+      return {
+        icon: d.icon,
+        iconClass: 'text-primary',
+        text: `${who}${d.verb} ${what}`,
         href,
         accent: 'primary',
       };

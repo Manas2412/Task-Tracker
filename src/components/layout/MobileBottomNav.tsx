@@ -10,6 +10,7 @@ type MobileBottomNavProps = {
   isSuperAdmin: boolean;
   isOsd: boolean;
   isJs: boolean;
+  canAccessDocumentCentre: boolean;
   unreadCount: number;
 };
 
@@ -33,7 +34,13 @@ const ADMIN_MORE_ITEMS = [
   { href: '/admin/users', label: 'Users', icon: 'ti-users', adminOnly: true },
 ] as const;
 
-export function MobileBottomNav({ isSuperAdmin, isOsd, isJs, unreadCount }: MobileBottomNavProps) {
+export function MobileBottomNav({
+  isSuperAdmin,
+  isOsd,
+  isJs,
+  canAccessDocumentCentre,
+  unreadCount,
+}: MobileBottomNavProps) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -60,9 +67,9 @@ export function MobileBottomNav({ isSuperAdmin, isOsd, isJs, unreadCount }: Mobi
     };
   }, [moreOpen]);
 
-  const isMoreActive = [...MORE_ITEMS, ...ADMIN_MORE_ITEMS].some(
-    item => isActive(pathname, item.href),
-  );
+  const isMoreActive =
+    [...MORE_ITEMS, ...ADMIN_MORE_ITEMS].some((item) => isActive(pathname, item.href)) ||
+    (canAccessDocumentCentre && isActive(pathname, '/document-centre'));
 
   return (
     <nav
@@ -123,6 +130,14 @@ export function MobileBottomNav({ isSuperAdmin, isOsd, isJs, unreadCount }: Mobi
                   active={isActive(pathname, item.href)}
                 />
               ))}
+              {canAccessDocumentCentre ? (
+                <MoreMenuItem
+                  href="/document-centre"
+                  label="Document Centre"
+                  icon="ti-files"
+                  active={isActive(pathname, '/document-centre')}
+                />
+              ) : null}
               {(isSuperAdmin || isOsd || isJs) ? (
                 <>
                   <div className="border-t border-line-2 mx-3" />

@@ -95,6 +95,20 @@ enum TimelineFileStatus {
   closed
 }
 
+// Document Centre — the executive records workspace (Super Admin + the OSD
+// desks). Urgency replaces task priority; status carries the open/completed
+// lifecycle behind the "Completed" filter.
+enum DocumentUrgency {
+  highly_urgent
+  urgent
+  normal
+}
+
+enum DocumentStatus {
+  open
+  completed
+}
+
 enum AttachmentOwnerType {
   task
   task_comment
@@ -102,6 +116,7 @@ enum AttachmentOwnerType {
   timeline_file_source
   timeline_file_action
   js_engagement
+  document_record
 }
 
 enum AttachmentSource {
@@ -134,6 +149,13 @@ enum NotificationType {
   task_pulled
   division_access_delegated
   division_access_delegation_revoked
+  document_record_created
+  document_discussion
+  document_review_requested
+  document_review_completed
+  document_awaiting_input
+  document_attachment_added
+  document_drive_link_added
 }
 
 enum AuditAction {
@@ -161,82 +183,86 @@ enum ReassignmentRequestStatus {
 // ============================================================
 
 model User {
-  id                    String         @id @default(uuid()) @db.Uuid
-  name                  String
-  username              String         @unique
-  email                 String?        @unique
-  phone                 String?        @map("phone")
-  workActivities        String?        @map("work_activities")
-  passwordHash          String         @map("password_hash")
-  designation           String
-  hierarchySlot         HierarchySlot  @map("hierarchy_slot")
-  contractRole          ContractRole?  @map("contract_role")
+  id             String        @id @default(uuid()) @db.Uuid
+  name           String
+  username       String        @unique
+  email          String?       @unique
+  phone          String?       @map("phone")
+  workActivities String?       @map("work_activities")
+  passwordHash   String        @map("password_hash")
+  designation    String
+  hierarchySlot  HierarchySlot @map("hierarchy_slot")
+  contractRole   ContractRole? @map("contract_role")
 
-  divisionId            String         @map("division_id") @db.Uuid
-  subDivisionId         String?        @map("sub_division_id") @db.Uuid
-  sectionId             String?        @map("section_id") @db.Uuid
+  divisionId    String  @map("division_id") @db.Uuid
+  subDivisionId String? @map("sub_division_id") @db.Uuid
+  sectionId     String? @map("section_id") @db.Uuid
 
-  isPmu                 Boolean        @default(false) @map("is_pmu")
-  pmuRole               PmuRole?       @map("pmu_role")
-  pmuId                 String?        @map("pmu_id") @db.Uuid
+  isPmu   Boolean  @default(false) @map("is_pmu")
+  pmuRole PmuRole? @map("pmu_role")
+  pmuId   String?  @map("pmu_id") @db.Uuid
 
-  supervisorId          String?        @map("supervisor_id") @db.Uuid
+  supervisorId String? @map("supervisor_id") @db.Uuid
 
-  isActive              Boolean        @default(true) @map("is_active")
-  isSuperAdmin          Boolean        @default(false) @map("is_super_admin")
-  forcePasswordChange   Boolean        @default(false) @map("force_password_change")
-  passwordChangedAt     DateTime?      @map("password_changed_at") @db.Timestamptz(6)
-  lastLogin             DateTime?      @map("last_login") @db.Timestamptz(6)
+  isActive            Boolean   @default(true) @map("is_active")
+  isSuperAdmin        Boolean   @default(false) @map("is_super_admin")
+  forcePasswordChange Boolean   @default(false) @map("force_password_change")
+  passwordChangedAt   DateTime? @map("password_changed_at") @db.Timestamptz(6)
+  lastLogin           DateTime? @map("last_login") @db.Timestamptz(6)
 
-  createdById           String?        @map("created_by") @db.Uuid
-  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdById String?  @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   // Relations
-  division              Division       @relation("UserDivision", fields: [divisionId], references: [id])
-  subDivision           Division?      @relation("UserSubDivision", fields: [subDivisionId], references: [id])
-  section               Division?      @relation("UserSection", fields: [sectionId], references: [id])
-  pmu                   Division?      @relation("UserPmu", fields: [pmuId], references: [id])
+  division    Division  @relation("UserDivision", fields: [divisionId], references: [id])
+  subDivision Division? @relation("UserSubDivision", fields: [subDivisionId], references: [id])
+  section     Division? @relation("UserSection", fields: [sectionId], references: [id])
+  pmu         Division? @relation("UserPmu", fields: [pmuId], references: [id])
 
-  supervisor            User?          @relation("UserSupervisor", fields: [supervisorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  subordinates          User[]         @relation("UserSupervisor")
+  supervisor   User?  @relation("UserSupervisor", fields: [supervisorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subordinates User[] @relation("UserSupervisor")
 
-  createdBy             User?          @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  createdUsers          User[]         @relation("UserCreatedBy")
+  createdBy    User?  @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdUsers User[] @relation("UserCreatedBy")
 
-  ownedTasks            Task[]         @relation("TaskOwner")
-  createdTasks          Task[]         @relation("TaskCreatedBy")
-  archivedTasks         Task[]         @relation("TaskArchivedBy")
-  taskCollaborators     TaskCollaborator[] @relation("TaskCollaboratorUser")
+  ownedTasks             Task[]             @relation("TaskOwner")
+  createdTasks           Task[]             @relation("TaskCreatedBy")
+  archivedTasks          Task[]             @relation("TaskArchivedBy")
+  taskCollaborators      TaskCollaborator[] @relation("TaskCollaboratorUser")
   addedTaskCollaborators TaskCollaborator[] @relation("TaskCollaboratorAddedBy")
-  taskComments          TaskComment[]
-  taskActivity          TaskActivity[]
+  taskComments           TaskComment[]
+  taskActivity           TaskActivity[]
 
-  uploadedAttachments   Attachment[]   @relation("AttachmentUploadedBy")
+  uploadedAttachments Attachment[] @relation("AttachmentUploadedBy")
 
-  createdTimelineFiles  TimelineFile[] @relation("TimelineFileCreatedBy")
-  archivedTimelineFiles TimelineFile[] @relation("TimelineFileArchivedBy")
+  createdTimelineFiles  TimelineFile[]         @relation("TimelineFileCreatedBy")
+  archivedTimelineFiles TimelineFile[]         @relation("TimelineFileArchivedBy")
   linkedTaskLinks       TimelineFileTaskLink[]
   timelineFileActivity  TimelineFileActivity[]
   timelineFileComments  TimelineFileComment[]
 
-  createdTags           Tag[]
-  notifications         Notification[]
+  createdTags   Tag[]
+  notifications Notification[]
 
   reassignmentRequestsBy       ReassignmentRequest[] @relation("ReassignmentRequestedBy")
   reassignmentRequestsApprover ReassignmentRequest[] @relation("ReassignmentApprover")
   reassignmentRequestsProposed ReassignmentRequest[] @relation("ReassignmentProposedOwner")
 
-  auditLog              AuditLog[]
+  auditLog AuditLog[]
 
-  createdDivisions      Division[]     @relation("DivisionCreatedBy")
-  headedDivisions       Division[]     @relation("DivisionHead")
+  createdDivisions Division[] @relation("DivisionCreatedBy")
+  headedDivisions  Division[] @relation("DivisionHead")
 
-  delegationsGiven      DivisionAccessDelegation[] @relation("DelegationBy")
-  delegationsReceived   DivisionAccessDelegation[] @relation("DelegationTo")
-  delegationsRevoked    DivisionAccessDelegation[] @relation("DelegationRevokedBy")
+  delegationsGiven    DivisionAccessDelegation[] @relation("DelegationBy")
+  delegationsReceived DivisionAccessDelegation[] @relation("DelegationTo")
+  delegationsRevoked  DivisionAccessDelegation[] @relation("DelegationRevokedBy")
 
-  createdEngagements    JsEngagement[]             @relation("EngagementCreatedBy")
-  engagementParts       JsEngagementParticipant[]  @relation("EngagementParticipant")
+  createdEngagements JsEngagement[]            @relation("EngagementCreatedBy")
+  engagementParts    JsEngagementParticipant[] @relation("EngagementParticipant")
+
+  createdDocumentRecords  DocumentRecord[]  @relation("DocumentRecordCreatedBy")
+  archivedDocumentRecords DocumentRecord[]  @relation("DocumentRecordArchivedBy")
+  documentComments        DocumentComment[]
 
   @@index([supervisorId])
   @@index([divisionId])
@@ -250,42 +276,42 @@ model User {
 // ============================================================
 
 model Division {
-  id                       String        @id @default(uuid()) @db.Uuid
-  name                     String
-  parentId                 String?       @map("parent_id") @db.Uuid
-  kind                     DivisionKind
-  hasPmu                   Boolean       @default(false) @map("has_pmu")
-  pmuParentDivisionId      String?       @map("pmu_parent_division_id") @db.Uuid
-  abbreviation             String        @default("")
-  taskSeq                  Int           @default(0) @map("task_seq")
-  avatarColour             String        @map("avatar_colour")
-  displayOrder             Int           @default(0) @map("display_order")
+  id                  String       @id @default(uuid()) @db.Uuid
+  name                String
+  parentId            String?      @map("parent_id") @db.Uuid
+  kind                DivisionKind
+  hasPmu              Boolean      @default(false) @map("has_pmu")
+  pmuParentDivisionId String?      @map("pmu_parent_division_id") @db.Uuid
+  abbreviation        String       @default("")
+  taskSeq             Int          @default(0) @map("task_seq")
+  avatarColour        String       @map("avatar_colour")
+  displayOrder        Int          @default(0) @map("display_order")
 
   // Division-based RBAC: the user who acts as this division's head.
   // Head powers extend to users holding an active DivisionAccessDelegation.
-  headUserId               String?       @map("head_user_id") @db.Uuid
+  headUserId String? @map("head_user_id") @db.Uuid
 
-  createdById              String?       @map("created_by") @db.Uuid
-  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdById String?  @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  parent                   Division?     @relation("DivisionParent", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  children                 Division[]    @relation("DivisionParent")
+  parent   Division?  @relation("DivisionParent", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children Division[] @relation("DivisionParent")
 
-  pmuParentDivision        Division?     @relation("DivisionPmuParent", fields: [pmuParentDivisionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  pmuChildren              Division[]    @relation("DivisionPmuParent")
+  pmuParentDivision Division?  @relation("DivisionPmuParent", fields: [pmuParentDivisionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pmuChildren       Division[] @relation("DivisionPmuParent")
 
-  createdBy                User?         @relation("DivisionCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  head                     User?         @relation("DivisionHead", fields: [headUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy User? @relation("DivisionCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  head      User? @relation("DivisionHead", fields: [headUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  usersInDivision          User[]        @relation("UserDivision")
-  usersInSubDivision       User[]        @relation("UserSubDivision")
-  usersInSection           User[]        @relation("UserSection")
-  usersInPmu               User[]        @relation("UserPmu")
-  tasks                    Task[]        @relation("TaskDivision")
-  tasksInSubDivision       Task[]        @relation("TaskSubDivision")
-  markedTimelineFiles      TimelineFileMarkedTo[]
-  accessDelegations        DivisionAccessDelegation[]
-  engagements              JsEngagement[] @relation("EngagementDivision")
+  usersInDivision     User[]                     @relation("UserDivision")
+  usersInSubDivision  User[]                     @relation("UserSubDivision")
+  usersInSection      User[]                     @relation("UserSection")
+  usersInPmu          User[]                     @relation("UserPmu")
+  tasks               Task[]                     @relation("TaskDivision")
+  tasksInSubDivision  Task[]                     @relation("TaskSubDivision")
+  markedTimelineFiles TimelineFileMarkedTo[]
+  accessDelegations   DivisionAccessDelegation[]
+  engagements         JsEngagement[]             @relation("EngagementDivision")
 
   @@index([parentId])
   @@index([kind])
@@ -329,46 +355,46 @@ model DivisionAccessDelegation {
 // ============================================================
 
 model Task {
-  id                       String          @id @default(uuid()) @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
   // Not globally unique: the TL-<3 digit>-<2 digit> form can recur across
   // years. The row UUID is the true key; this is just a lookup index.
-  refNumber                String?         @map("ref_number")
-  name                     String
-  description              String?
+  refNumber   String? @map("ref_number")
+  name        String
+  description String?
 
-  ownerId                  String          @map("owner_id") @db.Uuid
-  divisionId               String          @map("division_id") @db.Uuid
-  subDivisionId            String?         @map("sub_division_id") @db.Uuid
+  ownerId       String  @map("owner_id") @db.Uuid
+  divisionId    String  @map("division_id") @db.Uuid
+  subDivisionId String? @map("sub_division_id") @db.Uuid
 
-  status                   TaskStatus      @default(not_started)
-  priority                 TaskPriority    @default(low)
-  jsPriorityLane           JsPriorityLane? @map("js_priority_lane")
-  visibility               Visibility      @default(division)
+  status         TaskStatus      @default(not_started)
+  priority       TaskPriority    @default(low)
+  jsPriorityLane JsPriorityLane? @map("js_priority_lane")
+  visibility     Visibility      @default(division)
 
   // Set by a PMU team leader on a PMU task to share it with the whole PMU
   // team (every member except the PMU's home-division head). Read-time
   // membership — see buildVisibilityClausesFrom. Only meaningful when the
   // task's division is a PMU.
-  sharedWithPmuTeam        Boolean         @default(false) @map("shared_with_pmu_team")
+  sharedWithPmuTeam Boolean @default(false) @map("shared_with_pmu_team")
 
-  dueDate                  DateTime?       @map("due_date") @db.Timestamptz(6)
-  milestone                Boolean         @default(false)
-  recurrenceRule           RecurrenceRule? @map("recurrence_rule")
+  dueDate        DateTime?       @map("due_date") @db.Timestamptz(6)
+  milestone      Boolean         @default(false)
+  recurrenceRule RecurrenceRule? @map("recurrence_rule")
 
-  jsPrioritySortOrder      Int?            @map("js_priority_sort_order")
+  jsPrioritySortOrder Int? @map("js_priority_sort_order")
 
-  parentTaskId             String?         @map("parent_task_id") @db.Uuid
-  linkedTimelineFileId     String?         @map("linked_timeline_file_id") @db.Uuid
+  parentTaskId         String? @map("parent_task_id") @db.Uuid
+  linkedTimelineFileId String? @map("linked_timeline_file_id") @db.Uuid
 
   // Per-parent counter for subtask reference numbers (<parent ref>-NN, e.g.
   // OJS-28 -> OJS-28-01). Advanced only on the parent when a subtask is added;
   // stays 0 on tasks that have no subtasks. Subtasks no longer consume the
   // division / Timeline-File sequence.
-  subtaskSeq               Int             @default(0) @map("subtask_seq")
+  subtaskSeq Int @default(0) @map("subtask_seq")
 
-  createdById              String          @map("created_by") @db.Uuid
-  createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdById String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Timestamp of the last MEANINGFUL activity on the task — creation, a
   // comment, a subtask/attachment/tag change, an owner/status/priority/context
@@ -377,28 +403,28 @@ model Task {
   // events (comments, attachments) that don't touch the task row, and is NEVER
   // advanced by passive reads (task_read / subtask_read). Maintained by the
   // touch helpers in src/lib/activity.ts. See DATA_MODEL.md.
-  lastActivityAt           DateTime        @default(now()) @map("last_activity_at") @db.Timestamptz(6)
+  lastActivityAt DateTime @default(now()) @map("last_activity_at") @db.Timestamptz(6)
 
-  archivedAt               DateTime?       @map("archived_at") @db.Timestamptz(6)
-  archivedById             String?         @map("archived_by") @db.Uuid
+  archivedAt   DateTime? @map("archived_at") @db.Timestamptz(6)
+  archivedById String?   @map("archived_by") @db.Uuid
 
-  owner                    User            @relation("TaskOwner", fields: [ownerId], references: [id])
-  division                 Division        @relation("TaskDivision", fields: [divisionId], references: [id])
-  subDivision              Division?       @relation("TaskSubDivision", fields: [subDivisionId], references: [id])
-  createdBy                User            @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  archivedBy               User?           @relation("TaskArchivedBy", fields: [archivedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  owner       User      @relation("TaskOwner", fields: [ownerId], references: [id])
+  division    Division  @relation("TaskDivision", fields: [divisionId], references: [id])
+  subDivision Division? @relation("TaskSubDivision", fields: [subDivisionId], references: [id])
+  createdBy   User      @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  archivedBy  User?     @relation("TaskArchivedBy", fields: [archivedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  parentTask               Task?           @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  subtasks                 Task[]          @relation("TaskSubtasks")
+  parentTask Task?  @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subtasks   Task[] @relation("TaskSubtasks")
 
-  linkedTimelineFile       TimelineFile?   @relation(fields: [linkedTimelineFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  linkedTimelineFile TimelineFile? @relation(fields: [linkedTimelineFileId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  collaborators            TaskCollaborator[]
-  comments                 TaskComment[]
-  activity                 TaskActivity[]
-  tags                     TaskTag[]
-  reassignmentRequests     ReassignmentRequest[]
-  timelineFileLinks        TimelineFileTaskLink[]
+  collaborators        TaskCollaborator[]
+  comments             TaskComment[]
+  activity             TaskActivity[]
+  tags                 TaskTag[]
+  reassignmentRequests ReassignmentRequest[]
+  timelineFileLinks    TimelineFileTaskLink[]
 
   @@index([ownerId])
   @@index([divisionId])
@@ -414,12 +440,12 @@ model Task {
 }
 
 model TaskCollaborator {
-  id        String                @id @default(uuid()) @db.Uuid
-  taskId    String                @map("task_id") @db.Uuid
-  userId    String                @map("user_id") @db.Uuid
+  id        String               @id @default(uuid()) @db.Uuid
+  taskId    String               @map("task_id") @db.Uuid
+  userId    String               @map("user_id") @db.Uuid
   role      TaskCollaboratorRole
-  addedById String                @map("added_by") @db.Uuid
-  addedAt   DateTime              @default(now()) @map("added_at") @db.Timestamptz(6)
+  addedById String               @map("added_by") @db.Uuid
+  addedAt   DateTime             @default(now()) @map("added_at") @db.Timestamptz(6)
 
   task    Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user    User @relation("TaskCollaboratorUser", fields: [userId], references: [id])
@@ -494,43 +520,43 @@ model Attachment {
 // ============================================================
 
 model TimelineFile {
-  id                          String              @id @default(uuid()) @db.Uuid
-  refNo                       String              @unique @map("ref_no")
-  refYear                     Int                 @map("ref_year")
-  refSeq                      Int                 @map("ref_seq")
+  id                         String             @id @default(uuid()) @db.Uuid
+  refNo                      String             @unique @map("ref_no")
+  refYear                    Int                @map("ref_year")
+  refSeq                     Int                @map("ref_seq")
   // Per-file counter for tasks generated from this file (TL-<seq>-NN).
-  taskSeq                     Int                 @default(0) @map("task_seq")
-  subject                     String
-  fromWhom                    String              @map("from_whom")
-  receivedDate                DateTime            @map("received_date") @db.Date
-  deadlineDate                DateTime?           @map("deadline_date") @db.Date
-  status                      TimelineFileStatus  @default(pending_action)
-  priority                    TaskPriority        @default(medium)
-  secretaryComments           String?             @map("secretary_comments")
-  deskComments                String?             @map("desk_comments")
-  actionDocumentAttachmentId  String?             @map("action_document_attachment_id") @db.Uuid
+  taskSeq                    Int                @default(0) @map("task_seq")
+  subject                    String
+  fromWhom                   String             @map("from_whom")
+  receivedDate               DateTime           @map("received_date") @db.Date
+  deadlineDate               DateTime?          @map("deadline_date") @db.Date
+  status                     TimelineFileStatus @default(pending_action)
+  priority                   TaskPriority       @default(medium)
+  secretaryComments          String?            @map("secretary_comments")
+  deskComments               String?            @map("desk_comments")
+  actionDocumentAttachmentId String?            @map("action_document_attachment_id") @db.Uuid
 
-  createdById                 String              @map("created_by") @db.Uuid
-  createdAt                   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdById    String    @map("created_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   // Timestamp of the last MEANINGFUL activity on the file — creation, a status
   // or field change, a comment, a marked-to change, a linked task, a document
   // upload, etc. Powers the "Recently modified" list sort, mirroring
   // Task.lastActivityAt. Timeline files have no @updatedAt, so this is their
   // sole "last touched" signal. Maintained by the touch helpers in
   // src/lib/activity.ts; never advanced by passive reads.
-  lastActivityAt              DateTime            @default(now()) @map("last_activity_at") @db.Timestamptz(6)
-  archivedAt                  DateTime?           @map("archived_at") @db.Timestamptz(6)
-  archivedById                String?             @map("archived_by") @db.Uuid
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at") @db.Timestamptz(6)
+  archivedAt     DateTime? @map("archived_at") @db.Timestamptz(6)
+  archivedById   String?   @map("archived_by") @db.Uuid
 
-  createdBy                   User                @relation("TimelineFileCreatedBy", fields: [createdById], references: [id])
-  archivedBy                  User?               @relation("TimelineFileArchivedBy", fields: [archivedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  actionDocument              Attachment?         @relation("TimelineFileActionDocument", fields: [actionDocumentAttachmentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdBy      User        @relation("TimelineFileCreatedBy", fields: [createdById], references: [id])
+  archivedBy     User?       @relation("TimelineFileArchivedBy", fields: [archivedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actionDocument Attachment? @relation("TimelineFileActionDocument", fields: [actionDocumentAttachmentId], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
-  markedTo                    TimelineFileMarkedTo[]
-  taskLinks                   TimelineFileTaskLink[]
-  activity                    TimelineFileActivity[]
-  comments                    TimelineFileComment[]
-  tasksLinkedTo               Task[]
+  markedTo      TimelineFileMarkedTo[]
+  taskLinks     TimelineFileTaskLink[]
+  activity      TimelineFileActivity[]
+  comments      TimelineFileComment[]
+  tasksLinkedTo Task[]
 
   @@unique([refYear, refSeq])
   @@index([deadlineDate])
@@ -541,14 +567,14 @@ model TimelineFile {
 }
 
 model TimelineFileComment {
-  id               String                @id @default(uuid()) @db.Uuid
-  timelineFileId   String                @map("timeline_file_id") @db.Uuid
-  userId           String                @map("user_id") @db.Uuid
-  body             String
-  mentions         String[]              @default([]) @db.Uuid
-  parentCommentId  String?               @map("parent_comment_id") @db.Uuid
-  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  editedAt         DateTime?             @map("edited_at") @db.Timestamptz(6)
+  id              String    @id @default(uuid()) @db.Uuid
+  timelineFileId  String    @map("timeline_file_id") @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  body            String
+  mentions        String[]  @default([]) @db.Uuid
+  parentCommentId String?   @map("parent_comment_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  editedAt        DateTime? @map("edited_at") @db.Timestamptz(6)
 
   timelineFile  TimelineFile          @relation(fields: [timelineFileId], references: [id], onDelete: Cascade)
   user          User                  @relation(fields: [userId], references: [id])
@@ -604,6 +630,70 @@ model TimelineFileActivity {
 }
 
 // ============================================================
+// Document Centre (executive records — MoMs, briefings, reports)
+// ============================================================
+
+/// An executive document record: a MoM, meeting document, briefing note,
+/// report, presentation, or official correspondence. Confidential; visible
+/// only to Super Admins and the OSD desks (see src/lib/document-centre.ts).
+/// Attachments + Google Drive links reuse the polymorphic Attachment table
+/// with ownerType `document_record`; discussion reuses the shared component
+/// via DocumentComment. Mirrors the Task/TimelineFile shape.
+model DocumentRecord {
+  id              String          @id @default(uuid()) @db.Uuid
+  subject         String
+  // Free-text context / background (the "Context" field, a plain textarea
+  // rendered read-only through QuoteCard — mirrors Task.description).
+  context         String?
+  urgency         DocumentUrgency @default(normal)
+  status          DocumentStatus  @default(open)
+  // Workflow flags — each surfaces its own badge on the card + detail page.
+  markedForReview Boolean         @default(false) @map("marked_for_review")
+  awaitingInput   Boolean         @default(false) @map("awaiting_input")
+
+  createdById    String    @map("created_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  // Last MEANINGFUL activity — drives the "Recently modified" sort, mirroring
+  // Task.lastActivityAt. Maintained by touchDocumentActivity + inline sets;
+  // never advanced by passive reads.
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at") @db.Timestamptz(6)
+  archivedAt     DateTime? @map("archived_at") @db.Timestamptz(6)
+  archivedById   String?   @map("archived_by") @db.Uuid
+
+  createdBy  User              @relation("DocumentRecordCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  archivedBy User?             @relation("DocumentRecordArchivedBy", fields: [archivedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  comments   DocumentComment[]
+
+  @@index([createdById])
+  @@index([status])
+  @@index([urgency])
+  @@index([lastActivityAt])
+  @@index([createdAt(sort: Desc)])
+  @@map("document_records")
+}
+
+model DocumentComment {
+  id               String    @id @default(uuid()) @db.Uuid
+  documentRecordId String    @map("document_record_id") @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  body             String
+  mentions         String[]  @default([]) @db.Uuid
+  parentCommentId  String?   @map("parent_comment_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  editedAt         DateTime? @map("edited_at") @db.Timestamptz(6)
+
+  documentRecord DocumentRecord    @relation(fields: [documentRecordId], references: [id], onDelete: Cascade)
+  user           User              @relation(fields: [userId], references: [id])
+  parentComment  DocumentComment?  @relation("DocRecordCommentThread", fields: [parentCommentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies        DocumentComment[] @relation("DocRecordCommentThread")
+
+  @@index([documentRecordId, createdAt(sort: Desc)])
+  @@index([parentCommentId])
+  @@map("document_comments")
+}
+
+// ============================================================
 // Tags
 // ============================================================
 
@@ -654,19 +744,19 @@ model Notification {
 // ============================================================
 
 model ReassignmentRequest {
-  id               String                     @id @default(uuid()) @db.Uuid
-  taskId           String                     @map("task_id") @db.Uuid
-  requestedById    String                     @map("requested_by") @db.Uuid
-  proposedOwnerId  String                     @map("proposed_owner_id") @db.Uuid
-  approverId       String                     @map("approver_id") @db.Uuid
-  status           ReassignmentRequestStatus  @default(pending)
-  createdAt        DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
-  resolvedAt       DateTime?                  @map("resolved_at") @db.Timestamptz(6)
+  id              String                    @id @default(uuid()) @db.Uuid
+  taskId          String                    @map("task_id") @db.Uuid
+  requestedById   String                    @map("requested_by") @db.Uuid
+  proposedOwnerId String                    @map("proposed_owner_id") @db.Uuid
+  approverId      String                    @map("approver_id") @db.Uuid
+  status          ReassignmentRequestStatus @default(pending)
+  createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt      DateTime?                 @map("resolved_at") @db.Timestamptz(6)
 
-  task           Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  requestedBy    User @relation("ReassignmentRequestedBy", fields: [requestedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  proposedOwner  User @relation("ReassignmentProposedOwner", fields: [proposedOwnerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  approver       User @relation("ReassignmentApprover", fields: [approverId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  task          Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestedBy   User @relation("ReassignmentRequestedBy", fields: [requestedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  proposedOwner User @relation("ReassignmentProposedOwner", fields: [proposedOwnerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approver      User @relation("ReassignmentApprover", fields: [approverId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([approverId, status])
   @@map("reassignment_requests")
@@ -705,20 +795,20 @@ model AuditLog {
 /// text venue or meeting link. Attachments reuse the polymorphic
 /// Attachment table with ownerType `js_engagement`.
 model JsEngagement {
-  id                       String    @id @default(uuid()) @db.Uuid
-  title                    String
-  startsAt                 DateTime  @map("starts_at") @db.Timestamptz(6)
-  venue                    String?
-  momNotes                 String?   @map("mom_notes")
-  divisionId               String    @map("division_id") @db.Uuid
-  createdById              String    @map("created_by") @db.Uuid
-  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  archivedAt               DateTime? @map("archived_at") @db.Timestamptz(6)
+  id          String    @id @default(uuid()) @db.Uuid
+  title       String
+  startsAt    DateTime  @map("starts_at") @db.Timestamptz(6)
+  venue       String?
+  momNotes    String?   @map("mom_notes")
+  divisionId  String    @map("division_id") @db.Uuid
+  createdById String    @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
 
-  division                 Division  @relation("EngagementDivision", fields: [divisionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  createdBy                User      @relation("EngagementCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  participants             JsEngagementParticipant[]
+  division     Division                  @relation("EngagementDivision", fields: [divisionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy    User                      @relation("EngagementCreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  participants JsEngagementParticipant[]
 
   @@index([startsAt])
   @@index([divisionId])
@@ -726,11 +816,11 @@ model JsEngagement {
 }
 
 model JsEngagementParticipant {
-  engagementId             String    @map("engagement_id") @db.Uuid
-  userId                   String    @map("user_id") @db.Uuid
+  engagementId String @map("engagement_id") @db.Uuid
+  userId       String @map("user_id") @db.Uuid
 
-  engagement               JsEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
-  user                     User         @relation("EngagementParticipant", fields: [userId], references: [id], onDelete: Cascade)
+  engagement JsEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  user       User         @relation("EngagementParticipant", fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([engagementId, userId])
   @@index([userId])

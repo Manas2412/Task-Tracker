@@ -7,6 +7,7 @@ import {
   canEditTfAttachments,
 } from '@/app/actions/attachments';
 import { auth } from '@/lib/auth';
+import { canAccessDocumentCentreById } from '@/lib/document-centre';
 import { rateLimit } from '@/lib/rate-limit';
 import {
   generateObjectKey,
@@ -31,7 +32,7 @@ import {
  */
 
 const bodySchema = z.object({
-  scope: z.enum(['task', 'tf_source', 'tf_action']),
+  scope: z.enum(['task', 'tf_source', 'tf_action', 'document']),
   parentId: z.string().uuid(),
   filename: z.string().trim().min(1).max(200),
   contentType: z.string().trim().min(1).max(200),
@@ -77,11 +78,14 @@ export async function POST(request: Request) {
     );
   }
 
-  // Permission gate — collaborators may add task documents.
+  // Permission gate — collaborators may add task documents; Document Centre is
+  // gated by the executive allowlist.
   const allowed =
     parsed.data.scope === 'task'
       ? await canAddTaskAttachments(session.user.id, parsed.data.parentId)
-      : await canEditTfAttachments(session.user.id, parsed.data.parentId);
+      : parsed.data.scope === 'document'
+        ? await canAccessDocumentCentreById(session.user.id)
+        : await canEditTfAttachments(session.user.id, parsed.data.parentId);
   if (!allowed) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -91,7 +95,9 @@ export async function POST(request: Request) {
       ? { kind: 'task', taskId: parsed.data.parentId }
       : parsed.data.scope === 'tf_source'
         ? { kind: 'tf_source', tfId: parsed.data.parentId }
-        : { kind: 'tf_action', tfId: parsed.data.parentId };
+        : parsed.data.scope === 'tf_action'
+          ? { kind: 'tf_action', tfId: parsed.data.parentId }
+          : { kind: 'document', documentId: parsed.data.parentId };
   const key = generateObjectKey(scope, parsed.data.filename);
 
   try {
