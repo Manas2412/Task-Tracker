@@ -17,15 +17,54 @@ import { cn } from '@/lib/utils';
  * It never touches the URL, so the existing filter chips / division controls
  * and their state are untouched — the search is purely additive and overlays
  * the list while a query is active.
+ *
+ * The active query is persisted in sessionStorage keyed by the list view
+ * (`storageKey`), so opening a task and hitting Back restores the same search
+ * instead of resetting to the full list. Clearing the search (the red ✕) also
+ * clears the stored value, so a dismissed search stays dismissed.
  */
 
 const MIN_CHARS = 2;
 const DEBOUNCE_MS = 250;
+const SEARCH_PREFIX = 'tasks-search:';
 
 type Data = { rows: QuickSearchTaskCard[]; total: number; capped: boolean };
 
-export function TasksQuickSearch({ children }: { children: ReactNode }) {
+export function TasksQuickSearch({
+  children,
+  storageKey,
+}: {
+  children: ReactNode;
+  /** Stable identity of this list view — scopes the persisted query. */
+  storageKey: string;
+}) {
   const [query, setQuery] = useState('');
+  const searchStorageKey = SEARCH_PREFIX + storageKey;
+  // Hydrate a persisted query after mount (sessionStorage is client-only, so a
+  // useState initializer would mismatch the server render). Restores the search
+  // on Back navigation without a URL change.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+    try {
+      const saved = sessionStorage.getItem(searchStorageKey);
+      if (saved) setQuery(saved);
+    } catch {
+      /* storage unavailable — non-fatal */
+    }
+  }, [searchStorageKey]);
+
+  // Persist the query as it changes; clear the entry when the search is emptied.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    try {
+      if (query.trim().length >= MIN_CHARS) sessionStorage.setItem(searchStorageKey, query);
+      else sessionStorage.removeItem(searchStorageKey);
+    } catch {
+      /* non-fatal */
+    }
+  }, [query, searchStorageKey]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<Data>({ rows: [], total: 0, capped: false });
