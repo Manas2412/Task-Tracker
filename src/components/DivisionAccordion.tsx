@@ -12,6 +12,14 @@ type DivisionAccordionProps = {
   /** Singular unit for the count badge, e.g. "task" or "file". */
   unit?: string;
   defaultOpen?: boolean;
+  /**
+   * Controlled open state. When provided (together with `onToggle`), the caller
+   * owns the open/closed state — used by the tasks list to persist and restore
+   * expanded divisions across Back navigation. Omit both to keep the default
+   * self-contained behaviour (used by the timeline-files grouped list).
+   */
+  open?: boolean;
+  onToggle?: () => void;
   children: React.ReactNode;
 };
 
@@ -28,9 +36,17 @@ export function DivisionAccordion({
   count,
   unit = 'item',
   defaultOpen = false,
+  open: controlledOpen,
+  onToggle,
   children,
 }: DivisionAccordionProps) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const toggle = () => {
+    if (isControlled) onToggle?.();
+    else setInternalOpen((v) => !v);
+  };
   const bodyId = useId();
 
   return (
@@ -45,7 +61,7 @@ export function DivisionAccordion({
 
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         aria-expanded={open}
         aria-controls={bodyId}
         className={cn(

@@ -2,7 +2,6 @@ import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 
 import { PullToRefresh } from '@/components/ui';
-import { DivisionAccordion } from '@/components/DivisionAccordion';
 import { auth } from '@/lib/auth';
 import { isMediaAndIt } from '@/lib/divisions';
 import { prisma } from '@/lib/db';
@@ -14,6 +13,7 @@ import { DivisionControls } from './_components/DivisionControls';
 import { FilterChips } from './_components/FilterChips';
 import { StatsStrip } from './_components/StatsStrip';
 import { TaskListItem } from './_components/TaskListItem';
+import { TaskGroupStateProvider, GroupedDivisionAccordion } from './_components/TaskListState';
 import { TasksQuickSearch } from './_components/TasksQuickSearch';
 import { QuickCreatePrimary } from './_components/QuickCreate';
 
@@ -108,6 +108,14 @@ export default async function TasksPage({ searchParams }: PageProps) {
     ? null
     : segmentTasksByRelation(tasks, me.id, me.isPmu, me.pmuId, isExcludedPmuHead);
 
+  // Stable identity of this exact list view — used to scope the preserved scroll
+  // position and quick-search query so Back restores them only for the same
+  // filters/sort/group, never bleeding across unrelated views. router.back()
+  // restores the URL, so these params are identical on return.
+  const listStateKey = `filter=${filter}&division=${divisionFilter}&sort=${sort}&group=${
+    groupByDivision ? 'division' : ''
+  }`;
+
   return (
       <PullToRefresh>
       <div className="pb-24 md:pb-10">
@@ -136,7 +144,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
 
         {/* Task list — Quick Search overlays matching cards in this panel while
             a query is active, and the normal list returns when it is cleared. */}
-        <TasksQuickSearch>
+        <TasksQuickSearch storageKey={listStateKey}>
           <div className="flex items-center justify-between mb-2">
             <h2 className="section-label">Tasks</h2>
             <span className="text-[11px] text-ink-3">
@@ -148,23 +156,26 @@ export default async function TasksPage({ searchParams }: PageProps) {
             grouped.length === 0 ? (
               <EmptyState filter={filter} />
             ) : (
-              <div className="flex flex-col gap-3">
-                {grouped.map((group) => (
-                  <DivisionAccordion
-                    key={group.divisionId}
-                    name={group.divisionName}
-                    colour={group.colour}
-                    count={group.tasks.length}
-                    unit="task"
-                  >
-                    <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
-                      {group.tasks.map((t) => (
-                        <TaskRow key={t.id} task={t} caller={permCaller} canWatchlist={canWatchlist} />
-                      ))}
-                    </ul>
-                  </DivisionAccordion>
-                ))}
-              </div>
+              <TaskGroupStateProvider scrollKey={listStateKey}>
+                <div className="flex flex-col gap-3">
+                  {grouped.map((group) => (
+                    <GroupedDivisionAccordion
+                      key={group.divisionId}
+                      persistId={group.divisionId}
+                      name={group.divisionName}
+                      colour={group.colour}
+                      count={group.tasks.length}
+                      unit="task"
+                    >
+                      <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-3">
+                        {group.tasks.map((t) => (
+                          <TaskRow key={t.id} task={t} caller={permCaller} canWatchlist={canWatchlist} />
+                        ))}
+                      </ul>
+                    </GroupedDivisionAccordion>
+                  ))}
+                </div>
+              </TaskGroupStateProvider>
             )
           ) : (
             // Always render all three segments — even empty ones — so the
