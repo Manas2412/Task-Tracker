@@ -58,6 +58,7 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
   const sortActive = activeSort !== '';
   const activeSortLabel = SORT_OPTIONS.find((o) => o.value === activeSort)?.label;
   const groupBy = searchParams.get('group') === 'division';
+  const archived = searchParams.get('archived') === '1';
 
   const [statusOpen, setStatusOpen] = useState(false);
   const [divisionOpen, setDivisionOpen] = useState(false);
@@ -77,7 +78,7 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
   }, []);
 
   const buildHref = useCallback(
-    (overrides: { filter?: TfFilter; division?: string; sort?: string; group?: string }) => {
+    (overrides: { filter?: TfFilter; division?: string; sort?: string; group?: string; archived?: string }) => {
       const params = new URLSearchParams(searchParams.toString());
       const setOrDelete = (key: string, value: string | undefined, clearWhen: string) => {
         if (value === undefined) return;
@@ -88,6 +89,7 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
       setOrDelete('division', overrides.division, '');
       setOrDelete('sort', overrides.sort, '');
       setOrDelete('group', overrides.group, '');
+      setOrDelete('archived', overrides.archived, '');
       const qs = params.toString();
       return qs ? `/timeline-files?${qs}` : '/timeline-files';
     },
@@ -108,6 +110,9 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
   };
   const onToggleGroup = () => {
     router.push(buildHref({ group: groupBy ? '' : 'division' }), { scroll: false });
+  };
+  const onToggleArchived = () => {
+    router.push(buildHref({ archived: archived ? '' : '1' }), { scroll: false });
   };
 
   const activeStatusMeta = STATUS_OPTIONS.find((o) => o.value === activeStatus);
@@ -287,6 +292,17 @@ export function TfListControls({ divisions, canGroupByDivision }: TfListControls
           Group by division
         </button>
       ) : null}
+
+      {/* Archived TL files toggle — shows archived files (still visibility-scoped) */}
+      <button
+        type="button"
+        onClick={onToggleArchived}
+        aria-pressed={archived}
+        className={triggerClass(archived)}
+      >
+        <i className="ti ti-archive text-[13px]" aria-hidden="true" />
+        Archived TL files
+      </button>
     </div>
   );
 }

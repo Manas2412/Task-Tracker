@@ -196,7 +196,8 @@ Reassignment:
 Deletion (the Archive / soft-delete feature has been removed from the platform):
 - Delete (hard) — the **head of the task's division** (direct head or active delegate) or a **Super Admin** (any task), plus a user for their **own personal task**. Removes the task and its subtasks/comments/attachments; cannot be undone. Enforced in `deleteTaskAction` via `canActAsHeadOf`.
 - Timeline File — hard-delete is Super Admin only (any file, regardless of creator).
-- The `archived_at` / `archived_by` columns (task + timeline file) and the `archivedAt: null` "hide archived" read filters remain in the schema, but no code path sets them any more; there is no user-facing Archive/Restore action.
+- **Timeline File archive (reversible soft-delete)** — OSD or Super Admin may **archive / restore** a Timeline File (`archiveTimelineFileAction` / `unarchiveTimelineFileAction`, gated by `requireOsdOrSuperAdmin`). Archiving sets `archived_at` / `archived_by`; archived files drop out of the active list, counts, calendar and search, and are shown only under the "Archived TL files" list toggle and the (read-only) detail page, from which they can be restored. Visibility is unchanged — archiving never widens who can see a file.
+- For **tasks**, the `archived_at` / `archived_by` columns and the `archivedAt: null` "hide archived" read filters remain in the schema, but no code path sets them (there is no task Archive/Restore action). Only Timeline Files have the archive feature.
 
 Planning calendar (`/calendar`):
 - One view for three kinds — **JS engagements** (teal), **task deadlines** (dark blue, every visible task with a due date), **Timeline file deadlines** (red). Tasks/TFs reuse their normal scopers, so division-only and PMU-team-only visibility hold on the calendar exactly as on the lists.

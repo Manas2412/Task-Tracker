@@ -80,6 +80,8 @@ type DiscussionProps = {
   mentionables: Mentionable[];
   currentUserId: string;
   canViewProfiles: boolean;
+  /** When true, the thread is view-only: no composer, reply, edit, or delete. */
+  readOnly?: boolean;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -100,6 +102,7 @@ export function Discussion({
   mentionables,
   currentUserId,
   canViewProfiles,
+  readOnly = false,
 }: DiscussionProps) {
   const totalCount = comments.reduce((sum, c) => sum + 1 + c.replies.length, 0);
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -143,12 +146,13 @@ export function Discussion({
                 mentionables={mentionables}
                 currentUserId={currentUserId}
                 canViewProfiles={canViewProfiles}
+                readOnly={readOnly}
               />
             ))}
           </ul>
         )}
 
-        {replyTo === null ? (
+        {!readOnly && replyTo === null ? (
           <Composer
             entityField={entityField}
             entityId={entityId}
@@ -171,6 +175,7 @@ function CommentThread({
   mentionables,
   currentUserId,
   canViewProfiles,
+  readOnly,
 }: {
   comment: DiscussionComment;
   replyTo: string | null;
@@ -181,6 +186,7 @@ function CommentThread({
   mentionables: Mentionable[];
   currentUserId: string;
   canViewProfiles: boolean;
+  readOnly: boolean;
 }) {
   const [showAllReplies, setShowAllReplies] = useState(false);
   const hasReplies = comment.replies.length > 0;
@@ -195,17 +201,20 @@ function CommentThread({
         mentionables={mentionables}
         actions={actions}
         canViewProfiles={canViewProfiles}
+        readOnly={readOnly}
       />
 
       <div className="ml-9 mt-1 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => onReply(replyTo === comment.id ? null : comment.id)}
-          className="text-[11px] text-ink-3 hover:text-primary font-medium flex items-center gap-1"
-        >
-          <i className="ti ti-message-circle text-[13px]" aria-hidden="true" />
-          {replyTo === comment.id ? 'Cancel' : 'Reply'}
-        </button>
+        {!readOnly ? (
+          <button
+            type="button"
+            onClick={() => onReply(replyTo === comment.id ? null : comment.id)}
+            className="text-[11px] text-ink-3 hover:text-primary font-medium flex items-center gap-1"
+          >
+            <i className="ti ti-message-circle text-[13px]" aria-hidden="true" />
+            {replyTo === comment.id ? 'Cancel' : 'Reply'}
+          </button>
+        ) : null}
         {hasReplies ? (
           <span className="text-[11px] text-ink-3">
             {comment.replies.length} {comment.replies.length === 1 ? 'reply' : 'replies'}
@@ -234,6 +243,7 @@ function CommentThread({
                   mentionables={mentionables}
                   actions={actions}
                   canViewProfiles={canViewProfiles}
+                  readOnly={readOnly}
                 />
               </li>
             ))}
@@ -241,7 +251,7 @@ function CommentThread({
         </div>
       ) : null}
 
-      {replyTo === comment.id ? (
+      {!readOnly && replyTo === comment.id ? (
         <div className="ml-9 mt-2 pl-3 discussion-thread-line">
           <Composer
             entityField={entityField}
@@ -265,6 +275,7 @@ function CommentRow({
   mentionables,
   actions,
   canViewProfiles,
+  readOnly,
 }: {
   comment: DiscussionReply;
   compact?: boolean;
@@ -272,9 +283,11 @@ function CommentRow({
   mentionables: Mentionable[];
   actions: DiscussionActions;
   canViewProfiles: boolean;
+  readOnly?: boolean;
 }) {
   const isOwn = String(comment.userId) === String(currentUserId);
   const [windowOpen, setWindowOpen] = useState(() => {
+    if (readOnly) return false;
     const elapsed = Date.now() - new Date(comment.createdAt).getTime();
     return isOwn && elapsed < EDIT_WINDOW_MS;
   });
