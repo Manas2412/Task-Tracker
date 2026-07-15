@@ -75,6 +75,7 @@ async function wipe() {
     prisma.notification.deleteMany(),
     prisma.attachment.deleteMany(),
     prisma.auditLog.deleteMany(),
+    prisma.userDivisionAccess.deleteMany(),
     prisma.task.deleteMany(),
     prisma.timelineFile.deleteMany(),
     prisma.tag.deleteMany(),

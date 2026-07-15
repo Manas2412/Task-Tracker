@@ -75,6 +75,7 @@ export default async function ProfilePage() {
           designation: true,
           divisionId: true,
           division: { select: { name: true } },
+          divisionAccess: { select: { divisionId: true } },
         },
         orderBy: { name: 'asc' },
       }),
@@ -99,7 +100,7 @@ export default async function ProfilePage() {
             {
               id: u.id,
               isActive: true,
-              divisionId: u.divisionId,
+              memberDivisionIds: [u.divisionId, ...u.divisionAccess.map((a) => a.divisionId)],
               directHeadedDivisionIds: directHeadedByUser.get(u.id) ?? [],
             },
             {

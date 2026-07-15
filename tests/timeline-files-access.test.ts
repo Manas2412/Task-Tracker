@@ -39,8 +39,23 @@ describe('buildTfVisibilityClause', () => {
     expect(await buildTfVisibilityClause({ ...base, hierarchySlot: 'director', isSuperAdmin: true })).toEqual({});
   });
 
-  it('scopes an ordinary officer to files marked to their division', async () => {
-    const where = await buildTfVisibilityClause({ ...base, hierarchySlot: 'section_officer' });
-    expect(where).toEqual({ markedTo: { some: { divisionId: 'div-ki' } } });
+  it('scopes an ordinary officer to files marked to their home division', async () => {
+    // Member set passed explicitly so the pure test never hits the DB; a
+    // single-member officer sees files marked to their home division.
+    const where = await buildTfVisibilityClause(
+      { ...base, hierarchySlot: 'section_officer' },
+      ['div-ki'],
+    );
+    expect(where).toEqual({ markedTo: { some: { divisionId: { in: ['div-ki'] } } } });
+  });
+
+  it('scopes a multi-division member to files marked to ANY of their member divisions', async () => {
+    const where = await buildTfVisibilityClause(
+      { ...base, hierarchySlot: 'section_officer' },
+      ['div-ki', 'div-nsdf'],
+    );
+    expect(where).toEqual({
+      markedTo: { some: { divisionId: { in: ['div-ki', 'div-nsdf'] } } },
+    });
   });
 });

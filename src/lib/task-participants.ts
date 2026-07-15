@@ -2,7 +2,6 @@ import type { Prisma } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
 import { getOfficeOfJsDivisionId } from '@/lib/engagements';
-import { getLinkedParticipantDivisionIds } from '@/lib/rbac';
 import { getPmuParentDivisionHeadId } from '@/lib/visibility';
 
 /**
@@ -10,17 +9,17 @@ import { getPmuParentDivisionHeadId } from '@/lib/visibility';
  * user-picker (collaborators, subtask assignees, @mentions) and its
  * server-side guard, so the pickers and the actions never diverge.
  *
- * A task's participants are the active users of its division (or, for a PMU
- * task, its PMU team), that division's head, and the always-relevant
- * oversight roles (OSD + Super Admin). The seeded "Office of JS" division is
- * a coordinating office, so its tasks may involve any active user.
+ * A task's participants are the active MEMBERS of its division — users whose
+ * home division is the task's division OR who hold an admin-granted extra
+ * membership in it (user_division_access) — or, for a PMU task, its PMU team,
+ * plus that division's head and the always-relevant oversight roles (OSD +
+ * Super Admin). The seeded "Office of JS" division is a coordinating office, so
+ * its tasks may involve any active user.
  *
- * On top of that, members of any division cross-linked for participation
- * (`CROSS_DIVISION_PARTICIPANT_LINKS` in src/lib/rbac — e.g. Khelo India / Khelo
- * India Mission ↔ NSDF, both directions) are folded in, so the cross-division
- * reach applies uniformly to collaborators, subtask assignees, and @mentions in
- * the discussion. The link grants participant reach only — no head powers, no
- * visibility of the other division's board. See PERMISSIONS §5.17.
+ * Cross-division participation is therefore expressed by membership: a user
+ * homed elsewhere but granted the task's division as an extra member counts as
+ * a participant exactly like a home member. This replaces the retired hardcoded
+ * cross-division participant links (KI / KIM ↔ NSDF). See PERMISSIONS §5.17.
  *
  * The task OWNER is deliberately stricter (same division only — see
  * createTaskAction) and is not built from this rule.
@@ -54,6 +53,12 @@ export function buildTaskParticipantWhereFrom(
     { hierarchySlot: 'osd' },
     { isSuperAdmin: true },
   ];
+  // Admin-granted extra members of the task's (non-PMU) division participate
+  // exactly like home members. Membership is division-level, so a grant never
+  // points at a PMU — the PMU-task branch stays pmu_id-only.
+  if (!isPmu) {
+    or.push({ divisionAccess: { some: { divisionId: task.divisionId } } });
+  }
   // The division's head (may sit in a different home division).
   if (headId) or.push({ id: headId });
 
@@ -61,28 +66,23 @@ export function buildTaskParticipantWhereFrom(
 }
 
 /**
- * DB-backed wrapper: resolves the head + Office-of-JS ids to build the base
- * participant set, then folds in members of any cross-linked division
- * (`CROSS_DIVISION_PARTICIPANT_LINKS`, e.g. Khelo India / Khelo India Mission ↔
- * NSDF). The single source every task user-picker and guard reads, so the
- * cross-division reach lands on collaborators, subtask assignees, and @mentions
- * alike.
+ * DB-backed wrapper: resolves the head + Office-of-JS ids and builds the
+ * participant set. Cross-division reach comes from membership (the
+ * `divisionAccess` clause in the pure builder), so a user granted the task's
+ * division as an extra membership is a participant — the single source every
+ * task user-picker and guard reads, so the reach lands on collaborators,
+ * subtask assignees, and @mentions alike.
  */
 export async function buildTaskParticipantWhere(
   task: ParticipantTask,
 ): Promise<Prisma.UserWhereInput> {
-  const [officeOfJsDivisionId, linkedDivisionIds] = await Promise.all([
-    getOfficeOfJsDivisionId(),
-    getLinkedParticipantDivisionIds(task.divisionId),
-  ]);
+  const officeOfJsDivisionId = await getOfficeOfJsDivisionId();
   const headId =
     task.division.headUserId ??
     (task.division.kind === 'pmu'
       ? await getPmuParentDivisionHeadId(task.divisionId)
       : null);
-  const base = buildTaskParticipantWhereFrom(task, headId, officeOfJsDivisionId);
-  if (linkedDivisionIds.length === 0) return base;
-  return { OR: [base, { isActive: true, divisionId: { in: linkedDivisionIds } }] };
+  return buildTaskParticipantWhereFrom(task, headId, officeOfJsDivisionId);
 }
 
 /** Whether a user is allowed to take part in a task (server-side guard). */

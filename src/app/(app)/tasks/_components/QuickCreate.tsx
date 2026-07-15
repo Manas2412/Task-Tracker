@@ -67,6 +67,8 @@ export type OwnerCandidate = {
   designation: string;
   divisionId: string;
   pmuId: string | null;
+  /** Target divisions this user may own tasks in (home + admin-granted extras). */
+  memberDivisionIds: string[];
   divisionName: string;
   divisionColour: string;
 };
@@ -316,7 +318,7 @@ function QuickCreateForm({
             ? true
             : selectedTarget.kind === 'pmu'
               ? c.pmuId === selectedTarget.id
-              : c.divisionId === selectedTarget.id,
+              : c.memberDivisionIds.includes(selectedTarget.id),
         )
         .map((c) => ({
           id: c.id,

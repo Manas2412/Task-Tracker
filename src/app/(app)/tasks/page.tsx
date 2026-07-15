@@ -55,15 +55,24 @@ export default async function TasksPage({ searchParams }: PageProps) {
       hierarchySlot: true,
       isPmu: true,
       pmuId: true,
+      divisionAccess: { select: { divisionId: true } },
     },
   });
   if (!me) redirect('/login');
 
-  // Group-by-division is a cross-division (leadership) view. Normal users only
-  // ever see their own division, so the control is hidden and a manually-set
-  // ?group=division URL param is ignored for them.
+  // Member divisions (home + admin-granted extras) — drives the per-card
+  // management gate and whether Group-by-division is offered.
+  const memberDivisionIds = [me.divisionId, ...me.divisionAccess.map((a) => a.divisionId)];
+
+  // Group-by-division is a cross-division view. It is offered to leadership
+  // (Super Admin / OSD / JS) and to any multi-division member, whose flat list
+  // now spans more than one division. A single-division user's ?group=division
+  // param is ignored.
   const canGroupByDivision =
-    me.isSuperAdmin || me.hierarchySlot === 'osd' || me.hierarchySlot === 'js';
+    me.isSuperAdmin ||
+    me.hierarchySlot === 'osd' ||
+    me.hierarchySlot === 'js' ||
+    memberDivisionIds.length > 1;
   const groupByDivision = canGroupByDivision && requestedGroupByDivision;
 
   const [taskResult, counts, divisions, pmuParentHeadId, headedDivisionIds] = await Promise.all([
@@ -92,7 +101,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
     id: me.id,
     isSuperAdmin: me.isSuperAdmin,
     hierarchySlot: me.hierarchySlot,
-    divisionId: me.divisionId,
+    memberDivisionIds,
     headedDivisionIds,
   };
 
@@ -229,7 +238,7 @@ type PermCaller = {
   id: string;
   isSuperAdmin: boolean;
   hierarchySlot: string;
-  divisionId: string;
+  memberDivisionIds: string[];
   headedDivisionIds: string[];
 };
 

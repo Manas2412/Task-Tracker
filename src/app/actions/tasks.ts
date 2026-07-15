@@ -16,8 +16,8 @@ import {
   canCreateDivisionTask,
   canManageTask,
   canTransferTaskTo,
-  canTransferTaskToOrLinked,
   getHeadedDivisionIds,
+  getMemberDivisionIds,
   getRbacActor,
   getRbacTarget,
   resolveDivisionOwner,
@@ -173,13 +173,17 @@ async function canEditTask(
   if (task.ownerId === callerId || task.createdById === callerId) return true;
   const caller = await prisma.user.findUnique({
     where: { id: callerId },
-    select: { id: true, isSuperAdmin: true, hierarchySlot: true, divisionId: true },
+    select: { id: true, isSuperAdmin: true, hierarchySlot: true },
   });
   if (!caller) return false;
   // headedDivisionIds folds in active delegations, so a delegate manages the
-  // division's tasks exactly as its head would, for the delegation's lifetime.
-  const headedDivisionIds = await getHeadedDivisionIds(callerId);
-  return canManageTask({ ...caller, headedDivisionIds }, task);
+  // division's tasks exactly as its head would; memberDivisionIds (home +
+  // admin-granted extras) lets a Director member manage that division's tasks.
+  const [headedDivisionIds, memberDivisionIds] = await Promise.all([
+    getHeadedDivisionIds(callerId),
+    getMemberDivisionIds(callerId),
+  ]);
+  return canManageTask({ ...caller, memberDivisionIds, headedDivisionIds }, task);
 }
 
 /**
@@ -198,12 +202,17 @@ async function canEditTaskDetails(
   if (task.visibility === 'personal' && task.ownerId === callerId) return true;
   const caller = await prisma.user.findUnique({
     where: { id: callerId },
-    select: { isSuperAdmin: true, hierarchySlot: true, divisionId: true },
+    select: { isSuperAdmin: true, hierarchySlot: true },
   });
   if (!caller) return false;
   if (caller.isSuperAdmin) return true;
   if (caller.hierarchySlot === 'js' || caller.hierarchySlot === 'osd') return true;
-  if (caller.hierarchySlot === 'director' && caller.divisionId === task.divisionId) return true;
+  // A Director who is a member (home or admin-granted extra) of the task's
+  // division may redefine it, matching the canEditTask management gate.
+  if (caller.hierarchySlot === 'director') {
+    const memberDivisionIds = await getMemberDivisionIds(callerId);
+    if (memberDivisionIds.includes(task.divisionId)) return true;
+  }
   const actor = await getRbacActor(callerId);
   return actor !== null && canActAsHeadOf(actor, task.divisionId);
 }
@@ -336,8 +345,11 @@ async function createTaskInner(
   if (parsed.data.visibility === 'division' && !hasDivisionPower) {
     return fail('Only the division head can create division-level tasks.', epoch);
   }
-  if (targetDivisionId !== meRow.divisionId && !hasDivisionPower) {
-    return fail('You can only create tasks in your own division.', epoch);
+  // A non-head may only create a (personal) task in a division they are a
+  // MEMBER of — home or an admin-granted extra division (actor.memberDivisionIds
+  // covers both). Creating elsewhere still requires division power.
+  if (!actor.memberDivisionIds.includes(targetDivisionId) && !hasDivisionPower) {
+    return fail('You can only create tasks in a division you belong to.', epoch);
   }
 
   // By default a new division task starts unassigned: the owner is left as
@@ -388,8 +400,19 @@ async function createTaskInner(
     if (parsed.data.ownerId) {
       const chosen = await prisma.user.findUnique({
         where: { id: parsed.data.ownerId },
-        select: { id: true, isActive: true, divisionId: true, pmuId: true },
+        select: {
+          id: true,
+          isActive: true,
+          divisionId: true,
+          pmuId: true,
+          divisionAccess: { select: { divisionId: true } },
+        },
       });
+      // The chosen owner must be a MEMBER of the target division — home or an
+      // admin-granted extra membership — the same pool ownership resolves to.
+      const chosenMemberDivisionIds = chosen
+        ? [chosen.divisionId, ...chosen.divisionAccess.map((a) => a.divisionId)]
+        : [];
       const isMember =
         !!chosen &&
         chosen.isActive &&
@@ -397,7 +420,7 @@ async function createTaskInner(
           ? true
           : targetDivision?.kind === 'pmu'
             ? chosen.pmuId === targetDivisionId
-            : chosen.divisionId === targetDivisionId);
+            : chosenMemberDivisionIds.includes(targetDivisionId));
       if (!isMember) {
         return {
           ok: false,
@@ -1105,9 +1128,9 @@ export async function addSubtaskAction(
     if (!assignee || !assignee.isActive) {
       return fail('Assignee not found or inactive.', epoch);
     }
-    // Subtask assignees come from the task's participants — its division, its
-    // head, oversight roles, plus any cross-linked division (e.g. Khelo India /
-    // Khelo India Mission ↔ NSDF), all folded into isTaskParticipant.
+    // Subtask assignees come from the task's participants — the division's
+    // members (home or admin-granted extra membership), its head, and oversight
+    // roles — all resolved by isTaskParticipant.
     if (!(await isTaskParticipant(assigneeId, parent))) {
       return fail('Subtask assignee is not eligible for this task.', epoch);
     }
@@ -2491,14 +2514,17 @@ export async function resolveReassignmentAction(
 // ============================================================
 
 /**
- * Allowed targets (enforced in `canTransferTaskToOrLinked`, src/lib/rbac):
+ * Allowed targets (enforced in `canTransferTaskTo`, src/lib/rbac):
  *   Super Admin   → anyone
- *   Division Head → own division(s), another Division Head, Super Admin,
- *                   plus any configured cross-division link (a Khelo India
- *                   head/delegate may also transfer to NSDF members)
- *   Division User → own division, their Division Head, Super Admin
- * A comment is mandatory on every transfer. The full trail lands in
- * task_activity (with the comment), the comment thread, and audit_log.
+ *   Division Head → a member of any division they head, a co-member of any
+ *                   division they belong to, another Division Head, Super Admin
+ *   Division User → a co-member of any division they belong to, the head of any
+ *                   division they belong to, Super Admin
+ * "Belong to" is the member set (home + admin-granted extra divisions), so
+ * cross-division transfer now flows from shared membership — the hardcoded
+ * KI→NSDF allocation link is retired. A comment is mandatory on every transfer.
+ * The full trail lands in task_activity (with the comment), the comment thread,
+ * and audit_log.
  */
 const transferTaskSchema = z.object({
   taskId: z.string().uuid(),
@@ -2551,9 +2577,9 @@ export async function transferTaskAction(
     getRbacTarget(target.id),
   ]);
   if (!actor) return fail('Your account could not be found.', epoch);
-  if (!targetRbac || !canTransferTaskToOrLinked(actor, targetRbac)) {
+  if (!targetRbac || !canTransferTaskTo(actor, targetRbac)) {
     return fail(
-      'You can transfer within your division, to your division head, or to Super Admin.',
+      'You can transfer within a division you belong to, to a division head, or to Super Admin.',
       epoch,
     );
   }
@@ -2683,10 +2709,14 @@ export async function pullTaskAction(
 
   const meRow = await prisma.user.findUnique({
     where: { id: me.id },
-    select: { id: true, name: true, divisionId: true },
+    select: { id: true, name: true },
   });
   if (!meRow) return fail('User not found.', epoch);
-  if (meRow.divisionId !== task.divisionId) return fail('You can only pull tasks from your own division.', epoch);
+  // A member (home or admin-granted extra) of the task's division may pull it.
+  const memberDivisionIds = await getMemberDivisionIds(me.id);
+  if (!memberDivisionIds.includes(task.divisionId)) {
+    return fail('You can only pull tasks from a division you belong to.', epoch);
+  }
 
   await prisma.$transaction([
     prisma.task.update({

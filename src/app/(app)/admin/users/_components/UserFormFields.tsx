@@ -41,6 +41,8 @@ export type UserFormDefaults = {
   subDivisionId?: string | null;
   sectionId?: string | null;
   pmuId?: string | null;
+  /** Extra divisions this user is a full member of, beyond their home division. */
+  extraDivisionIds?: string[];
   supervisorId?: string | null;
   isSuperAdmin?: boolean;
 };
@@ -90,6 +92,14 @@ export function UserFormFields({
   const [subDivisionId, setSubDivisionId] = useState(defaults?.subDivisionId ?? '');
   const [sectionId, setSectionId] = useState(defaults?.sectionId ?? '');
   const [pmuId, setPmuId] = useState(defaults?.pmuId ?? '');
+  // Extra divisions the user is a full member of, beyond their home division.
+  const [extraDivisionIds, setExtraDivisionIds] = useState<Set<string>>(
+    () => new Set(defaults?.extraDivisionIds ?? []),
+  );
+
+  // Extra-membership options are the top-level divisions other than the home
+  // division (a division can't be both home and an extra membership).
+  const extraOptions = topDivisions.filter((d) => d.id !== divisionId);
 
   const subDivisions = divisionId ? subDivisionsByParent(divisionId) : [];
   const sections = subDivisionId
@@ -235,10 +245,17 @@ export function UserFormFields({
               name="divisionId"
               value={divisionId}
               onChange={(e) => {
-                setDivisionId(e.target.value);
+                const value = e.target.value;
+                setDivisionId(value);
                 setSubDivisionId('');
                 setSectionId('');
                 setPmuId('');
+                // The new home division can't also be an extra membership.
+                setExtraDivisionIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(value);
+                  return next;
+                });
               }}
               required
               className={selectCn(!!fieldErrors?.divisionId)}
@@ -338,6 +355,46 @@ export function UserFormFields({
             </select>
           </Field>
         </div>
+      </Section>
+
+      {/* Additional divisions — full membership beyond the home division */}
+      <Section title="Additional divisions" full>
+        <p className="text-[11px] text-ink-3 mb-2.5 leading-relaxed">
+          Full member of these divisions in addition to the home division above.
+          The user sees their tasks and timeline files, can be assigned work and
+          collaborate there, and can group by division — but gains no head powers
+          and cannot create division tasks unless they head that division.
+        </p>
+        {extraOptions.length === 0 ? (
+          <p className="text-[11px] text-ink-3">No other divisions available.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+            {extraOptions.map((d) => (
+              <label
+                key={d.id}
+                className="flex items-center gap-2 text-[12.5px] text-ink cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  name="extraDivisionIds"
+                  value={d.id}
+                  checked={extraDivisionIds.has(d.id)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setExtraDivisionIds((prev) => {
+                      const next = new Set(prev);
+                      if (checked) next.add(d.id);
+                      else next.delete(d.id);
+                      return next;
+                    });
+                  }}
+                  className="h-3.5 w-3.5 rounded border-line accent-ink"
+                />
+                {d.name}
+              </label>
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* Supervisor */}

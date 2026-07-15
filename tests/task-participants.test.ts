@@ -19,15 +19,28 @@ function task(overrides: Partial<ParticipantTask> = {}): ParticipantTask {
 }
 
 describe('buildTaskParticipantWhereFrom', () => {
-  it('a division task: members + head + OSD + Super Admin', () => {
+  it('a division task: members (home + granted) + head + OSD + Super Admin', () => {
     const where = buildTaskParticipantWhereFrom(task(), HEAD, OJS);
     expect(where.isActive).toBe(true);
     expect(where.OR).toEqual([
       { divisionId: DIV },
       { hierarchySlot: 'osd' },
       { isSuperAdmin: true },
+      // Admin-granted extra members of the division participate like home members.
+      { divisionAccess: { some: { divisionId: DIV } } },
       { id: HEAD },
     ]);
+  });
+
+  it('a PMU task does NOT add the division-membership clause', () => {
+    // Extra memberships are division-level (never a PMU), so a PMU task stays
+    // pmu_id-scoped.
+    const where = buildTaskParticipantWhereFrom(
+      task({ divisionId: PMU, division: { kind: 'pmu', headUserId: null } }),
+      HEAD,
+      OJS,
+    );
+    expect(where.OR).not.toContainEqual({ divisionAccess: { some: { divisionId: PMU } } });
   });
 
   it('a PMU task scopes members by pmuId, not divisionId', () => {
@@ -63,6 +76,7 @@ describe('buildTaskParticipantWhereFrom', () => {
       { divisionId: DIV },
       { hierarchySlot: 'osd' },
       { isSuperAdmin: true },
+      { divisionAccess: { some: { divisionId: DIV } } },
     ]);
     expect(where.OR).not.toContainEqual({ id: null });
   });

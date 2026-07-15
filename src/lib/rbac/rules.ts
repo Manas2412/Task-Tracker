@@ -22,6 +22,11 @@ export type RbacRole = 'super_admin' | 'division_head' | 'division_user';
 
 export type RbacActor = {
   id: string;
+  /**
+   * The actor's single HOME division (users.division_id). Drives ownership,
+   * display, PMU home, and reference-number identity — NOT membership reach
+   * (use `memberDivisionIds` for that; home is always included in it).
+   */
   divisionId: string;
   isSuperAdmin: boolean;
   /** hierarchy_slot = 'osd' — the JS-office coordinator acts across divisions. */
@@ -29,19 +34,15 @@ export type RbacActor = {
   /** Divisions where the actor holds head powers — direct + delegated. */
   headedDivisionIds: string[];
   /**
-   * Extra divisions this actor may ALLOCATE tasks to, beyond the base matrix —
-   * configured cross-division links (see CROSS_DIVISION_ALLOCATION_LINKS in
-   * `src/lib/rbac/index.ts`, e.g. a Khelo India head/delegate may give work to
-   * NSDF members). "Allocate" covers all three ways of putting work on a user:
-   * CREATING a division task in the linked division (`canCreateDivisionTask`),
-   * directly ASSIGNING/reassigning its owner (`canAssignTaskTo`), and
-   * TRANSFERRING to it (`canTransferTaskToOrLinked`). It grants only that reach
-   * — NOT full head powers over the linked division (no delete, no visibility
-   * of its board, no managing its existing tasks, no delegation). The
-   * reassignment APPROVAL path stays on the base matrix. Populated by
-   * `getRbacActor`; absent when there are no links for the actor.
+   * Divisions the actor is a MEMBER of: their home division plus any
+   * admin-granted extra divisions (user_division_access). Drives member-level
+   * reach — being a co-member for transfer, an assignment target within a
+   * headed division, and (for a Director) managing that division's tasks. Home
+   * is always included. It grants NO head powers (no delete, no delegation, no
+   * division-task creation). Populated by `getRbacActor`. This replaces the
+   * retired hardcoded cross-division allocation link.
    */
-  allocatableDivisionIds?: string[];
+  memberDivisionIds: string[];
 };
 
 export type RbacTarget = {
@@ -49,6 +50,9 @@ export type RbacTarget = {
   divisionId: string;
   isSuperAdmin: boolean;
   headedDivisionIds: string[];
+  /** Divisions the target is a MEMBER of (home + granted extras). A task may be
+   *  transferred/assigned to a user in ANY of their member divisions. */
+  memberDivisionIds: string[];
   isActive: boolean;
 };
 
@@ -72,16 +76,25 @@ export function isDelegationActive(
   return d.startsAt.getTime() <= t && t <= d.endsAt.getTime();
 }
 
+/** True when two member-division sets share at least one division. */
+function sharesMemberDivision(a: string[], b: string[]): boolean {
+  return a.some((d) => b.includes(d));
+}
+
 /**
  * Task transfer matrix (current owner hands the task off):
  *
  *   Super Admin   → anyone.
- *   Division Head → users in divisions they head or their home division,
- *                   another Division Head, or Super Admin.
- *   Division User → users in their own division, the head of their own
- *                   division, or Super Admin.
+ *   Division Head → users in divisions they head, a co-member of any division
+ *                   they belong to, another Division Head, or Super Admin.
+ *   Division User → a co-member of any division they belong to, the head of any
+ *                   division they belong to, or Super Admin.
  *
- * Inactive targets and self-transfers are always rejected.
+ * "Belong to" means the member set (home + admin-granted extra divisions), so a
+ * multi-division member can transfer within any of their divisions and receive
+ * tasks in any of theirs. This membership reach replaces the retired
+ * cross-division allocation link. Inactive targets and self-transfers are
+ * always rejected.
  */
 export function canTransferTaskTo(actor: RbacActor, target: RbacTarget): boolean {
   if (!target.isActive || target.id === actor.id) return false;
@@ -90,80 +103,37 @@ export function canTransferTaskTo(actor: RbacActor, target: RbacTarget): boolean
 
   if (roleOf(actor) === 'division_head') {
     if (target.headedDivisionIds.length > 0) return true;
+    // A co-member of any division the actor belongs to, or a member of any
+    // division the actor heads.
     return (
-      target.divisionId === actor.divisionId ||
-      actor.headedDivisionIds.includes(target.divisionId)
+      sharesMemberDivision(actor.memberDivisionIds, target.memberDivisionIds) ||
+      target.memberDivisionIds.some((d) => actor.headedDivisionIds.includes(d))
     );
   }
 
-  if (target.divisionId === actor.divisionId) return true;
-  return target.headedDivisionIds.includes(actor.divisionId);
+  // Division user → a co-member of any of their divisions, or the head of any
+  // division they belong to.
+  return (
+    sharesMemberDivision(actor.memberDivisionIds, target.memberDivisionIds) ||
+    actor.memberDivisionIds.some((d) => target.headedDivisionIds.includes(d))
+  );
 }
 
 /**
- * Transfer target check for the Transfer-task flow: the base matrix
- * (`canTransferTaskTo`) PLUS any configured cross-division allocation links
- * carried on `actor.allocatableDivisionIds` (e.g. a Khelo India head/delegate
- * may hand tasks to NSDF members). The reassignment APPROVAL matrix deliberately
- * stays on the base rule, so cross-division owner *proposals* remain blocked;
- * all other transfer logic is unchanged.
- */
-export function canTransferTaskToOrLinked(actor: RbacActor, target: RbacTarget): boolean {
-  if (canTransferTaskTo(actor, target)) return true;
-  if (!target.isActive || target.id === actor.id) return false;
-  return (actor.allocatableDivisionIds ?? []).includes(target.divisionId);
-}
-
-/**
- * Symmetric cross-division PARTICIPANT links. Given a task division's
- * abbreviation and the configured unordered pairs, return the OTHER division
- * abbreviations whose members may take part in that task — and, because the link
- * is symmetric, whose tasks that division's members may take part in, in return.
- * "Take part" spans every task user-picker built on the participant set: subtask
- * assignees, collaborators, and @mentions in the discussion. e.g. with
- * `[['KI','NSDF'], ['KIM','NSDF']]`, a Khelo India or Khelo India Mission task
- * may add / assign / mention an NSDF member, and an NSDF task may do the same
- * for a Khelo India / Khelo India Mission member.
- *
- * Unlike the allocation link (§5.6, head-only), this reach is open to ALL
- * members of the linked divisions, not just heads — it widens only who may
- * participate, granting no head powers or visibility of the other board.
- *
- * Pure (no DB) so it is unit-testable and keyed by ABBREVIATION, which has no
- * admin edit path — a division rename cannot silently break the link. A
- * division is never linked to itself; unknown abbreviations simply yield an
- * empty set (fail-closed).
- */
-export function linkedParticipantAbbreviations(
-  divisionAbbr: string,
-  links: readonly (readonly [string, string])[],
-): string[] {
-  const out = new Set<string>();
-  for (const [a, b] of links) {
-    if (a === divisionAbbr) out.add(b);
-    if (b === divisionAbbr) out.add(a);
-  }
-  out.delete(divisionAbbr);
-  return [...out];
-}
-
-/**
- * Assignment matrix (setting a task's owner directly, without the
- * target's consent): Super Admin assigns anywhere; a Division Head within
- * divisions they head (their home division counts while they hold any
- * headship) OR a cross-division allocation link (e.g. a Khelo India
- * head/delegate may assign to NSDF members). Division users cannot assign
- * directly — they go through transfer (with a mandatory comment) or the
- * approval flow.
+ * Assignment matrix (setting a task's owner directly, without the target's
+ * consent): Super Admin assigns anywhere; otherwise the actor must hold a
+ * headship (the head-power gate — a plain member cannot assign). A head may
+ * assign to any user who is a MEMBER of a division they head, or to a co-member
+ * of any division they belong to. Division users cannot assign directly — they
+ * go through transfer (with a mandatory comment) or the approval flow.
  */
 export function canAssignTaskTo(actor: RbacActor, target: RbacTarget): boolean {
   if (!target.isActive) return false;
   if (actor.isSuperAdmin) return true;
   if (actor.headedDivisionIds.length === 0) return false;
   return (
-    actor.headedDivisionIds.includes(target.divisionId) ||
-    target.divisionId === actor.divisionId ||
-    (actor.allocatableDivisionIds ?? []).includes(target.divisionId)
+    target.memberDivisionIds.some((d) => actor.headedDivisionIds.includes(d)) ||
+    sharesMemberDivision(actor.memberDivisionIds, target.memberDivisionIds)
   );
 }
 
@@ -176,19 +146,16 @@ export function canActAsHeadOf(actor: RbacActor, divisionId: string): boolean {
 /**
  * Division-level task creation (visibility: 'division') — giving work on a
  * division's board is reserved for Super Admin, OSD, the division's head or an
- * active delegate (`headedDivisionIds` covers direct + delegated), OR a head
- * with a cross-division allocation link into that division (e.g. a Khelo India
- * head/delegate may create division tasks for NSDF). Everyone else creates
- * personal tasks only. The same rule also gates changing an existing task's
- * visibility. (Moving a task into a different division is a separate,
+ * active delegate (`headedDivisionIds` covers direct + delegated). Everyone
+ * else creates personal tasks only. Crucially, mere MEMBERSHIP of a division
+ * does NOT grant this — a non-head member creates personal tasks only, exactly
+ * as in their home division. The same rule also gates changing an existing
+ * task's visibility. (Moving a task into a different division is a separate,
  * Super-Admin/OSD-only gate in `updateTaskFieldsAction` — not this rule.)
  */
 export function canCreateDivisionTask(actor: RbacActor, divisionId: string): boolean {
   if (actor.isSuperAdmin || actor.isOsd) return true;
-  return (
-    actor.headedDivisionIds.includes(divisionId) ||
-    (actor.allocatableDivisionIds ?? []).includes(divisionId)
-  );
+  return actor.headedDivisionIds.includes(divisionId);
 }
 
 /**
@@ -203,7 +170,9 @@ export function canCreateDivisionTask(actor: RbacActor, divisionId: string): boo
  *     rights even after ownership is handed to someone else, so a Head / OSD /
  *     Super Admin who set up a task can still curate its collaborators;
  *   - a Super Admin, OSD, or JS (whole-office oversight);
- *   - a Director of the task's own division;
+ *   - a Director who is a MEMBER of the task's division (home or an
+ *     admin-granted extra division) — a Director member manages that division's
+ *     tasks;
  *   - the head of the task's division — INCLUDING an active delegate, since
  *     `headedDivisionIds` folds in live delegations. A delegate is the
  *     temporary head for the delegation's lifetime and manages its tasks
@@ -216,7 +185,8 @@ export function canManageTask(
     id: string;
     isSuperAdmin: boolean;
     hierarchySlot: string;
-    divisionId: string;
+    /** The caller's member divisions (home + granted extras). */
+    memberDivisionIds: string[];
     headedDivisionIds: string[];
   },
   task: { ownerId: string; createdById: string; divisionId: string },
@@ -224,7 +194,9 @@ export function canManageTask(
   if (task.ownerId === caller.id || task.createdById === caller.id) return true;
   if (caller.isSuperAdmin) return true;
   if (caller.hierarchySlot === 'osd' || caller.hierarchySlot === 'js') return true;
-  if (caller.hierarchySlot === 'director' && caller.divisionId === task.divisionId) return true;
+  if (caller.hierarchySlot === 'director' && caller.memberDivisionIds.includes(task.divisionId)) {
+    return true;
+  }
   return caller.headedDivisionIds.includes(task.divisionId);
 }
 
@@ -249,16 +221,19 @@ export function isEligibleDelegate(
   target: {
     id: string;
     isActive: boolean;
-    divisionId: string;
+    /** The target's member divisions (home + granted extras). */
+    memberDivisionIds: string[];
     directHeadedDivisionIds: string[];
   },
   ctx: { divisionId: string; delegatorId: string; delegatorHomeDivisionId: string },
 ): boolean {
   if (!target.isActive || target.id === ctx.delegatorId) return false;
   if (target.directHeadedDivisionIds.length > 0) return true;
+  // A member (home or granted) of the delegated division, or of the delegator's
+  // home division, qualifies.
   return (
-    target.divisionId === ctx.divisionId ||
-    target.divisionId === ctx.delegatorHomeDivisionId
+    target.memberDivisionIds.includes(ctx.divisionId) ||
+    target.memberDivisionIds.includes(ctx.delegatorHomeDivisionId)
   );
 }
 

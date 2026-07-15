@@ -61,7 +61,11 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
   const [users, divisionsRaw] = await Promise.all([
     prisma.user.findMany({
       where: whereFilter,
-      include: { division: true, subDivision: true },
+      include: {
+        division: true,
+        subDivision: true,
+        divisionAccess: { select: { divisionId: true } },
+      },
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     }),
     prisma.division.findMany({
@@ -117,6 +121,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
     subDivisionName: u.subDivision?.name ?? null,
     sectionId: u.sectionId,
     pmuId: u.pmuId,
+    extraDivisionIds: u.divisionAccess.map((a) => a.divisionId),
     supervisorId: u.supervisorId,
     isActive: u.isActive,
     isSuperAdmin: u.isSuperAdmin,

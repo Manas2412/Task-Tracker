@@ -16,6 +16,7 @@ import {
   notifyDocumentAudience,
   writeDocumentAudit,
 } from '@/lib/document-centre';
+import { getMemberDivisionIds } from '@/lib/rbac';
 import { isTaskCollaborator } from '@/lib/task-participants';
 import {
   deleteObject as deleteS3Object,
@@ -121,13 +122,16 @@ export async function canEditTfAttachments(
 ): Promise<boolean> {
   const me = await prisma.user.findUnique({
     where: { id: callerId },
-    select: { isSuperAdmin: true, hierarchySlot: true, divisionId: true },
+    select: { isSuperAdmin: true, hierarchySlot: true },
   });
   if (!me) return false;
   if (me.isSuperAdmin || me.hierarchySlot === 'osd') return true;
   if (me.hierarchySlot !== 'director') return false;
+  // A Director who is a member (home or admin-granted extra) of any division
+  // the file is marked to may edit its action documents.
+  const memberDivisionIds = await getMemberDivisionIds(callerId);
   const marked = await prisma.timelineFileMarkedTo.findFirst({
-    where: { timelineFileId: tfId, divisionId: me.divisionId },
+    where: { timelineFileId: tfId, divisionId: { in: memberDivisionIds } },
     select: { timelineFileId: true },
   });
   return !!marked;

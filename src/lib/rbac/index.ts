@@ -1,8 +1,7 @@
 import { prisma } from '@/lib/db';
 
 import {
-  canTransferTaskToOrLinked,
-  linkedParticipantAbbreviations,
+  canTransferTaskTo,
   type RbacActor,
   type RbacTarget,
 } from './rules';
@@ -10,81 +9,29 @@ import {
 export * from './rules';
 
 /**
- * Configured cross-division ALLOCATION links. A head/delegate of the KEY
- * division may allocate tasks to members of the listed divisions on top of the
- * normal matrix — where "allocate" means all three ways of putting work on a
- * user: creating a division task there (`canCreateDivisionTask`), assigning /
- * reassigning its owner (`canAssignTaskTo`), and transferring to it
- * (`canTransferTaskToOrLinked`). It grants only that reach, NOT full head
- * powers over the linked division.
- *
- * Divisions are keyed by their ABBREVIATION (e.g. 'KI', 'NSDF') — unlike the
- * display name, an abbreviation is set once at creation and has no admin edit
- * path, so a division rename in Structure & Hierarchy cannot silently break the
- * link. If no division carries the abbreviation, the link is simply skipped —
- * fail-closed: it only ever adds the extra reach, never removes a base-matrix
- * permission.
- *
- * Product rule: the Khelo India (KI) division head/delegate may allocate tasks
- * to NSDF members. Everything else stays on the base matrix.
- */
-const CROSS_DIVISION_ALLOCATION_LINKS: Record<string, string[]> = {
-  KI: ['NSDF'],
-};
-
-/**
- * Configured cross-division PARTICIPANT links — symmetric, unordered pairs keyed
- * by ABBREVIATION. Members of either division in a pair may take part in the
- * other division's tasks (both directions): as subtask assignees, collaborators,
- * and @mentions in the discussion. Open to ALL members, not just heads, and
- * grants participant reach only — no head powers, no board visibility (see
- * `linkedParticipantAbbreviations` in ./rules and PERMISSIONS §5.17).
- *
- * Product rule: Khelo India (KI) and Khelo India Mission (KIM) are each linked
- * with NSDF, so their members may collaborate across the boundary in either
- * direction. Add more pairs here. Resolution is fail-closed — an abbreviation
- * that matches no division simply drops that pair.
- */
-const CROSS_DIVISION_PARTICIPANT_LINKS: readonly (readonly [string, string])[] = [
-  ['KI', 'NSDF'],
-  ['KIM', 'NSDF'],
-];
-
-/**
- * Division ids whose members may take part in a task belonging to
- * `taskDivisionId`, via `CROSS_DIVISION_PARTICIPANT_LINKS`. Resolves the task
- * division's abbreviation to its symmetric link targets, then those target
- * abbreviations back to division ids. Returns [] when the division is unknown,
- * carries no linked abbreviation, or no division matches a target abbreviation.
- */
-export async function getLinkedParticipantDivisionIds(taskDivisionId: string): Promise<string[]> {
-  const division = await prisma.division.findUnique({
-    where: { id: taskDivisionId },
-    select: { abbreviation: true },
-  });
-  if (!division) return [];
-
-  const targetAbbrs = linkedParticipantAbbreviations(
-    division.abbreviation,
-    CROSS_DIVISION_PARTICIPANT_LINKS,
-  );
-  if (targetAbbrs.length === 0) return [];
-
-  // `abbreviation` is not DB-unique, so resolve to EVERY division carrying a
-  // target abbreviation (deterministic, not scan-order-dependent).
-  const divisions = await prisma.division.findMany({
-    where: { abbreviation: { in: targetAbbrs } },
-    select: { id: true },
-  });
-  return divisions.map((d) => d.id);
-}
-
-/**
  * DB-backed context builders for division-based RBAC.
  *
  * Everything here re-reads role state from the database — never from JWT
- * claims — so a head change or a delegation takes effect on the next
- * request, not the next sign-in.
+ * claims — so a head change, a delegation, or a division-membership grant takes
+ * effect on the next request, not the next sign-in.
+ *
+ * Two distinct division sets per user, kept strictly separate:
+ *   - `headedDivisionIds` — divisions the user holds HEAD powers over (direct
+ *     headship + active delegations). Drives head-only powers: curation,
+ *     delete, delegation, and creating division-visibility tasks. A member is
+ *     never a head.
+ *   - `memberDivisionIds` — divisions the user is a MEMBER of: their single
+ *     home division (users.division_id) plus any admin-granted extra divisions
+ *     (user_division_access). Drives member-level access: board visibility
+ *     (tasks + Timeline Files), participation (collaborator / subtask assignee /
+ *     @mention), being an assignment / transfer target, pulling unassigned
+ *     tasks, and director-management. Membership NEVER confers head powers.
+ *
+ * The home `divisionId` alone still drives ownership, display, PMU home, and
+ * reference-number identity. This admin-managed membership model replaces the
+ * previously hardcoded cross-division link configs (KI↔NSDF allocation +
+ * participant, and the per-username view grants) — cross-division reach is now
+ * set per user via user_division_access, not in code.
  */
 
 /**
@@ -117,46 +64,24 @@ export async function getHeadedDivisionIds(
 }
 
 /**
- * Extra divisions the actor may ALLOCATE tasks to (create / assign / transfer)
- * via `CROSS_DIVISION_ALLOCATION_LINKS`, resolved from the divisions they
- * currently head (direct + delegated). Returns [] for non-heads (the common
- * case) without touching the database.
+ * Divisions the user is a MEMBER of right now: their single home division
+ * (users.division_id) plus every admin-granted extra division
+ * (user_division_access). Home is always included. This is the member set
+ * consulted for board visibility, participation, assignment / transfer
+ * targeting, pull, and director-management — NEVER for head powers.
+ *
+ * Returns `[homeDivisionId]` for the common case (no extra grants) plus any
+ * extras, deduped. Returns [] only when the user is missing.
  */
-export async function getAllocatableDivisionIds(headedDivisionIds: string[]): Promise<string[]> {
-  if (headedDivisionIds.length === 0) return [];
-
-  const abbreviations = new Set<string>();
-  for (const [head, targets] of Object.entries(CROSS_DIVISION_ALLOCATION_LINKS)) {
-    abbreviations.add(head);
-    for (const t of targets) abbreviations.add(t);
-  }
-
-  const divisions = await prisma.division.findMany({
-    where: { abbreviation: { in: [...abbreviations] } },
-    select: { id: true, abbreviation: true },
-  });
-  // Group ALL ids per abbreviation. `abbreviation` is not DB-unique (no
-  // @unique / admin uniqueness check), so a misconfigured duplicate must be
-  // handled deterministically — resolve the link to every division carrying
-  // the abbreviation rather than a scan-order-dependent last-write-wins single.
-  const idsByAbbr = new Map<string, string[]>();
-  for (const d of divisions) {
-    const list = idsByAbbr.get(d.abbreviation) ?? [];
-    list.push(d.id);
-    idsByAbbr.set(d.abbreviation, list);
-  }
-  const headed = new Set(headedDivisionIds);
-
-  const extra = new Set<string>();
-  for (const [headAbbr, targetAbbrs] of Object.entries(CROSS_DIVISION_ALLOCATION_LINKS)) {
-    // Grant only when the actor heads a division carrying the KEY abbreviation.
-    const headsKey = (idsByAbbr.get(headAbbr) ?? []).some((id) => headed.has(id));
-    if (!headsKey) continue;
-    for (const ta of targetAbbrs) {
-      for (const tid of idsByAbbr.get(ta) ?? []) extra.add(tid);
-    }
-  }
-  return [...extra];
+export async function getMemberDivisionIds(userId: string): Promise<string[]> {
+  const [user, extras] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { divisionId: true } }),
+    prisma.userDivisionAccess.findMany({ where: { userId }, select: { divisionId: true } }),
+  ]);
+  if (!user) return [];
+  const ids = new Set<string>([user.divisionId]);
+  for (const e of extras) ids.add(e.divisionId);
+  return [...ids];
 }
 
 /** Full RBAC view of one user, or null when the user is missing/disabled. */
@@ -172,15 +97,17 @@ export async function getRbacActor(userId: string): Promise<RbacActor | null> {
     },
   });
   if (!user || !user.isActive) return null;
-  const headedDivisionIds = await getHeadedDivisionIds(userId);
-  const allocatableDivisionIds = await getAllocatableDivisionIds(headedDivisionIds);
+  const [headedDivisionIds, memberDivisionIds] = await Promise.all([
+    getHeadedDivisionIds(userId),
+    getMemberDivisionIds(userId),
+  ]);
   return {
     id: user.id,
     divisionId: user.divisionId,
     isSuperAdmin: user.isSuperAdmin,
     isOsd: user.hierarchySlot === 'osd',
     headedDivisionIds,
-    allocatableDivisionIds,
+    memberDivisionIds,
   };
 }
 
@@ -251,6 +178,23 @@ export async function getHeadedDivisionsByUser(
   return new Map([...byUser].map(([k, v]) => [k, [...v]]));
 }
 
+/**
+ * Map of userId → the divisions they are a MEMBER of (home division + granted
+ * extras), for decorating candidate lists without one query per user. The
+ * batch analogue of `getMemberDivisionIds`; mirrors `getHeadedDivisionsByUser`.
+ * Keyed on active users; an access row for an inactive user is ignored.
+ */
+export async function getMemberDivisionsByUser(): Promise<Map<string, string[]>> {
+  const [users, accessRows] = await Promise.all([
+    prisma.user.findMany({ where: { isActive: true }, select: { id: true, divisionId: true } }),
+    prisma.userDivisionAccess.findMany({ select: { userId: true, divisionId: true } }),
+  ]);
+  const byUser = new Map<string, Set<string>>();
+  for (const u of users) byUser.set(u.id, new Set<string>([u.divisionId]));
+  for (const a of accessRows) byUser.get(a.userId)?.add(a.divisionId);
+  return new Map([...byUser].map(([k, v]) => [k, [...v]]));
+}
+
 /** RBAC view of a prospective transfer/assignment target. */
 export async function getRbacTarget(userId: string): Promise<RbacTarget | null> {
   const user = await prisma.user.findUnique({
@@ -258,12 +202,16 @@ export async function getRbacTarget(userId: string): Promise<RbacTarget | null> 
     select: { id: true, divisionId: true, isSuperAdmin: true, isActive: true },
   });
   if (!user) return null;
-  const headedDivisionIds = await getHeadedDivisionIds(userId);
+  const [headedDivisionIds, memberDivisionIds] = await Promise.all([
+    getHeadedDivisionIds(userId),
+    getMemberDivisionIds(userId),
+  ]);
   return {
     id: user.id,
     divisionId: user.divisionId,
     isSuperAdmin: user.isSuperAdmin,
     headedDivisionIds,
+    memberDivisionIds,
     isActive: user.isActive,
   };
 }
@@ -312,7 +260,7 @@ export type TransferTargetRow = {
  * in memory (the ministry has well under a thousand users).
  */
 export async function fetchTransferTargets(actor: RbacActor): Promise<TransferTargetRow[]> {
-  const [users, headedByUser] = await Promise.all([
+  const [users, headedByUser, memberByUser] = await Promise.all([
     prisma.user.findMany({
       where: { isActive: true, id: { not: actor.id } },
       select: {
@@ -326,15 +274,17 @@ export async function fetchTransferTargets(actor: RbacActor): Promise<TransferTa
       orderBy: { name: 'asc' },
     }),
     getHeadedDivisionsByUser(),
+    getMemberDivisionsByUser(),
   ]);
 
   return users
     .filter((u) =>
-      canTransferTaskToOrLinked(actor, {
+      canTransferTaskTo(actor, {
         id: u.id,
         divisionId: u.divisionId,
         isSuperAdmin: u.isSuperAdmin,
         headedDivisionIds: headedByUser.get(u.id) ?? [],
+        memberDivisionIds: memberByUser.get(u.id) ?? [u.divisionId],
         isActive: true,
       }),
     )

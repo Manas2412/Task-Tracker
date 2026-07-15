@@ -7,9 +7,7 @@ import {
   canDelegateDivision,
   canManageTask,
   canTransferTaskTo,
-  canTransferTaskToOrLinked,
   isEligibleDelegate,
-  linkedParticipantAbbreviations,
   roleOf,
   type RbacActor,
   type RbacTarget,
@@ -24,22 +22,29 @@ const ABD = 'div-abd';
 const MEDIA = 'div-media';
 const OJS = 'div-ojs';
 
+// memberDivisionIds always includes the home division; unless a test grants an
+// extra membership explicitly, it defaults to just the home division so the
+// single-division cases read exactly as before.
 function actor(overrides: Partial<RbacActor> = {}): RbacActor {
+  const divisionId = overrides.divisionId ?? KI;
   return {
     id: 'actor-1',
-    divisionId: KI,
+    divisionId,
     isSuperAdmin: false,
     headedDivisionIds: [],
+    memberDivisionIds: [divisionId],
     ...overrides,
   };
 }
 
 function target(overrides: Partial<RbacTarget> = {}): RbacTarget {
+  const divisionId = overrides.divisionId ?? KI;
   return {
     id: 'target-1',
-    divisionId: KI,
+    divisionId,
     isSuperAdmin: false,
     headedDivisionIds: [],
+    memberDivisionIds: [divisionId],
     isActive: true,
     ...overrides,
   };
@@ -54,6 +59,13 @@ describe('roleOf', () => {
 
   it('super admin wins over headship', () => {
     expect(roleOf({ isSuperAdmin: true, headedDivisionIds: [KI] })).toBe('super_admin');
+  });
+
+  it('membership never promotes to division_head', () => {
+    // A member of many divisions but head of none stays a division_user.
+    expect(
+      roleOf({ isSuperAdmin: false, headedDivisionIds: [] }),
+    ).toBe('division_user');
   });
 });
 
@@ -137,47 +149,30 @@ describe('canTransferTaskTo — super admin', () => {
   });
 });
 
-describe('canTransferTaskToOrLinked — cross-division links (Khelo India → NSDF)', () => {
-  // Chanchal: home + head of KI, granted the KI→NSDF transfer link.
-  const kiHead = actor({ id: 'chanchal', divisionId: KI, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
-
-  it('lets a Khelo India head transfer to an NSDF member (beyond the base matrix)', () => {
-    // The base matrix alone forbids it — a plain NSDF member is neither in KI nor a head.
-    expect(canTransferTaskTo(kiHead, target({ divisionId: NSDF }))).toBe(false);
-    expect(canTransferTaskToOrLinked(kiHead, target({ divisionId: NSDF }))).toBe(true);
+describe('canTransferTaskTo — multi-division membership', () => {
+  it('a member of two divisions can transfer to a co-member of either', () => {
+    // Home KI, also a full member of NSDF via an admin grant. This is the
+    // membership-native replacement for the retired KI→NSDF allocation link.
+    const dual = actor({ divisionId: KI, memberDivisionIds: [KI, NSDF] });
+    expect(canTransferTaskTo(dual, target({ divisionId: NSDF }))).toBe(true);
+    expect(canTransferTaskTo(dual, target({ divisionId: KI }))).toBe(true);
+    // still not to an unrelated division
+    expect(canTransferTaskTo(dual, target({ divisionId: MEDIA }))).toBe(false);
   });
 
-  it('works the same for a KI delegate (headship via delegation)', () => {
-    // A user whose home is elsewhere but who holds the KI headship + link.
-    const delegate = actor({ id: 'deleg', divisionId: MEDIA, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
-    expect(canTransferTaskToOrLinked(delegate, target({ divisionId: NSDF }))).toBe(true);
-  });
-
-  it('does not widen the link to other divisions', () => {
-    expect(canTransferTaskToOrLinked(kiHead, target({ divisionId: MEDIA }))).toBe(false);
-    expect(canTransferTaskToOrLinked(kiHead, target({ divisionId: SGM }))).toBe(false);
-  });
-
-  it('still rejects inactive NSDF targets and self-transfers', () => {
-    expect(canTransferTaskToOrLinked(kiHead, target({ divisionId: NSDF, isActive: false }))).toBe(false);
-    expect(canTransferTaskToOrLinked(kiHead, target({ id: kiHead.id, divisionId: NSDF }))).toBe(false);
-  });
-
-  it('grants nothing extra to a regular Khelo India user (no link, not a head)', () => {
+  it('reaches a target via the target’s extra membership too', () => {
+    // The target is homed in NSDF but also a member of KI — a KI user reaches them.
     const kiUser = actor({ divisionId: KI });
-    expect(canTransferTaskToOrLinked(kiUser, target({ divisionId: NSDF }))).toBe(false);
+    expect(
+      canTransferTaskTo(kiUser, target({ divisionId: NSDF, memberDivisionIds: [NSDF, KI] })),
+    ).toBe(true);
   });
 
-  it('is one-way — an NSDF head with no link cannot reach KI members through it', () => {
-    const nsdfHead = actor({ id: 'zuber', divisionId: ABD, headedDivisionIds: [ABD, NSDF] });
-    // A plain KI member is outside Zuber's headed divisions and not a head himself.
-    expect(canTransferTaskToOrLinked(nsdfHead, target({ divisionId: KI }))).toBe(false);
-  });
-
-  it('preserves the base matrix when there is no link', () => {
-    // Identical to canTransferTaskTo for the ordinary same-division case.
-    const plain = actor({ divisionId: KI });
-    expect(canTransferTaskToOrLinked(plain, target({ divisionId: KI }))).toBe(true);
+  it('a plain KI user cannot reach an NSDF member without a shared membership', () => {
+    const kiUser = actor({ divisionId: KI, memberDivisionIds: [KI] });
+    expect(
+      canTransferTaskTo(kiUser, target({ divisionId: NSDF, memberDivisionIds: [NSDF] })),
+    ).toBe(false);
   });
 });
 
@@ -204,24 +199,18 @@ describe('canAssignTaskTo', () => {
     expect(canAssignTaskTo(sa, target({ isActive: false }))).toBe(false);
   });
 
-  it('honours a cross-division allocation link (KI head → NSDF)', () => {
-    const kiHead = actor({ divisionId: KI, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
-    expect(canAssignTaskTo(kiHead, target({ divisionId: NSDF }))).toBe(true);
-    // link is scoped: no reach to unlinked divisions, and never to inactive.
-    expect(canAssignTaskTo(kiHead, target({ divisionId: MEDIA }))).toBe(false);
-    expect(canAssignTaskTo(kiHead, target({ divisionId: NSDF, isActive: false }))).toBe(false);
+  it('a head assigns to a member of a headed division, even one homed elsewhere', () => {
+    // Membership replaces the old allocation link: a user homed in MEDIA but
+    // granted NSDF membership is assignable by NSDF's head.
+    const head = actor({ divisionId: ABD, headedDivisionIds: [ABD, NSDF] });
+    expect(
+      canAssignTaskTo(head, target({ divisionId: MEDIA, memberDivisionIds: [MEDIA, NSDF] })),
+    ).toBe(true);
   });
 
-  it('a KI delegate (home elsewhere) also assigns to NSDF via the link', () => {
-    const delegate = actor({ divisionId: MEDIA, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
-    expect(canAssignTaskTo(delegate, target({ divisionId: NSDF }))).toBe(true);
-  });
-
-  it('a non-head with a stray link still cannot assign (assignment is head-only)', () => {
-    // Links are derived from headship, so this never occurs in practice; the
-    // head-only guard keeps it fail-safe regardless.
-    const plain = actor({ divisionId: KI, headedDivisionIds: [], allocatableDivisionIds: [NSDF] });
-    expect(canAssignTaskTo(plain, target({ divisionId: NSDF }))).toBe(false);
+  it('membership alone does not let a non-head assign (assignment is head-only)', () => {
+    const member = actor({ divisionId: KI, headedDivisionIds: [], memberDivisionIds: [KI, NSDF] });
+    expect(canAssignTaskTo(member, target({ divisionId: NSDF }))).toBe(false);
   });
 });
 
@@ -233,11 +222,11 @@ describe('canActAsHeadOf', () => {
     expect(canActAsHeadOf(actor({ isSuperAdmin: true }), KI)).toBe(true);
   });
 
-  it('a cross-division allocation link does NOT confer head powers', () => {
-    // KI head may ALLOCATE to NSDF, but is not a head of NSDF — no delete,
+  it('membership does NOT confer head powers', () => {
+    // A member of NSDF (not its head) gets no head powers there — no delete,
     // no free reassignment of NSDF's own tasks, no delegation.
-    const kiHead = actor({ headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
-    expect(canActAsHeadOf(kiHead, NSDF)).toBe(false);
+    const member = actor({ headedDivisionIds: [KI], memberDivisionIds: [KI, NSDF] });
+    expect(canActAsHeadOf(member, NSDF)).toBe(false);
   });
 });
 
@@ -275,17 +264,12 @@ describe('canCreateDivisionTask', () => {
     expect(canCreateDivisionTask(user, SGM)).toBe(false);
   });
 
-  it('honours a cross-division allocation link (KI head → NSDF)', () => {
-    const kiHead = actor({ divisionId: KI, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
-    expect(canCreateDivisionTask(kiHead, NSDF)).toBe(true);
-    expect(canCreateDivisionTask(kiHead, KI)).toBe(true);
-    // scoped: no reach to divisions outside the link.
-    expect(canCreateDivisionTask(kiHead, MEDIA)).toBe(false);
-  });
-
-  it('a KI delegate (home elsewhere) also creates NSDF tasks via the link', () => {
-    const delegate = actor({ divisionId: MEDIA, headedDivisionIds: [KI], allocatableDivisionIds: [NSDF] });
-    expect(canCreateDivisionTask(delegate, NSDF)).toBe(true);
+  it('membership does NOT grant division-task creation (a non-head member)', () => {
+    // Full membership of NSDF lets the user see and work NSDF tasks, but
+    // creating a division-visibility task stays a head power.
+    const member = actor({ divisionId: KI, headedDivisionIds: [], memberDivisionIds: [KI, NSDF] });
+    expect(canCreateDivisionTask(member, NSDF)).toBe(false);
+    expect(canCreateDivisionTask(member, KI)).toBe(false);
   });
 });
 
@@ -298,14 +282,14 @@ describe('canManageTask — edit fields + manage collaborators', () => {
       id: string;
       isSuperAdmin: boolean;
       hierarchySlot: string;
-      divisionId: string;
+      memberDivisionIds: string[];
       headedDivisionIds: string[];
     }> = {},
   ) => ({
     id: 'caller-1',
     isSuperAdmin: false,
     hierarchySlot: 'under_secretary',
-    divisionId: SGM,
+    memberDivisionIds: [SGM],
     headedDivisionIds: [] as string[],
     ...overrides,
   });
@@ -328,12 +312,17 @@ describe('canManageTask — edit fields + manage collaborators', () => {
     expect(canManageTask(caller({ hierarchySlot: 'js' }), task)).toBe(true);
   });
 
-  it("allows a Director of the task's own division only", () => {
+  it("allows a Director who is a member of the task's division (home or granted)", () => {
     expect(
-      canManageTask(caller({ hierarchySlot: 'director', divisionId: SGM }), task),
+      canManageTask(caller({ hierarchySlot: 'director', memberDivisionIds: [SGM] }), task),
     ).toBe(true);
+    // A Director homed in KI but granted SGM membership manages SGM tasks.
     expect(
-      canManageTask(caller({ hierarchySlot: 'director', divisionId: KI }), task),
+      canManageTask(caller({ hierarchySlot: 'director', memberDivisionIds: [KI, SGM] }), task),
+    ).toBe(true);
+    // A Director who is not a member of the task's division cannot.
+    expect(
+      canManageTask(caller({ hierarchySlot: 'director', memberDivisionIds: [KI] }), task),
     ).toBe(false);
   });
 
@@ -344,12 +333,14 @@ describe('canManageTask — edit fields + manage collaborators', () => {
   it('allows an active DELEGATE of the division (delegation folds into headedDivisionIds)', () => {
     // A user homed elsewhere, holding a live delegation over SGM, is the
     // temporary head and manages SGM tasks — including their collaborators.
-    const delegate = caller({ id: 'deleg', divisionId: MEDIA, headedDivisionIds: [SGM] });
+    const delegate = caller({ id: 'deleg', memberDivisionIds: [MEDIA], headedDivisionIds: [SGM] });
     expect(canManageTask(delegate, task)).toBe(true);
   });
 
   it('rejects a plain member who is neither owner, creator, nor head', () => {
-    expect(canManageTask(caller({ id: 'someone-else', divisionId: SGM }), task)).toBe(false);
+    expect(
+      canManageTask(caller({ id: 'someone-else', memberDivisionIds: [SGM] }), task),
+    ).toBe(false);
   });
 
   it('rejects a head of a different division', () => {
@@ -369,64 +360,40 @@ describe('canDelegateDivision', () => {
 describe('isEligibleDelegate', () => {
   const ctx = { divisionId: NSDF, delegatorId: 'zuber', delegatorHomeDivisionId: ABD };
 
-  const person = (overrides: Record<string, unknown>) => ({
-    id: 'p1',
-    isActive: true,
-    divisionId: KI,
-    directHeadedDivisionIds: [] as string[],
-    ...overrides,
+  const person = (overrides: {
+    id?: string;
+    isActive?: boolean;
+    divisionId?: string;
+    memberDivisionIds?: string[];
+    directHeadedDivisionIds?: string[];
+  }) => ({
+    id: overrides.id ?? 'p1',
+    isActive: overrides.isActive ?? true,
+    memberDivisionIds: overrides.memberDivisionIds ?? [overrides.divisionId ?? KI],
+    directHeadedDivisionIds: overrides.directHeadedDivisionIds ?? [],
   });
 
   it('accepts another direct division head', () => {
     expect(isEligibleDelegate(person({ directHeadedDivisionIds: [SGM] }), ctx)).toBe(true);
   });
 
-  it('accepts a user of the delegated division', () => {
+  it('accepts a member of the delegated division', () => {
     expect(isEligibleDelegate(person({ divisionId: NSDF }), ctx)).toBe(true);
   });
 
-  it("accepts a user of the delegator's home division", () => {
+  it("accepts a member of the delegator's home division", () => {
     expect(isEligibleDelegate(person({ divisionId: ABD }), ctx)).toBe(true);
+  });
+
+  it('accepts a member of the delegated division via an admin-granted extra membership', () => {
+    expect(
+      isEligibleDelegate(person({ divisionId: KI, memberDivisionIds: [KI, NSDF] }), ctx),
+    ).toBe(true);
   });
 
   it('rejects outsiders, the delegator, and inactive users', () => {
     expect(isEligibleDelegate(person({ divisionId: KI }), ctx)).toBe(false);
     expect(isEligibleDelegate(person({ id: 'zuber', divisionId: NSDF }), ctx)).toBe(false);
     expect(isEligibleDelegate(person({ divisionId: NSDF, isActive: false }), ctx)).toBe(false);
-  });
-});
-
-// The configured cross-division participant links for the ministry: Khelo India
-// (KI) and Khelo India Mission (KIM) are each symmetrically linked with NSDF.
-// These govern subtask assignees, collaborators, and @mentions alike.
-const PARTICIPANT_LINKS: readonly (readonly [string, string])[] = [
-  ['KI', 'NSDF'],
-  ['KIM', 'NSDF'],
-];
-
-describe('linkedParticipantAbbreviations', () => {
-  it('KI and KIM both link out to NSDF', () => {
-    expect(linkedParticipantAbbreviations('KI', PARTICIPANT_LINKS)).toEqual(['NSDF']);
-    expect(linkedParticipantAbbreviations('KIM', PARTICIPANT_LINKS)).toEqual(['NSDF']);
-  });
-
-  it('is symmetric — NSDF links back to both KI and KIM', () => {
-    const linked = linkedParticipantAbbreviations('NSDF', PARTICIPANT_LINKS);
-    expect(new Set(linked)).toEqual(new Set(['KI', 'KIM']));
-  });
-
-  it('an unlinked division gets nothing', () => {
-    expect(linkedParticipantAbbreviations('SGM', PARTICIPANT_LINKS)).toEqual([]);
-    expect(linkedParticipantAbbreviations('OJS', PARTICIPANT_LINKS)).toEqual([]);
-  });
-
-  it('never links a division to itself', () => {
-    expect(linkedParticipantAbbreviations('KI', [['KI', 'KI']])).toEqual([]);
-  });
-
-  it('does not bridge KI and KIM through their shared NSDF link', () => {
-    // KI links to NSDF, KIM links to NSDF, but KI must not reach KIM.
-    expect(linkedParticipantAbbreviations('KI', PARTICIPANT_LINKS)).not.toContain('KIM');
-    expect(linkedParticipantAbbreviations('KIM', PARTICIPANT_LINKS)).not.toContain('KI');
   });
 });

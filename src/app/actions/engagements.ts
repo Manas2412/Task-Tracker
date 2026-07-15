@@ -8,6 +8,7 @@ import { auth } from '@/lib/auth';
 import { istWallClockToUtc } from '@/lib/date';
 import { prisma } from '@/lib/db';
 import { canAccessEngagements, getOfficeOfJsDivisionId } from '@/lib/engagements';
+import { getMemberDivisionIds } from '@/lib/rbac';
 
 import type { EngagementDetailData, EngagementState } from './states';
 
@@ -49,17 +50,18 @@ async function requireEngagementManager(
   if (!session?.user) {
     return { ok: false, state: fail('You are signed out.', epoch) };
   }
-  const [me, officeOfJsDivisionId] = await Promise.all([
+  const [me, officeOfJsDivisionId, memberDivisionIds] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { id: true, divisionId: true, isSuperAdmin: true, isActive: true },
+      select: { id: true, isSuperAdmin: true, isActive: true },
     }),
     getOfficeOfJsDivisionId(),
+    getMemberDivisionIds(session.user.id),
   ]);
   if (!me?.isActive) {
     return { ok: false, state: fail('Your account could not be found.', epoch) };
   }
-  if (!canAccessEngagements(me, officeOfJsDivisionId)) {
+  if (!canAccessEngagements({ memberDivisionIds, isSuperAdmin: me.isSuperAdmin }, officeOfJsDivisionId)) {
     return {
       ok: false,
       state: fail('Only the Office of JS or a Super Admin can manage engagements.', epoch),

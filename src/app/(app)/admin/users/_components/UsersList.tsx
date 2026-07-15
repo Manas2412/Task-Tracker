@@ -31,6 +31,8 @@ export type UserRow = {
   sectionId: string | null;
   pmuId: string | null;
   divisionId: string;
+  /** Extra divisions this user is a full member of, beyond their home division. */
+  extraDivisionIds: string[];
   supervisorId: string | null;
   isActive: boolean;
   isSuperAdmin: boolean;
@@ -263,6 +265,7 @@ function rowToDefaults(u: UserRow): UserFormDefaults {
     subDivisionId: u.subDivisionId,
     sectionId: u.sectionId,
     pmuId: u.pmuId,
+    extraDivisionIds: u.extraDivisionIds,
     supervisorId: u.supervisorId,
     isSuperAdmin: u.isSuperAdmin,
   };

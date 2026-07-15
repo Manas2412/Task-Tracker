@@ -248,7 +248,16 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
       ? await prisma.user.findMany({
           where: {
             isActive: true,
-            ...(hasOfficeOfJsTarget ? {} : { divisionId: { in: creatableDivisionIds } }),
+            ...(hasOfficeOfJsTarget
+              ? {}
+              : {
+                  OR: [
+                    { divisionId: { in: creatableDivisionIds } },
+                    // Admin-granted extra members of a target division may own
+                    // a task spawned into it, matching the server check.
+                    { divisionAccess: { some: { divisionId: { in: creatableDivisionIds } } } },
+                  ],
+                }),
           },
           select: {
             id: true,
@@ -256,6 +265,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
             designation: true,
             divisionId: true,
             division: { select: { name: true, avatarColour: true } },
+            divisionAccess: { select: { divisionId: true } },
           },
           orderBy: { name: 'asc' },
         })
@@ -265,6 +275,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
     name: u.name,
     designation: u.designation,
     divisionId: u.divisionId,
+    memberDivisionIds: [u.divisionId, ...u.divisionAccess.map((a) => a.divisionId)],
     divisionName: u.division.name,
     divisionColour: u.division.avatarColour,
   }));

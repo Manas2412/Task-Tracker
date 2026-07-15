@@ -6,6 +6,7 @@ import {
   fetchEngagements,
   getOfficeOfJsDivisionId,
 } from '@/lib/engagements';
+import { getMemberDivisionIds } from '@/lib/rbac';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
 import { buildVisibilityClauses } from '@/lib/visibility';
 
@@ -80,7 +81,11 @@ export async function fetchCalendarEvents(opts: {
   if (!me) return [];
 
   const officeOfJsDivisionId = await getOfficeOfJsDivisionId();
-  const maySeeEngagements = canAccessEngagements(me, officeOfJsDivisionId);
+  const memberDivisionIds = await getMemberDivisionIds(me.id);
+  const maySeeEngagements = canAccessEngagements(
+    { memberDivisionIds, isSuperAdmin: me.isSuperAdmin },
+    officeOfJsDivisionId,
+  );
 
   const wantTasks = filters.kinds.has('task');
   const wantTfs = filters.kinds.has('tf');

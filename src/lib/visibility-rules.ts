@@ -27,12 +27,17 @@ export type VisibilityOptions = {
    */
   isPmuParentDivisionHead?: boolean;
   /**
-   * Divisions the caller holds a cross-division ALLOCATION link into (e.g. a
-   * Khelo India head → NSDF). Grants sight of the DIVISION tasks the caller
-   * themselves CREATED there, so they can track work they allocated — it does
-   * NOT expose that division's board, only their own creations in it.
+   * Divisions the caller is a MEMBER of: their home division plus any
+   * admin-granted extra divisions (user_division_access). Grants FULL board
+   * visibility of each division's non-personal tasks. The home division is
+   * handled per role — an officer always sees their home board, a PMU member
+   * does NOT (PMU isolation is preserved), and a JS user sees the priority
+   * board rather than a home board — so only the EXTRA granted divisions widen
+   * the JS/PMU branches. Defaults to [me.divisionId] (home-only) when omitted.
+   * Populated by buildVisibilityClauses; this replaces the retired
+   * cross-division allocation-link visibility.
    */
-  allocatableDivisionIds?: string[];
+  memberDivisionIds?: string[];
 };
 
 /**
@@ -64,30 +69,25 @@ export function buildVisibilityClausesFrom(
     { createdById: me.id, visibility: 'personal' },
   ];
 
-  // Division tasks I CREATED in a division I hold a cross-division allocation
-  // link into (e.g. a Khelo India head tracking work they gave to NSDF). Scoped
-  // to my own creations in the linked division — it never exposes that
-  // division's board, only the tasks I put there. Without this, a head who
-  // allocates a task to a linked-division owner instantly loses sight of it.
-  if (opts.allocatableDivisionIds && opts.allocatableDivisionIds.length > 0) {
-    clauses.push({
-      createdById: me.id,
-      visibility: 'division',
-      divisionId: { in: opts.allocatableDivisionIds },
-    });
-  }
-
   if (me.isSuperAdmin || me.hierarchySlot === 'osd') {
     // Super Admin + OSD see all non-personal tasks across the ministry.
     clauses.push({ visibility: 'division' });
     return clauses;
   }
 
+  // The caller's member divisions (home + admin-granted extras). The EXTRA
+  // grants (member set minus home) widen every role's board; home is added only
+  // in the officer branch, so PMU isolation and the JS surface are preserved
+  // for callers with no extra grants.
+  const memberDivisionIds = opts.memberDivisionIds ?? [me.divisionId];
+  const extraDivisionIds = memberDivisionIds.filter((d) => d !== me.divisionId);
+
   const divisionIds = new Set(headedDivisionIds);
+  for (const d of extraDivisionIds) divisionIds.add(d);
 
   if (me.hierarchySlot === 'js') {
-    // JS sees own + the JS Priority Board surface, plus any division they
-    // happen to head or hold a delegation for.
+    // JS sees own + the JS Priority Board surface, plus any division they head
+    // or hold a delegation for, plus any admin-granted extra division board.
     clauses.push({
       visibility: 'division',
       jsPriorityLane: { not: null },
@@ -124,9 +124,10 @@ export function buildVisibilityClausesFrom(
     return clauses;
   }
 
-  // Ministry officers (director down to ASO) — all non-personal tasks in
-  // their own division, plus every division they head. Without the own-
-  // division clause a fresh division user saw an empty board on first login.
+  // Ministry officers (director down to ASO) — all non-personal tasks in every
+  // division they are a MEMBER of (home + admin-granted extras), plus every
+  // division they head. Without the home-division clause a fresh division user
+  // saw an empty board on first login.
   divisionIds.add(me.divisionId);
   clauses.push({ visibility: 'division', divisionId: { in: [...divisionIds] } });
   return clauses;

@@ -4,6 +4,7 @@ import { TimelineFileCardInteractive } from '@/components/ui';
 import { DivisionAccordion } from '@/components/DivisionAccordion';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { getMemberDivisionIds } from '@/lib/rbac';
 import { isS3Configured } from '@/lib/s3';
 import { isMediaAndIt } from '@/lib/divisions';
 import {
@@ -51,6 +52,13 @@ type PageProps = {
 function groupByDivision(
   tfs: VisibleTimelineFile[],
   divisionFilter: string,
+  /**
+   * Divisions the viewer may group by (their member set), or null for a
+   * leadership viewer who sees every division. A non-leadership member never
+   * sees a group header for a division they don't belong to, even when a file
+   * they can see is co-marked to it.
+   */
+  viewableDivisionIds: string[] | null,
 ): Array<{
   id: string;
   name: string;
@@ -69,6 +77,7 @@ function groupByDivision(
     }
     for (const { division } of tf.markedTo) {
       if (divisionFilter && division.id !== divisionFilter) continue;
+      if (viewableDivisionIds && !viewableDivisionIds.includes(division.id)) continue;
       const g =
         groups.get(division.id) ??
         { id: division.id, name: division.name, colour: division.avatarColour, tfs: [] };
@@ -103,13 +112,18 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
     ? ((searchParams?.sort as TfSort) ?? 'latest')
     : 'latest';
 
-  // Group-by-division is a cross-division (leadership) view. Normal users only
-  // ever see their own division, so the control is hidden and a manually-set
-  // ?group=division URL param is ignored for them.
-  const canGroupByDivision =
+  // Group-by-division is a cross-division view. It is offered to leadership
+  // (Super Admin / OSD / JS) and to any multi-division member (home + at least
+  // one admin-granted extra), whose list now spans more than one division. A
+  // single-division user's ?group=division param is ignored.
+  const isLeadership =
     session.user.isSuperAdmin ||
     session.user.hierarchySlot === 'osd' ||
     session.user.hierarchySlot === 'js';
+  const memberDivisionIds = await getMemberDivisionIds(session.user.id);
+  const canGroupByDivision = isLeadership || memberDivisionIds.length > 1;
+  // Leadership groups by every division; a member groups only by their own.
+  const groupViewableDivisionIds = isLeadership ? null : memberDivisionIds;
 
   const requestedGroup: TfGroup = VALID_GROUPS.includes((searchParams?.group as TfGroup) ?? 'none')
     ? ((searchParams?.group as TfGroup) ?? 'none')
@@ -202,7 +216,7 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
           />
         ) : group === 'division' ? (
           <div className="flex flex-col gap-3">
-            {groupByDivision(tfs, divisionFilter).map((g) => (
+            {groupByDivision(tfs, divisionFilter, groupViewableDivisionIds).map((g) => (
               <DivisionAccordion
                 key={g.id}
                 name={g.name}
