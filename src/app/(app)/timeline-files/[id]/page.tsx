@@ -74,10 +74,11 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
 
   const visibility = await buildTfVisibilityClause(me);
 
+  // Archived files are still shown here (read-only, with a Restore action) so
+  // they can be reviewed and restored — visibility scoping is unchanged.
   const tf = await prisma.timelineFile.findFirst({
     where: {
       id: params.id,
-      archivedAt: null,
       AND: [visibility],
     },
     include: {
@@ -146,26 +147,34 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
       })
     : [];
 
+  // An archived file is read-only until restored: every edit affordance is
+  // suppressed, leaving only the Restore action (for OSD / Super Admin).
+  const isArchived = tf.archivedAt !== null;
+  // Archive / restore matches the OSD/Super-Admin TF-management gate.
+  const canArchive = me.isSuperAdmin || me.hierarchySlot === 'osd';
+
   const canEditFields =
-    me.isSuperAdmin || me.hierarchySlot === 'osd';
+    !isArchived && (me.isSuperAdmin || me.hierarchySlot === 'osd');
   const canEditStatus =
-    me.isSuperAdmin ||
-    me.hierarchySlot === 'osd' ||
-    (me.hierarchySlot === 'director' &&
-      tf.markedTo.some((m) => m.division.id === me.divisionId));
+    !isArchived &&
+    (me.isSuperAdmin ||
+      me.hierarchySlot === 'osd' ||
+      (me.hierarchySlot === 'director' &&
+        tf.markedTo.some((m) => m.division.id === me.divisionId)));
   // Spawning a task from a TF always produces a division-level task, so
   // the head rule applies: Super Admin, OSD, or head/delegate of a marked
   // division. Others see the linked-task list without the create button.
   const actor = await getRbacActor(me.id);
-  const creatableDivisionIds = actor
-    ? tf.markedTo
-        .map((m) => m.division.id)
-        .filter((id) => canCreateDivisionTask(actor, id))
-    : [];
+  const creatableDivisionIds =
+    !isArchived && actor
+      ? tf.markedTo
+          .map((m) => m.division.id)
+          .filter((id) => canCreateDivisionTask(actor, id))
+      : [];
   const canCreateTasks = creatableDivisionIds.length > 0;
 
   // Attachments — same gate as TF field editing for non-OSD directors of marked-to.
-  const canEditAtt = await canEditTfAttachments(me.id, tf.id);
+  const canEditAtt = isArchived ? false : await canEditTfAttachments(me.id, tf.id);
   const s3Ready = isS3Configured();
 
   // Source documents — many allowed
@@ -296,11 +305,23 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
           <TfMoreMenu
             tfId={tf.id}
             refNo={tf.refNo}
-            canViewAudit={canEditFields}
+            canViewAudit={me.isSuperAdmin || me.hierarchySlot === 'osd'}
             canDelete={!!me?.isSuperAdmin}
+            canArchive={canArchive}
+            isArchived={isArchived}
           />
         </div>
       </header>
+
+      {isArchived ? (
+        <div className="flex items-center gap-2 px-4 md:px-6 py-2.5 border-b border-line-2 bg-line-2 text-[12px] text-ink-2">
+          <i className="ti ti-archive text-[14px] text-ink-3" aria-hidden="true" />
+          <span>
+            This timeline file is archived and read-only.
+            {canArchive ? ' Restore it from the menu to make changes.' : ''}
+          </span>
+        </div>
+      ) : null}
 
       {/* Title block — a clear soft RED tint over the frosted glass (the
           Timeline-File colour on the calendar); stays coloured down to the
@@ -316,7 +337,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
             refNo={tf.refNo}
             refYear={tf.refYear}
             fileNumber={tf.refNo.split('/')[1] ?? String(tf.refSeq)}
-            canEdit={me.isSuperAdmin}
+            canEdit={!isArchived && me.isSuperAdmin}
           />
           <TfPriorityPicker tfId={tf.id} current={tf.priority} canEdit={canEditStatus} />
           <TfStatusPicker tfId={tf.id} current={tf.status} canEdit={canEditStatus} />
@@ -415,6 +436,7 @@ export default async function TimelineFileDetailPage({ params }: PageProps) {
         mentionables={mentionables}
         currentUserId={me.id}
         canViewProfiles={me.isSuperAdmin || me.hierarchySlot === 'osd'}
+        readOnly={isArchived}
       />
 
       {/* Details and the activity log live together in one collapsible panel

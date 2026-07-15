@@ -4,7 +4,11 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import { deleteTimelineFileAction } from '@/app/actions/timeline-files';
+import {
+  archiveTimelineFileAction,
+  deleteTimelineFileAction,
+  unarchiveTimelineFileAction,
+} from '@/app/actions/timeline-files';
 import { cn } from '@/lib/utils';
 
 type TfMoreMenuProps = {
@@ -14,9 +18,20 @@ type TfMoreMenuProps = {
   canViewAudit: boolean;
   /** Super Admin only — can hard-delete */
   canDelete: boolean;
+  /** OSD or Super Admin — can archive / restore */
+  canArchive: boolean;
+  /** Whether the file is currently archived. */
+  isArchived: boolean;
 };
 
-export function TfMoreMenu({ tfId, refNo, canViewAudit, canDelete }: TfMoreMenuProps) {
+export function TfMoreMenu({
+  tfId,
+  refNo,
+  canViewAudit,
+  canDelete,
+  canArchive,
+  isArchived,
+}: TfMoreMenuProps) {
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -45,13 +60,17 @@ export function TfMoreMenu({ tfId, refNo, canViewAudit, canDelete }: TfMoreMenuP
     };
   }, [open]);
 
-  const callAction = (action: typeof deleteTimelineFileAction) => {
+  const runAction = (
+    action: typeof deleteTimelineFileAction,
+    after: 'list' | 'refresh',
+  ) => {
     const fd = new FormData();
     fd.set('id', tfId);
     startTransition(async () => {
       const result = await action(undefined, fd);
       if (result.ok) {
-        router.push('/timeline-files');
+        // Delete / archive leave the active list; restore keeps you on the file.
+        if (after === 'list') router.push('/timeline-files');
         router.refresh();
       } else if (result.error) {
         alert(result.error);
@@ -117,7 +136,7 @@ export function TfMoreMenu({ tfId, refNo, canViewAudit, canDelete }: TfMoreMenuP
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => callAction(deleteTimelineFileAction)}
+                onClick={() => runAction(deleteTimelineFileAction, 'list')}
                 className="flex-1 py-1.5 rounded-md bg-urgent text-white text-[12px] font-medium disabled:opacity-60"
               >
                 {pending ? 'Deleting…' : 'Delete'}
@@ -138,6 +157,21 @@ export function TfMoreMenu({ tfId, refNo, canViewAudit, canDelete }: TfMoreMenuP
                 href={`/admin/audit?entity=timeline_file&entityId=${tfId}`}
                 onClick={() => setOpen(false)}
               />
+            ) : null}
+            {canArchive ? (
+              isArchived ? (
+                <MenuButton
+                  icon="ti-archive-off"
+                  label={pending ? 'Restoring…' : 'Restore from archive'}
+                  onClick={() => runAction(unarchiveTimelineFileAction, 'refresh')}
+                />
+              ) : (
+                <MenuButton
+                  icon="ti-archive"
+                  label={pending ? 'Archiving…' : 'Archive'}
+                  onClick={() => runAction(archiveTimelineFileAction, 'list')}
+                />
+              )
             ) : null}
             {canDelete ? (
               <MenuButton

@@ -112,6 +112,8 @@ export async function fetchVisibleTimelineFiles(opts: {
   sort?: TfSort;
   /** Narrow to files marked to this division (on top of visibility). */
   divisionId?: string;
+  /** Show archived files instead of active ones (the "Archived TL files" view). */
+  archived?: boolean;
 }): Promise<VisibleTimelineFile[]> {
   const me = await prisma.user.findUnique({
     where: { id: opts.callerId },
@@ -134,7 +136,8 @@ export async function fetchVisibleTimelineFiles(opts: {
 
   const tfs = await prisma.timelineFile.findMany({
     where: {
-      archivedAt: null,
+      // Active list hides archived files; the "Archived TL files" view flips it.
+      archivedAt: opts.archived ? { not: null } : null,
       AND: [visibility, statusFilter, divisionFilter],
     },
     include: {

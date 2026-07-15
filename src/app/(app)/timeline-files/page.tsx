@@ -36,7 +36,7 @@ type TfGroup = 'none' | 'division';
 const VALID_GROUPS: TfGroup[] = ['none', 'division'];
 
 type PageProps = {
-  searchParams?: { filter?: string; sort?: string; group?: string; division?: string };
+  searchParams?: { filter?: string; sort?: string; group?: string; division?: string; archived?: string };
 };
 
 /**
@@ -131,6 +131,9 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
   const group: TfGroup = canGroupByDivision ? requestedGroup : 'none';
 
   const divisionFilter = searchParams?.division ?? '';
+  // "Archived TL files" view — shows archived files (still visibility-scoped)
+  // instead of the active list.
+  const archived = searchParams?.archived === '1';
 
   const canCreate =
     session.user.isSuperAdmin || session.user.hierarchySlot === 'osd';
@@ -141,6 +144,7 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
       filter,
       sort,
       divisionId: divisionFilter || undefined,
+      archived,
     }),
     fetchTfCounts(session.user.id),
     // Divisions power both the create dialog and the Division filter dropdown,
@@ -202,7 +206,7 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
       {/* List */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="section-label">Files</h2>
+          <h2 className="section-label">{archived ? 'Archived files' : 'Files'}</h2>
           <span className="text-[11px] text-ink-3">
             {tfs.length} {tfs.length === 1 ? 'item' : 'items'}
           </span>
@@ -213,6 +217,7 @@ export default async function TimelineFilesPage({ searchParams }: PageProps) {
             filter={filter}
             canCreate={canCreate}
             divisionActive={Boolean(divisionFilter)}
+            archived={archived}
           />
         ) : group === 'division' ? (
           <div className="flex flex-col gap-3">
@@ -276,10 +281,12 @@ function EmptyState({
   filter,
   canCreate,
   divisionActive,
+  archived,
 }: {
   filter: TfFilter;
   canCreate: boolean;
   divisionActive: boolean;
+  archived: boolean;
 }) {
   const copy: Record<TfFilter, string> = {
     all: canCreate
@@ -291,17 +298,21 @@ function EmptyState({
     on_hold: 'Nothing on hold.',
     closed: 'No closed files.',
   };
-  // A Division filter narrowing to zero is a filtered-empty state, not an
-  // empty module — say so rather than "No timeline files yet".
-  const message = divisionActive
-    ? filter === 'all'
-      ? 'No timeline files marked to this division.'
-      : 'No timeline files marked to this division for this status.'
-    : copy[filter];
+  // The archived view is its own empty state; then a Division filter narrowing
+  // to zero is a filtered-empty state, not an empty module.
+  const message = archived
+    ? divisionActive
+      ? 'No archived timeline files for this division.'
+      : 'No archived timeline files.'
+    : divisionActive
+      ? filter === 'all'
+        ? 'No timeline files marked to this division.'
+        : 'No timeline files marked to this division for this status.'
+      : copy[filter];
   return (
     <div className="rounded-xl border border-dashed border-line p-10 text-center bg-panel">
       <i
-        className="ti ti-file-stack text-[28px] text-ink-3 mb-2 block"
+        className={`ti ${archived ? 'ti-archive' : 'ti-file-stack'} text-[28px] text-ink-3 mb-2 block`}
         aria-hidden="true"
       />
       <p className="text-[13px] text-ink-2">{message}</p>

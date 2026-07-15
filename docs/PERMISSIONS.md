@@ -152,14 +152,17 @@ The role switcher in the top bar is the only entry point. OSD and Super Admin ar
 - **Assign / transfer across divisions flows from shared membership.** A division head (direct head or active delegate) may assign or transfer a task on a division they head to **any member of that division** — home members and users granted the division via `user_division_access` alike, since both are ordinary members of it (§5.18). The picker for a division's task therefore surfaces every member of that division, and an assignment to one of them is free (no approval). Cross-division reach (for example a user working across Khelo India and NSDF) is now expressed by granting that specific user the extra membership, not by a hardcoded division link.
   - **Retired.** The former **Cross-division allocation link (Khelo India → NSDF)** — `CROSS_DIVISION_ALLOCATION_LINKS = {KI:['NSDF']}` and `RbacActor.allocatableDivisionIds` in `src/lib/rbac` — has been **deleted from the code**. It automatically let any Khelo India head create / assign / transfer NSDF tasks. That blanket link no longer applies; a Super Admin instead grants the specific users who need cross-division reach an extra membership via `user_division_access`. (The migration seeds the named users into their extra memberships; see §5.18.)
 
-### 5.7 Deletion (Archive removed)
+### 5.7 Deletion and archive
 
-The **Archive** (soft-delete) feature has been **removed from the platform** — there is no user-facing Archive or Restore action for tasks or timeline files, and the swipe-to-archive list gesture is gone. The `archived_at` / `archived_by` columns and the `archivedAt: null` read filters remain in the schema (nothing sets them any more), so any items archived before removal stay hidden; historical archive/restore events still appear in the audit trail.
+The platform-wide task **Archive** (soft-delete) remains removed — there is no Archive/Restore action for **tasks** (the swipe-to-archive gesture is gone); the `archived_at` / `archived_by` columns and `archivedAt: null` read filters stay in the schema but nothing sets them for tasks.
+
+**Timeline Files** have a **reversible archive** (soft-delete): OSD or a Super Admin may archive a file and later restore it (`archiveTimelineFileAction` / `unarchiveTimelineFileAction`, gated by `requireOsdOrSuperAdmin`). An archived file drops out of the active list, the summary counts, the calendar, and search; it appears only under the **"Archived TL files"** list toggle and on its (read-only) detail page, from which OSD/Super Admin can restore it. Archiving is visibility-neutral — it never changes who can see the file (`buildTfVisibilityClause` is unchanged). Archive/restore events are recorded in the audit trail.
 
 | Condition | Available action | Who |
 |---|---|---|
 | Task — delete (hard) | **Delete** (removes the task, its subtasks, comments, collaborators, and attachments; cannot be undone) | The **head of the task's division** (direct head or active delegate) or a **Super Admin** (any task); plus a user for their **own personal task**. Enforced by `canActAsHeadOf` in `deleteTaskAction`. |
-| Timeline File — hard-delete | ✓ | Super Admin only (any file, regardless of creator) |
+| Timeline File — archive / restore | **Archive** (reversible soft-delete) / **Restore** | OSD or Super Admin (`requireOsdOrSuperAdmin`) |
+| Timeline File — hard-delete | **Delete** (permanent) | Super Admin only (any file, regardless of creator) |
 | User | **Disable** (login blocked, audit history preserved) | Super Admin only |
 | User — hard-delete |  | Not supported — would break the audit trail |
 
