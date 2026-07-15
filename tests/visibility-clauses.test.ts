@@ -64,32 +64,49 @@ describe('buildVisibilityClausesFrom — base clauses', () => {
   });
 });
 
-describe('buildVisibilityClausesFrom — cross-division allocation link', () => {
-  it('sees own creations in the linked division, but not its board', () => {
-    // KI head (home KI, heads KI) with an NSDF allocation link.
+describe('buildVisibilityClausesFrom — multi-division membership', () => {
+  it('an officer sees the full board of every member division (home + granted)', () => {
+    // Home KI, granted an extra membership in NSDF — the membership-native
+    // replacement for the retired cross-division view/allocation link.
     const clauses = buildVisibilityClausesFrom(
-      caller({ hierarchySlot: 'director', divisionId: KI }),
-      [KI],
+      caller({ hierarchySlot: 'aso', divisionId: KI }),
       [],
-      { allocatableDivisionIds: [NSDF] },
+      [],
+      { memberDivisionIds: [KI, NSDF] },
     );
-    // Division tasks the KI head CREATED in NSDF are visible…
-    expect(clauses).toContainEqual({
-      createdById: 'me',
-      visibility: 'division',
-      divisionId: { in: [NSDF] },
-    });
-    // …but the (createdById-free) division-board clause covers only KI, not NSDF —
-    // the link never exposes NSDF's board at large.
-    const board = clauses.find((c) => 'divisionId' in c && !('createdById' in c)) as
-      | { divisionId?: { in?: string[] } }
-      | undefined;
-    expect(board?.divisionId?.in).toEqual([KI]);
+    expect(divisionClause(clauses)?.divisionId?.in?.sort()).toEqual([KI, NSDF].sort());
   });
 
-  it('adds no allocation clause when the caller holds no links', () => {
-    const clauses = buildVisibilityClausesFrom(caller({ hierarchySlot: 'director' }), [KI], []);
-    expect(clauses.some((c) => 'createdById' in c && c.visibility === 'division')).toBe(false);
+  it('unions member divisions with headed divisions', () => {
+    // A head of ABD who is also granted membership in KI.
+    const clauses = buildVisibilityClausesFrom(
+      caller({ hierarchySlot: 'director', divisionId: ABD }),
+      [ABD],
+      [],
+      { memberDivisionIds: [ABD, KI] },
+    );
+    expect(divisionClause(clauses)?.divisionId?.in?.sort()).toEqual([ABD, KI].sort());
+  });
+
+  it('defaults to the home division when no member set is given', () => {
+    const clauses = buildVisibilityClausesFrom(caller({ hierarchySlot: 'aso' }), []);
+    expect(divisionClause(clauses)?.divisionId?.in).toEqual([KI]);
+  });
+
+  it('a granted extra division widens the PMU branch without leaking the PMU home board', () => {
+    // A PMU member granted membership in NSDF sees NSDF's board via the extra,
+    // while their own ministry (home) division board stays hidden — PMU
+    // isolation is preserved because only the EXTRA grants widen this branch.
+    const clauses = buildVisibilityClausesFrom(
+      caller({ isPmu: true, divisionId: KI }),
+      [],
+      ['me'],
+      { memberDivisionIds: [KI, NSDF] },
+    );
+    // The extra (NSDF) board is visible…
+    expect(divisionClause(clauses)?.divisionId?.in).toEqual([NSDF]);
+    // …alongside the PMU-team owner clause, and the home (KI) board is NOT leaked.
+    expect(clauses).toContainEqual({ visibility: 'division', ownerId: { in: ['me'] } });
   });
 });
 

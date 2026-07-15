@@ -262,6 +262,9 @@ model User {
   delegationsReceived DivisionAccessDelegation[] @relation("DelegationTo")
   delegationsRevoked  DivisionAccessDelegation[] @relation("DelegationRevokedBy")
 
+  divisionAccess        UserDivisionAccess[] @relation("UserDivisionAccessUser")
+  grantedDivisionAccess UserDivisionAccess[] @relation("UserDivisionAccessGrantedBy")
+
   createdEngagements JsEngagement[]            @relation("EngagementCreatedBy")
   engagementParts    JsEngagementParticipant[] @relation("EngagementParticipant")
 
@@ -316,6 +319,7 @@ model Division {
   tasksInSubDivision  Task[]                     @relation("TaskSubDivision")
   markedTimelineFiles TimelineFileMarkedTo[]
   accessDelegations   DivisionAccessDelegation[]
+  memberAccess        UserDivisionAccess[]       @relation("UserDivisionAccessDivision")
   engagements         JsEngagement[]             @relation("EngagementDivision")
 
   @@index([parentId])
@@ -353,6 +357,39 @@ model DivisionAccessDelegation {
   @@index([divisionId, endsAt])
   @@index([delegatedById])
   @@map("division_access_delegations")
+}
+
+// ============================================================
+// User division access (multi-division membership)
+// ============================================================
+
+/// Extra divisions a user is a FULL MEMBER of, beyond their single home
+/// division (users.division_id). A Super Admin grants these in the Users
+/// section. Membership is permanent (unlike a time-boxed delegation) and
+/// grants ordinary member-level access in the division — full board
+/// visibility (tasks + Timeline Files), participation (collaborator / subtask
+/// assignee / @mention), and being an assignment / transfer target — but NOT
+/// head powers and NOT division-task creation for a non-head. The home
+/// division still drives ownership, display, PMU home, and ref identity.
+///
+/// This replaces the previously hardcoded cross-division links (the retired
+/// KI↔NSDF allocation + participant config): cross-division reach is now set
+/// per user here instead of in code.
+model UserDivisionAccess {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  divisionId  String   @map("division_id") @db.Uuid
+  grantedById String?  @map("granted_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user      User     @relation("UserDivisionAccessUser", fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  division  Division @relation("UserDivisionAccessDivision", fields: [divisionId], references: [id], onDelete: Cascade)
+  grantedBy User?    @relation("UserDivisionAccessGrantedBy", fields: [grantedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([userId, divisionId])
+  @@index([divisionId])
+  @@index([userId])
+  @@map("user_division_access")
 }
 
 // ============================================================

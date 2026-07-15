@@ -11,9 +11,10 @@ import { formatDue, initialsOf } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import {
   canManageTask,
-  canTransferTaskToOrLinked,
+  canTransferTaskTo,
   fetchTransferTargets,
   getHeadedDivisionsByUser,
+  getMemberDivisionsByUser,
   getRbacActor,
   getSubordinateIds,
 } from '@/lib/rbac';
@@ -140,18 +141,21 @@ export default async function TaskDetailPage({ params }: PageProps) {
   const heroTint = fromTimelineFile
     ? 'linear-gradient(180deg, color-mix(in srgb, var(--urgent-soft) 92%, transparent) 0%, color-mix(in srgb, var(--urgent-soft) 62%, transparent) 100%)'
     : 'linear-gradient(180deg, color-mix(in srgb, var(--primary-soft) 92%, transparent) 0%, color-mix(in srgb, var(--primary-soft) 62%, transparent) 100%)';
+  // Division-based RBAC context — heads (direct or delegated) get
+  // director-like powers over the divisions they head; membership (home +
+  // admin-granted extras) drives member-level rights like pull and
+  // director-management.
+  const actor = await getRbacActor(session.user.id);
+  const memberDivisionIds = actor?.memberDivisionIds ?? [me.divisionId];
+  const isHeadOfTaskDivision =
+    actor !== null && actor.headedDivisionIds.includes(task.divisionId);
+
   const canPull =
     isUnassigned &&
     !isOwner &&
     !task.parentTaskId &&
     task.visibility !== 'personal' &&
-    me.divisionId === task.divisionId;
-
-  // Division-based RBAC context — heads (direct or delegated) get
-  // director-like powers over the divisions they head.
-  const actor = await getRbacActor(session.user.id);
-  const isHeadOfTaskDivision =
-    actor !== null && actor.headedDivisionIds.includes(task.divisionId);
+    memberDivisionIds.includes(task.divisionId);
 
   // Delete mirrors deleteTaskAction. For a subtask, the right belongs to the
   // parent task's owner, the head of the division, or a Super Admin — never
@@ -178,7 +182,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
       id: session.user.id,
       isSuperAdmin: session.user.isSuperAdmin,
       hierarchySlot: session.user.hierarchySlot,
-      divisionId: session.user.divisionId,
+      memberDivisionIds,
       headedDivisionIds: actor?.headedDivisionIds ?? [],
     },
     { ownerId: task.ownerId, createdById: task.createdById, divisionId: task.divisionId },
@@ -187,12 +191,13 @@ export default async function TaskDetailPage({ params }: PageProps) {
 
   // Redefining the task — name, due date, recurrence — is stricter: a normal
   // owner (e.g. after a transfer) cannot. Mirrors canEditTaskDetails on the
-  // server. Own personal tasks stay fully editable.
+  // server. Own personal tasks stay fully editable. A Director who is a member
+  // (home or admin-granted extra) of the task's division may redefine it.
   const canEditDetails =
     session.user.isSuperAdmin ||
     session.user.hierarchySlot === 'osd' ||
     session.user.hierarchySlot === 'js' ||
-    (session.user.hierarchySlot === 'director' && session.user.divisionId === task.divisionId) ||
+    (session.user.hierarchySlot === 'director' && memberDivisionIds.includes(task.divisionId)) ||
     isHeadOfTaskDivision ||
     (task.visibility === 'personal' && task.ownerId === session.user.id);
 
@@ -413,6 +418,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
     pendingReassignmentRow,
     allDivisions,
     headedByUser,
+    memberByUser,
     subordinateIds,
     subDivisionOptions,
   ] =
@@ -449,6 +455,7 @@ export default async function TaskDetailPage({ params }: PageProps) {
           })
         : Promise.resolve([]),
       canReassign && !reassignAnywhere ? getHeadedDivisionsByUser() : Promise.resolve(new Map<string, string[]>()),
+      canReassign && !reassignAnywhere ? getMemberDivisionsByUser() : Promise.resolve(new Map<string, string[]>()),
       canReassign && !reassignAnywhere ? getSubordinateIds(session.user.id) : Promise.resolve(new Set<string>()),
       // Sub-divisions of the task's division — drives the Subdivision row,
       // which appears only when the division has any. Fetched regardless of
@@ -466,14 +473,15 @@ export default async function TaskDetailPage({ params }: PageProps) {
         reassignAnywhere ||
         subordinateIds.has(u.id) ||
         (actor !== null &&
-          // OrLinked so a cross-division allocation link (e.g. KI head → NSDF)
-          // surfaces those members in the reassign picker too — the same reach
-          // the server's free-assign check now allows.
-          canTransferTaskToOrLinked(actor, {
+          // Membership-aware transfer matrix: a co-member of a division the
+          // actor belongs to (home or admin-granted extra) surfaces here, which
+          // is the same reach the server's free-assign check allows.
+          canTransferTaskTo(actor, {
             id: u.id,
             divisionId: u.divisionId,
             isSuperAdmin: u.isSuperAdmin,
             headedDivisionIds: headedByUser.get(u.id) ?? [],
+            memberDivisionIds: memberByUser.get(u.id) ?? [u.divisionId],
             isActive: true,
           })),
     )

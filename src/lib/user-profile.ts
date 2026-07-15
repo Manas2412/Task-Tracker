@@ -36,17 +36,18 @@ export type AllottedTaskRow = {
 };
 
 type ViewerContext = {
-  divisionId: string;
+  /** The viewer's member divisions (home + admin-granted extras). */
+  memberDivisionIds: string[];
   isSuperAdmin: boolean;
   hierarchySlot: string;
 };
 
 /**
- * Who may see a person's "tasks allotted" list: a colleague in the **same
- * division** (a division-based user), or the oversight roles OSD / Super
- * Admin. Users of other divisions do not see the control at all. The task
- * query is additionally visibility-scoped to the viewer, so the list can
- * never leak a task they could not already see.
+ * Who may see a person's "tasks allotted" list: a colleague who is a **member**
+ * of the profiled user's division (home or an admin-granted extra membership),
+ * or the oversight roles OSD / Super Admin. Users who share no division do not
+ * see the control at all. The task query is additionally visibility-scoped to
+ * the viewer, so the list can never leak a task they could not already see.
  */
 export function canViewAllottedTasks(
   viewer: ViewerContext,
@@ -55,7 +56,7 @@ export function canViewAllottedTasks(
   return (
     viewer.isSuperAdmin ||
     viewer.hierarchySlot === 'osd' ||
-    viewer.divisionId === profileDivisionId
+    viewer.memberDivisionIds.includes(profileDivisionId)
   );
 }
 

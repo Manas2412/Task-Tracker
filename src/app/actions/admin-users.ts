@@ -161,6 +161,32 @@ async function validatePlacement(opts: {
   return Object.keys(errors).length > 0 ? errors : null;
 }
 
+/**
+ * Normalise + validate the extra-division memberships from the form. Dedupes,
+ * drops the home division (a division can't be both home and an extra), and
+ * confirms every remaining id is a real top-level division (kind 'division').
+ * Returns the clean id list, or a fieldErrors object keyed on `extraDivisionIds`.
+ */
+async function resolveExtraDivisionIds(
+  homeDivisionId: string,
+  rawIds: string[],
+): Promise<{ ok: true; ids: string[] } | { ok: false; fieldErrors: Record<string, string> }> {
+  const ids = [...new Set(rawIds)].filter((id) => id !== homeDivisionId);
+  if (ids.length === 0) return { ok: true, ids: [] };
+
+  const found = await prisma.division.findMany({
+    where: { id: { in: ids }, kind: 'division' },
+    select: { id: true },
+  });
+  if (found.length !== ids.length) {
+    return {
+      ok: false,
+      fieldErrors: { extraDivisionIds: 'Choose additional divisions from the top-level divisions.' },
+    };
+  }
+  return { ok: true, ids };
+}
+
 // ============================================================
 // createUserAction
 // ============================================================
@@ -192,6 +218,9 @@ const createUserSchema = z.object({
   subDivisionId: optionalRelationToUndefined,
   sectionId: optionalRelationToUndefined,
   pmuId: optionalRelationToUndefined,
+  // Extra divisions the user is a full member of (checkbox list). Repeated
+  // form field → getAll(); validated + deduped by resolveExtraDivisionIds.
+  extraDivisionIds: z.array(z.string().uuid()).optional().default([]),
   supervisorId: optionalRelationToUndefined,
   isSuperAdmin: z
     .string()
@@ -224,6 +253,7 @@ export async function createUserAction(
     subDivisionId: formData.get('subDivisionId'),
     sectionId: formData.get('sectionId'),
     pmuId: formData.get('pmuId'),
+    extraDivisionIds: formData.getAll('extraDivisionIds'),
     supervisorId: formData.get('supervisorId'),
     isSuperAdmin: formData.get('isSuperAdmin'),
   });
@@ -260,27 +290,43 @@ export async function createUserAction(
   });
   if (placementErrors) return { ok: false, fieldErrors: placementErrors, epoch };
 
+  const extra = await resolveExtraDivisionIds(parsed.data.divisionId, parsed.data.extraDivisionIds);
+  if (!extra.ok) return { ok: false, fieldErrors: extra.fieldErrors, epoch };
+
   try {
     const passwordHash = await hashPassword(parsed.data.password);
-    const created = await prisma.user.create({
-      data: {
-        name: parsed.data.name,
-        username: parsed.data.username,
-        passwordHash,
-        designation: parsed.data.designation,
-        hierarchySlot: parsed.data.hierarchySlot,
-        contractRole: parsed.data.contractRole ?? null,
-        divisionId: parsed.data.divisionId,
-        subDivisionId: parsed.data.pmuId ? null : parsed.data.subDivisionId ?? null,
-        sectionId: parsed.data.pmuId ? null : parsed.data.sectionId ?? null,
-        pmuId: parsed.data.pmuId ?? null,
-        isPmu: Boolean(parsed.data.pmuId),
-        supervisorId: parsed.data.supervisorId ?? null,
-        isActive: true,
-        isSuperAdmin: parsed.data.isSuperAdmin ?? false,
-        forcePasswordChange: parsed.data.forcePasswordChange ?? true,
-        createdById: guard.userId,
-      },
+    // User row + extra memberships persist atomically.
+    const created = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: parsed.data.name,
+          username: parsed.data.username,
+          passwordHash,
+          designation: parsed.data.designation,
+          hierarchySlot: parsed.data.hierarchySlot,
+          contractRole: parsed.data.contractRole ?? null,
+          divisionId: parsed.data.divisionId,
+          subDivisionId: parsed.data.pmuId ? null : parsed.data.subDivisionId ?? null,
+          sectionId: parsed.data.pmuId ? null : parsed.data.sectionId ?? null,
+          pmuId: parsed.data.pmuId ?? null,
+          isPmu: Boolean(parsed.data.pmuId),
+          supervisorId: parsed.data.supervisorId ?? null,
+          isActive: true,
+          isSuperAdmin: parsed.data.isSuperAdmin ?? false,
+          forcePasswordChange: parsed.data.forcePasswordChange ?? true,
+          createdById: guard.userId,
+        },
+      });
+      if (extra.ids.length > 0) {
+        await tx.userDivisionAccess.createMany({
+          data: extra.ids.map((divisionId) => ({
+            userId: user.id,
+            divisionId,
+            grantedById: guard.userId,
+          })),
+        });
+      }
+      return user;
     });
 
     await audit(guard.userId, 'create', created.id, {}, {
@@ -288,6 +334,7 @@ export async function createUserAction(
       username: created.username,
       hierarchySlot: created.hierarchySlot,
       divisionId: created.divisionId,
+      extraDivisionIds: extra.ids,
       isSuperAdmin: created.isSuperAdmin,
     });
 
@@ -316,6 +363,7 @@ const updateUserSchema = z.object({
   subDivisionId: optionalRelationToNull,
   sectionId: optionalRelationToNull,
   pmuId: optionalRelationToNull,
+  extraDivisionIds: z.array(z.string().uuid()).optional().default([]),
   supervisorId: optionalRelationToNull,
   isSuperAdmin: z
     .string()
@@ -344,6 +392,7 @@ export async function updateUserAction(
     subDivisionId: formData.get('subDivisionId'),
     sectionId: formData.get('sectionId'),
     pmuId: formData.get('pmuId'),
+    extraDivisionIds: formData.getAll('extraDivisionIds'),
     supervisorId: formData.get('supervisorId'),
     isSuperAdmin: formData.get('isSuperAdmin'),
   });
@@ -361,6 +410,7 @@ export async function updateUserAction(
       designation: true,
       hierarchySlot: true,
       contractRole: true,
+      divisionAccess: { select: { divisionId: true } },
       divisionId: true,
       subDivisionId: true,
       sectionId: true,
@@ -404,6 +454,17 @@ export async function updateUserAction(
   });
   if (placementErrors) return { ok: false, fieldErrors: placementErrors, epoch };
 
+  const extra = await resolveExtraDivisionIds(parsed.data.divisionId, parsed.data.extraDivisionIds);
+  if (!extra.ok) return { ok: false, fieldErrors: extra.fieldErrors, epoch };
+
+  // Diff the current memberships against the submitted set so the reconcile
+  // only touches what actually changed (and never duplicates the home division,
+  // which resolveExtraDivisionIds already excluded).
+  const currentExtra = new Set(before.divisionAccess.map((a) => a.divisionId));
+  const nextExtra = new Set(extra.ids);
+  const extraToRemove = [...currentExtra].filter((id) => !nextExtra.has(id));
+  const extraToAdd = [...nextExtra].filter((id) => !currentExtra.has(id));
+
   // isPmu tracks pmuId, but with one guard: only flip it to false when an
   // ACTUAL PMU assignment is being removed (before.pmuId was set). Legacy
   // PMU users (isPmu = true, pmuId = null) predate pmu_id and keep their
@@ -416,23 +477,42 @@ export async function updateUserAction(
   const removingPmu = !nextIsPmu && before.isPmu;
 
   try {
-    const updated = await prisma.user.update({
-      where: { id: parsed.data.userId },
-      data: {
-        name: parsed.data.name,
-        designation: parsed.data.designation,
-        hierarchySlot: parsed.data.hierarchySlot,
-        contractRole: parsed.data.contractRole,
-        divisionId: parsed.data.divisionId,
-        subDivisionId: parsed.data.pmuId ? null : parsed.data.subDivisionId,
-        sectionId: parsed.data.pmuId ? null : parsed.data.sectionId,
-        pmuId: parsed.data.pmuId,
-        isPmu: nextIsPmu,
-        // Dropping PMU membership clears the now-meaningless PMU role too.
-        ...(removingPmu ? { pmuRole: null } : {}),
-        supervisorId: parsed.data.supervisorId,
-        isSuperAdmin: parsed.data.isSuperAdmin,
-      },
+    // User row + membership reconcile persist atomically.
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.update({
+        where: { id: parsed.data.userId },
+        data: {
+          name: parsed.data.name,
+          designation: parsed.data.designation,
+          hierarchySlot: parsed.data.hierarchySlot,
+          contractRole: parsed.data.contractRole,
+          divisionId: parsed.data.divisionId,
+          subDivisionId: parsed.data.pmuId ? null : parsed.data.subDivisionId,
+          sectionId: parsed.data.pmuId ? null : parsed.data.sectionId,
+          pmuId: parsed.data.pmuId,
+          isPmu: nextIsPmu,
+          // Dropping PMU membership clears the now-meaningless PMU role too.
+          ...(removingPmu ? { pmuRole: null } : {}),
+          supervisorId: parsed.data.supervisorId,
+          isSuperAdmin: parsed.data.isSuperAdmin,
+        },
+      });
+      if (extraToRemove.length > 0) {
+        await tx.userDivisionAccess.deleteMany({
+          where: { userId: u.id, divisionId: { in: extraToRemove } },
+        });
+      }
+      if (extraToAdd.length > 0) {
+        await tx.userDivisionAccess.createMany({
+          data: extraToAdd.map((divisionId) => ({
+            userId: u.id,
+            divisionId,
+            grantedById: guard.userId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+      return u;
     });
 
     await audit(guard.userId, 'update', updated.id, before, {
@@ -444,6 +524,7 @@ export async function updateUserAction(
       subDivisionId: updated.subDivisionId,
       sectionId: updated.sectionId,
       pmuId: updated.pmuId,
+      extraDivisionIds: extra.ids,
       supervisorId: updated.supervisorId,
       isSuperAdmin: updated.isSuperAdmin,
     });
@@ -824,21 +905,28 @@ export async function changeDivisionAction(
   if (before.divisionId === parsed.data.divisionId) return ok(epoch);
 
   try {
-    await prisma.user.update({
-      where: { id: parsed.data.userId },
-      data: {
-        divisionId: parsed.data.divisionId,
-        // A division change resets all sub-placement: sub-division and
-        // section belong to the old division, and a PMU is division-bound,
-        // so the user leaves it too. Leaving them set would orphan the
-        // placement (pmuId pointing at a PMU in the old division).
-        subDivisionId: null,
-        sectionId: null,
-        pmuId: null,
-        isPmu: false,
-        pmuRole: null,
-      },
-    });
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: parsed.data.userId },
+        data: {
+          divisionId: parsed.data.divisionId,
+          // A division change resets all sub-placement: sub-division and
+          // section belong to the old division, and a PMU is division-bound,
+          // so the user leaves it too. Leaving them set would orphan the
+          // placement (pmuId pointing at a PMU in the old division).
+          subDivisionId: null,
+          sectionId: null,
+          pmuId: null,
+          isPmu: false,
+          pmuRole: null,
+        },
+      }),
+      // If the new home division was already held as an EXTRA membership, drop
+      // that now-redundant row (a division can't be both home and an extra).
+      prisma.userDivisionAccess.deleteMany({
+        where: { userId: parsed.data.userId, divisionId: parsed.data.divisionId },
+      }),
+    ]);
     await audit(
       guard.userId,
       'update',
@@ -874,8 +962,10 @@ const deleteUserSchema = z.object({
  *     attachments, Timeline Files + their comments/activity/links, tags,
  *     engagements) to the acting Super Admin;
  *   - nulls the nullable back-references (archived-by, audit actor,
- *     division head/creator, supervisor/creator links, delegation revoker);
- *   - deletes the join / request / delegation rows that name the user;
+ *     division head/creator, supervisor/creator links, delegation revoker,
+ *     division-membership granter);
+ *   - deletes the join / request / delegation / division-membership rows that
+ *     name the user;
  * then deletes the row (notifications and engagement participation cascade).
  *
  * Irreversible. Super Admin only; blocks self-delete, the last active Super
@@ -950,6 +1040,12 @@ export async function deleteUserAction(
         where: { revokedById: target },
         data: { revokedById: null },
       });
+      // Division-membership grants the user handed out to others keep their
+      // history, un-attributed.
+      await tx.userDivisionAccess.updateMany({
+        where: { grantedById: target },
+        data: { grantedById: null },
+      });
 
       // 3. Delete membership / request / delegation rows that name the user.
       await tx.taskCollaborator.deleteMany({ where: { userId: target } });
@@ -961,6 +1057,9 @@ export async function deleteUserAction(
       await tx.divisionAccessDelegation.deleteMany({
         where: { OR: [{ delegatedById: target }, { delegatedToId: target }] },
       });
+      // The user's own extra-division memberships (FK is NO ACTION, so these
+      // must be removed before the user row can be deleted).
+      await tx.userDivisionAccess.deleteMany({ where: { userId: target } });
 
       // 4. Notifications and engagement participation cascade on the delete.
       await tx.user.delete({ where: { id: target } });

@@ -8,7 +8,7 @@ import { initialsOf } from '@/lib/format';
 import { buildNotificationTaskContext } from '@/lib/notification-context';
 import { canAccessDocumentCentre as canAccessDocumentCentreShared } from '@/lib/document-centre-shared';
 import { canAccessTimelineFiles } from '@/lib/timeline-files-access';
-import { getAllocatableDivisionIds, getHeadedDivisionIds } from '@/lib/rbac';
+import { getHeadedDivisionIds } from '@/lib/rbac';
 import { isS3Configured } from '@/lib/s3';
 
 import {
@@ -46,26 +46,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ]);
   if (!me) redirect('/login');
 
-  // Extra divisions this caller may ALLOCATE into via a cross-division link
-  // (e.g. a Khelo India head/delegate → NSDF), beyond the divisions they head.
-  // Grants creation/assignment reach only, not full head powers.
-  const allocatableDivisionIds = await getAllocatableDivisionIds(headedDivisionIds);
-
   // Quick Create offers the Division visibility option to anyone who can give
-  // work on some division board: Super Admin, OSD, a head/delegate of any
-  // division, or a caller with a cross-division allocation link.
+  // work on some division board: Super Admin, OSD, or a head/delegate of any
+  // division. Creating a division task is a head power — mere membership of a
+  // division does NOT grant it.
   const canCreateDivisionTasks =
     me.isSuperAdmin ||
     me.hierarchySlot === 'osd' ||
-    headedDivisionIds.length > 0 ||
-    allocatableDivisionIds.length > 0;
+    headedDivisionIds.length > 0;
 
   // Divisions + PMUs the caller may target when creating a division task
   // (Structure & Hierarchy). Ownership auto-resolves to that division's head
   // — or a PMU's team leader — on the server. Super Admin / OSD see all; a head
-  // sees the divisions they head plus those divisions' PMUs, plus any division
-  // they hold a cross-division allocation link into (its members only, not its
-  // PMUs).
+  // sees the divisions they head plus those divisions' PMUs.
   const createTargetsRaw = canCreateDivisionTasks
     ? await prisma.division.findMany({
         where:
@@ -73,7 +66,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             ? { kind: { in: ['division', 'pmu'] } }
             : {
                 OR: [
-                  { id: { in: [...headedDivisionIds, ...allocatableDivisionIds] } },
+                  { id: { in: headedDivisionIds } },
                   { kind: 'pmu', pmuParentDivisionId: { in: headedDivisionIds } },
                 ],
               },
@@ -117,6 +110,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   OR: [
                     { divisionId: { in: divisionTargetIds } },
                     { pmuId: { in: pmuTargetIds } },
+                    // Admin-granted extra members of a target division are
+                    // assignable owners there too.
+                    { divisionAccess: { some: { divisionId: { in: divisionTargetIds } } } },
                   ],
                 }),
           },
@@ -130,6 +126,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             pmuRole: true,
             hierarchySlot: true,
             division: { select: { name: true, avatarColour: true } },
+            divisionAccess: { select: { divisionId: true } },
           },
         })
       : [];
@@ -140,6 +137,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     designation: u.designation,
     divisionId: u.divisionId,
     pmuId: u.pmuId,
+    // The target divisions this user may own tasks in — home + admin-granted
+    // extras — so the Quick Create owner picker matches multi-division members.
+    memberDivisionIds: [u.divisionId, ...u.divisionAccess.map((a) => a.divisionId)],
     divisionName: u.division.name,
     divisionColour: u.division.avatarColour,
   }));

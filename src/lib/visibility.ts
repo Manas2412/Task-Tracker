@@ -3,7 +3,7 @@ import type { Prisma, Task } from '@prisma/client';
 import { startOfDayIST, endOfDayIST } from '@/lib/date';
 import { prisma } from '@/lib/db';
 import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
-import { getAllocatableDivisionIds, getHeadedDivisionIds } from '@/lib/rbac';
+import { getHeadedDivisionIds, getMemberDivisionIds } from '@/lib/rbac';
 import {
   buildVisibilityClausesFrom,
   type CallerSummary,
@@ -111,20 +111,21 @@ export async function getPmuParentDivisionHeadId(pmuId: string): Promise<string 
  * Returns clauses that are then composed with the filter clause in the page.
  */
 export async function buildVisibilityClauses(me: CallerSummary): Promise<Prisma.TaskWhereInput[]> {
-  const [headedDivisionIds, pmuMemberIds, pmuParentHeadId] = await Promise.all([
+  const [headedDivisionIds, memberDivisionIds, pmuMemberIds, pmuParentHeadId] = await Promise.all([
     getHeadedDivisionIds(me.id),
+    // Member divisions (home + admin-granted extras). Resolved by id here so
+    // every task-read caller (list, counts, stats, search, calendar, priority
+    // board, attachments, profile, task detail) picks up multi-division board
+    // visibility without touching its own `me` select.
+    getMemberDivisionIds(me.id),
     me.isPmu ? getPmuTeammateIds(me.id) : Promise.resolve<string[]>([]),
     me.isPmu && me.pmuId
       ? getPmuParentDivisionHeadId(me.pmuId)
       : Promise.resolve<string | null>(null),
   ]);
-  // Cheap for the common case: no-ops (no query) unless the caller heads a
-  // division. Lets a cross-division allocator see the tasks they created in the
-  // linked division (e.g. KI head → NSDF) without exposing its board.
-  const allocatableDivisionIds = await getAllocatableDivisionIds(headedDivisionIds);
   return buildVisibilityClausesFrom(me, headedDivisionIds, pmuMemberIds, {
     isPmuParentDivisionHead: pmuParentHeadId !== null && pmuParentHeadId === me.id,
-    allocatableDivisionIds,
+    memberDivisionIds,
   });
 }
 

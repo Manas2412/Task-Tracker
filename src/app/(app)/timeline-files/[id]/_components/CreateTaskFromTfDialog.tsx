@@ -21,6 +21,8 @@ export type CtfOwnerCandidate = {
   name: string;
   designation: string;
   divisionId: string;
+  /** Divisions this user may own tasks in (home + admin-granted extras). */
+  memberDivisionIds: string[];
   divisionName: string;
   divisionColour: string;
 };
@@ -81,12 +83,13 @@ export function CreateTaskFromTfDialog({
   const isCrossDivision = divisions.length > 1;
   const selectedDivision = divisions.find((d) => d.id === divisionId);
 
-  // Owner pool for the picked division: its members, or any active user for an
-  // Office-of-JS task. Marked-to targets are always top-level divisions (the
-  // marked-to editor offers no PMUs), so a home-division match is exactly
-  // createTaskAction's server-side membership check on this path.
+  // Owner pool for the picked division: its members (home or admin-granted
+  // extra membership), or any active user for an Office-of-JS task. Marked-to
+  // targets are always top-level divisions (the marked-to editor offers no
+  // PMUs), so a member-set match is exactly createTaskAction's server-side
+  // membership check on this path.
   const ownerOptions: UserPickerOption[] = ownerCandidates
-    .filter((c) => (selectedDivision?.isOfficeOfJs ? true : c.divisionId === divisionId))
+    .filter((c) => (selectedDivision?.isOfficeOfJs ? true : c.memberDivisionIds.includes(divisionId)))
     .map((c) => ({
       id: c.id,
       name: c.name,

@@ -2,6 +2,7 @@ import type { Prisma, TimelineFile } from '@prisma/client';
 
 import { prisma } from '@/lib/db';
 import { startOfDayIST, endOfDayIST } from '@/lib/date';
+import { getMemberDivisionIds } from '@/lib/rbac';
 import { canAccessTimelineFiles } from '@/lib/timeline-files-access';
 
 /**
@@ -62,6 +63,12 @@ type CallerSummary = {
 
 export async function buildTfVisibilityClause(
   me: CallerSummary,
+  /**
+   * The caller's member divisions (home + admin-granted extras). Resolved by id
+   * when omitted, so real callers pick up multi-division visibility with no
+   * change; the pure unit test passes it explicitly to stay DB-free.
+   */
+  memberDivisionIds?: string[],
 ): Promise<Prisma.TimelineFileWhereInput> {
   // Slots barred from the module (e.g. PMU Consultant) see no Timeline File at
   // all — a match-nothing clause, checked before any role grant so it cannot be
@@ -77,7 +84,10 @@ export async function buildTfVisibilityClause(
   ) {
     return {};
   }
-  return { markedTo: { some: { divisionId: me.divisionId } } };
+  // An ordinary officer sees files marked to ANY division they are a member of
+  // (home + admin-granted extras).
+  const divisionIds = memberDivisionIds ?? (await getMemberDivisionIds(me.id));
+  return { markedTo: { some: { divisionId: { in: divisionIds } } } };
 }
 
 export type VisibleTimelineFile = TimelineFile & {

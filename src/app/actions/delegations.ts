@@ -120,7 +120,13 @@ export async function createDelegationAction(
     }),
     prisma.user.findUnique({
       where: { id: parsed.data.delegateToId },
-      select: { id: true, name: true, isActive: true, divisionId: true },
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        divisionId: true,
+        divisionAccess: { select: { divisionId: true } },
+      },
     }),
   ]);
   if (!meRow || !meRow.isActive) return fail('Your account is unavailable.', epoch);
@@ -148,7 +154,7 @@ export async function createDelegationAction(
       {
         id: target.id,
         isActive: target.isActive,
-        divisionId: target.divisionId,
+        memberDivisionIds: [target.divisionId, ...target.divisionAccess.map((a) => a.divisionId)],
         directHeadedDivisionIds: targetDirectHeaded,
       },
       {

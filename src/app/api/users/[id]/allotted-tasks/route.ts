@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { getMemberDivisionIds } from '@/lib/rbac';
 import { rateLimit } from '@/lib/rate-limit';
 import { canViewAllottedTasks, getAllottedDivisionTasksFor } from '@/lib/user-profile';
 
@@ -41,9 +42,10 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
+  const memberDivisionIds = await getMemberDivisionIds(session.user.id);
   const permitted = canViewAllottedTasks(
     {
-      divisionId: session.user.divisionId,
+      memberDivisionIds,
       isSuperAdmin: session.user.isSuperAdmin,
       hierarchySlot: session.user.hierarchySlot,
     },

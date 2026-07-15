@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
+import { getMemberDivisionIds } from '@/lib/rbac';
 import { rateLimit } from '@/lib/rate-limit';
 import { canViewAllottedTasks, getUserProfileCard } from '@/lib/user-profile';
 
@@ -36,11 +37,13 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  // The "tasks allotted" control shows only to same-division colleagues and
-  // the oversight roles — never to users of another division.
+  // The "tasks allotted" control shows only to colleagues who are MEMBERS of
+  // the profiled user's division (home or an admin-granted extra) and the
+  // oversight roles — resolved from the DB, not the home-only JWT.
+  const memberDivisionIds = await getMemberDivisionIds(session.user.id);
   const canSeeAllotted = canViewAllottedTasks(
     {
-      divisionId: session.user.divisionId,
+      memberDivisionIds,
       isSuperAdmin: session.user.isSuperAdmin,
       hierarchySlot: session.user.hierarchySlot,
     },

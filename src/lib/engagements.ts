@@ -11,7 +11,8 @@ import { prisma } from '@/lib/db';
  */
 
 export type EngagementCaller = {
-  divisionId: string;
+  /** The caller's member divisions (home + admin-granted extras). */
+  memberDivisionIds: string[];
   isSuperAdmin: boolean;
 };
 
@@ -37,7 +38,8 @@ export function canAccessEngagements(
   officeOfJsDivisionId: string | null,
 ): boolean {
   if (me.isSuperAdmin) return true;
-  return officeOfJsDivisionId !== null && me.divisionId === officeOfJsDivisionId;
+  // A member (home or admin-granted extra) of the Office of JS division.
+  return officeOfJsDivisionId !== null && me.memberDivisionIds.includes(officeOfJsDivisionId);
 }
 
 export type EngagementSummary = {

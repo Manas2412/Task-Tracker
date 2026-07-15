@@ -21,6 +21,7 @@ import {
 } from '@/lib/calendar';
 import { prisma } from '@/lib/db';
 import { canAccessEngagements, getOfficeOfJsDivisionId } from '@/lib/engagements';
+import { getMemberDivisionIds } from '@/lib/rbac';
 import { cn } from '@/lib/utils';
 
 import { CalendarProvider } from './_components/CalendarProvider';
@@ -73,7 +74,11 @@ export default async function CalendarPage({ searchParams }: PageProps) {
   if (!me) redirect('/login');
 
   const officeOfJsDivisionId = await getOfficeOfJsDivisionId();
-  const canManageEngagements = canAccessEngagements(me, officeOfJsDivisionId);
+  const memberDivisionIds = await getMemberDivisionIds(me.id);
+  const canManageEngagements = canAccessEngagements(
+    { memberDivisionIds, isSuperAdmin: me.isSuperAdmin },
+    officeOfJsDivisionId,
+  );
   const canCreateTf = me.isSuperAdmin || me.hierarchySlot === 'osd';
   // Only cross-division viewers get a division filter; everyone else is
   // already scoped to their own division by the visibility rules.

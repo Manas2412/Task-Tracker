@@ -184,6 +184,11 @@ Visibility flag on each task:
 - `Division` — follows the hierarchy rules above.
 - **Creating a `Division` task (or changing visibility either way) is a head power**: Super Admin, OSD, the division's head (`divisions.head_user_id`), or an active delegate (`division_access_delegations`). Everyone else creates `Personal` tasks only — enforced by `canCreateDivisionTask` in `src/lib/rbac/rules.ts` and gated again in `createTaskAction` / `updateTaskFieldsAction`. The same rule covers spawning tasks from a Timeline File.
 
+Multi-division full membership:
+- A user has **one home division** (`users.division_id`) — still drives ownership, display, PMU home, and reference-number identity. A **Super Admin** can grant a user **extra divisions** via the `user_division_access` join table (managed in Super Admin → Users, the "Additional divisions" checkbox list); the member set = home + granted, resolved by `getMemberDivisionIds` and unioned in the visibility scopers and participant checks.
+- In every member division the user gets **member-level access**: full task + Timeline-File board visibility, participation (collaborator / subtask assignee / @mention), assignment/transfer target, pull, and Director-member task management — but **no head powers and no division-task creation**. Head powers stay strictly on `headedDivisionIds`.
+- This **retires the hardcoded NSDF ↔ KI/KIM links** (`CROSS_DIVISION_ALLOCATION_LINKS`, `CROSS_DIVISION_PARTICIPANT_LINKS`, `CROSS_DIVISION_VIEW_GRANTS` and their helpers are deleted); cross-division reach is now admin-managed per user via `user_division_access`. See PERMISSIONS.md §5.18.
+
 Reassignment:
 - Downward within own chain — free.
 - Sideways or upward — requires superior's tap-approval; the "Approval needed" amber badge appears on those rows in the assignee picker.
