@@ -10,6 +10,13 @@ import { cn } from '@/lib/utils';
 
 type ProfileResponse = UserProfileCard & { canViewAllottedTasks: boolean };
 
+/** How the profiled person is attached to an allotted task. */
+const RELATION_LABEL: Record<AllottedTaskRow['relation'], string> = {
+  owner: 'Owner',
+  collaborator: 'Collaborator',
+  subtask: 'Subtask owner',
+};
+
 /** Gmail compose in a new tab, prefilled To: the person's email. */
 function gmailComposeUrl(email: string): string {
   return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}`;
@@ -336,6 +343,8 @@ export function UserProfilePopup({ userId, onClose }: UserProfilePopupProps) {
                                   </span>
                                   <span className="block text-[10.5px] text-ink-3">
                                     {TASK_STATUS_LABEL[t.status] ?? t.status}
+                                    <span className="text-ink-4"> · </span>
+                                    {RELATION_LABEL[t.relation]}
                                   </span>
                                 </span>
                                 <i

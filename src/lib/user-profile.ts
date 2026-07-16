@@ -26,13 +26,18 @@ export type UserProfileCard = {
   isSuperAdmin: boolean;
 };
 
-/** A division-visibility task allotted to (owned by) the profiled user. */
+/**
+ * A division-visibility task the profiled person is attached to — as the task
+ * owner, a collaborator, or the owner of a subtask. `relation` records which,
+ * so the profile popup can label why the task is listed.
+ */
 export type AllottedTaskRow = {
   id: string;
   name: string;
   status: string;
   dueDate: string | null;
   href: string;
+  relation: 'owner' | 'collaborator' | 'subtask';
 };
 
 type ViewerContext = {
@@ -99,13 +104,16 @@ export async function getUserProfileCard(id: string): Promise<UserProfileCard | 
 }
 
 /**
- * Division-visibility tasks allotted to `ownerId`, scoped to what `callerId`
- * is actually allowed to see (`buildVisibilityClauses`). Top-level tasks
- * only. Callers must still gate the surface with `canViewAllottedTasks`.
+ * Division-visibility tasks the profiled person (`personId`) is attached to —
+ * as the task owner (top-level task), a collaborator, or the owner of a subtask
+ * — scoped to what `callerId` is actually allowed to see
+ * (`buildVisibilityClauses`), so the list can never leak a task the caller
+ * could not already see. Callers must still gate the surface with
+ * `canViewAllottedTasks`.
  */
 export async function getAllottedDivisionTasksFor(
   callerId: string,
-  ownerId: string,
+  personId: string,
 ): Promise<AllottedTaskRow[]> {
   const me = await prisma.user.findUnique({
     where: { id: callerId },
@@ -124,11 +132,30 @@ export async function getAllottedDivisionTasksFor(
   const rows = await prisma.task.findMany({
     where: {
       AND: [
-        { ownerId, visibility: 'division', archivedAt: null, parentTaskId: null },
+        // How the profiled person is attached to the task: its owner (a
+        // top-level task or a subtask they own — subtasks are just tasks with a
+        // parent), or an explicit collaborator. Subtasks inherit their parent's
+        // visibility, so `division` still admits subtasks of division tasks.
+        {
+          visibility: 'division',
+          archivedAt: null,
+          OR: [
+            { ownerId: personId },
+            { collaborators: { some: { userId: personId } } },
+          ],
+        },
+        // Caller visibility guard — never surface a task the caller can't see.
         { OR: visibility },
       ],
     },
-    select: { id: true, name: true, status: true, dueDate: true },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      dueDate: true,
+      ownerId: true,
+      parentTaskId: true,
+    },
     orderBy: [{ updatedAt: 'desc' }],
     take: 50,
   });
@@ -139,5 +166,11 @@ export async function getAllottedDivisionTasksFor(
     status: t.status,
     dueDate: t.dueDate ? t.dueDate.toISOString() : null,
     href: `/tasks/${t.id}`,
+    relation:
+      t.ownerId === personId
+        ? t.parentTaskId
+          ? 'subtask'
+          : 'owner'
+        : 'collaborator',
   }));
 }
