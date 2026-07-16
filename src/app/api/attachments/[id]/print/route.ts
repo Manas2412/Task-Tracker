@@ -3,16 +3,23 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { logError } from '@/lib/utils/log';
 import { prisma } from '@/lib/db';
-import { isOfficeDocument, officeWebViewerUrl } from '@/lib/mime';
-import { isS3Configured, presignView } from '@/lib/s3';
+import { sanitizeFilename, getObjectStream, isS3Configured } from '@/lib/s3';
 import { buildTfVisibilityClause } from '@/lib/timeline-files';
 import { buildVisibilityClauses } from '@/lib/visibility';
 
 /**
- * GET /api/attachments/:id/view
+ * GET /api/attachments/:id/print
  *
- * Like the download route but uses Content-Disposition: inline so the
- * browser displays the file (PDF, image) instead of force-downloading.
+ * Streams an uploaded attachment's bytes back through THIS origin, inline, so
+ * the client can load it into a hidden iframe and call `window.print()`
+ * directly — the browser blocks programmatic printing of the cross-origin
+ * presigned S3 URL that `/view` and `/download` redirect to. Same auth and
+ * parent-visibility checks as those routes; only browser-renderable files
+ * (PDFs, images) are ever requested here (the client routes Office documents to
+ * their hosted viewer instead), but any uploaded object streams fine.
+ *
+ * Drive links are not proxied (we do not have their bytes) — the client opens
+ * those in a new tab and prints from there.
  */
 export async function GET(
   _request: Request,
@@ -71,10 +78,10 @@ export async function GET(
   }
 
   if (att.source === 'drive_link') {
-    if (!isSafeDriveLinkUrl(att.fileUrl)) {
-      return NextResponse.json({ error: 'Blocked redirect URL' }, { status: 403 });
-    }
-    return NextResponse.redirect(att.fileUrl);
+    return NextResponse.json(
+      { error: 'Drive links cannot be printed through the server.' },
+      { status: 400 },
+    );
   }
 
   if (!isS3Configured()) {
@@ -85,41 +92,26 @@ export async function GET(
   }
 
   try {
-    const url = await presignView({
-      key: att.fileUrl,
-      filename: att.fileName,
-      contentType: att.mimeType ?? undefined,
+    const { body, contentType, contentLength } = await getObjectStream(att.fileUrl);
+    const headers = new Headers({
+      'Content-Type': att.mimeType || contentType || 'application/octet-stream',
+      'Content-Disposition': `inline; filename="${sanitizeFilename(att.fileName)}"`,
+      // Same-origin only, keep out of any shared cache — these are access-gated.
+      'Cache-Control': 'private, no-store',
+      // Defence in depth: this route serves attachment bytes from our OWN
+      // origin, so active content (a scripted SVG, stray HTML) must never
+      // execute here. `nosniff` pins the declared type; `sandbox` neutralises
+      // any script/plugin/navigation if the URL is opened directly. The normal
+      // print path fetches these bytes and re-wraps them in a fresh blob (whose
+      // type is constrained to safe formats by isBrowserPrintable), so neither
+      // header affects PDF/image printing.
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': 'sandbox',
     });
-
-    // Office documents have no in-browser renderer, so open them directly in a
-    // hosted Office viewer — a single, fully-featured tab (print, download,
-    // zoom, page navigation). This replaces the old embedded Google preview,
-    // which, opened top-level, only offered a "Pop-out" and cascaded through
-    // several windows before reaching a usable viewer. PDFs, images and other
-    // browser-native types keep going straight to the presigned inline URL.
-    if (isOfficeDocument(att.fileName, att.mimeType)) {
-      return NextResponse.redirect(officeWebViewerUrl(url));
-    }
-
-    return NextResponse.redirect(url);
+    if (contentLength != null) headers.set('Content-Length', String(contentLength));
+    return new NextResponse(body, { status: 200, headers });
   } catch (err) {
-    logError('presignView failed', err);
-    return NextResponse.json({ error: 'Could not generate URL' }, { status: 500 });
-  }
-}
-
-const ALLOWED_DRIVE_HOSTS = new Set([
-  'drive.google.com',
-  'docs.google.com',
-  'sheets.google.com',
-  'slides.google.com',
-]);
-
-function isSafeDriveLinkUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' && ALLOWED_DRIVE_HOSTS.has(parsed.hostname);
-  } catch {
-    return false;
+    logError('attachment print stream failed', err);
+    return NextResponse.json({ error: 'Could not load file' }, { status: 500 });
   }
 }

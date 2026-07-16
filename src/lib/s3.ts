@@ -169,6 +169,29 @@ export async function deleteObject(key: string): Promise<void> {
   await s3Client().send(new DeleteObjectCommand({ Bucket: s3Bucket(), Key: key }));
 }
 
+/**
+ * Fetch an object as a web ReadableStream, for streaming it back through our
+ * own origin. Used by the print route: the browser can only auto-invoke
+ * `window.print()` on same-origin content, so the file bytes must be proxied
+ * rather than served via a cross-origin presigned redirect. Reserve this for
+ * that case — downloads and views still redirect straight to S3.
+ */
+export async function getObjectStream(key: string): Promise<{
+  body: ReadableStream;
+  contentType: string | undefined;
+  contentLength: number | undefined;
+}> {
+  const res = await s3Client().send(
+    new GetObjectCommand({ Bucket: s3Bucket(), Key: key }),
+  );
+  if (!res.Body) throw new Error('S3 object has no body');
+  return {
+    body: res.Body.transformToWebStream(),
+    contentType: res.ContentType,
+    contentLength: res.ContentLength,
+  };
+}
+
 // ============================================================
 // File-type helpers (UI consumes these)
 // ============================================================
