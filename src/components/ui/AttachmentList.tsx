@@ -12,7 +12,7 @@ import {
   renameAttachmentAction,
 } from '@/app/actions/attachments';
 import { fileBadgeFor, formatBytes, MAX_UPLOAD_BYTES } from '@/lib/s3';
-import { guessContentType } from '@/lib/mime';
+import { guessContentType, isBrowserPrintable } from '@/lib/mime';
 import { cn } from '@/lib/utils';
 
 export type AttachmentRow = {
@@ -267,6 +267,7 @@ function AttachmentRowCard({
   const [editValue, setEditValue] = useState('');
   const [renaming, setRenaming] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   const ext = isDriveLink ? '' : (row.fileName.includes('.') ? '.' + row.fileName.split('.').pop() : '');
@@ -305,6 +306,66 @@ function AttachmentRowCard({
       commitRename();
     } else if (e.key === 'Escape') {
       setEditing(false);
+    }
+  };
+
+  const printAttachment = async () => {
+    if (printing) return;
+    // Office documents and other non-renderable types have no in-browser
+    // print. Open them in the hosted viewer (same as View), which carries its
+    // own print control. Only PDFs and images can be auto-printed below.
+    if (!isBrowserPrintable(row.fileName, row.mimeType)) {
+      window.open(viewUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setPrinting(true);
+    try {
+      // Stream the bytes through our origin so the browser will let us call
+      // print() on them — it blocks programmatic printing of the cross-origin
+      // presigned S3 URL that /view redirects to.
+      const res = await fetch(`/api/attachments/${row.id}/print`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? 'Could not open the file for printing.');
+      }
+      const blobUrl = URL.createObjectURL(await res.blob());
+      const iframe = document.createElement('iframe');
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.style.cssText =
+        'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+      let cleaned = false;
+      let fallback: ReturnType<typeof setTimeout>;
+      // Single teardown for every exit path — after the print dialog closes
+      // (afterprint), or the fallback timer, or a failed load. It also clears
+      // the busy state, so the button stays disabled for the whole print
+      // interaction (not just the fetch) and can't spawn a second dialog.
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        clearTimeout(fallback);
+        URL.revokeObjectURL(blobUrl);
+        iframe.remove();
+        setPrinting(false);
+      };
+      iframe.onload = () => {
+        const win = iframe.contentWindow;
+        if (!win) {
+          cleanup();
+          return;
+        }
+        win.addEventListener('afterprint', cleanup);
+        win.focus();
+        win.print();
+      };
+      iframe.src = blobUrl;
+      document.body.appendChild(iframe);
+      // Backstop: guarantees teardown even if the iframe never fires `load`
+      // (e.g. undecodable bytes) or the browser omits `afterprint`.
+      fallback = setTimeout(cleanup, 60_000);
+    } catch (err) {
+      console.error('Print failed:', err);
+      alert(err instanceof Error ? err.message : 'Print failed.');
+      setPrinting(false);
     }
   };
 
@@ -419,6 +480,15 @@ function AttachmentRowCard({
               <i className="ti ti-eye text-[13px]" aria-hidden="true" />
               View
             </a>
+            <button
+              type="button"
+              onClick={printAttachment}
+              disabled={printing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line text-[11px] font-medium text-ink-2 hover:bg-line-2 transition-colors disabled:opacity-50"
+            >
+              <i className="ti ti-printer text-[13px]" aria-hidden="true" />
+              {printing ? 'Printing…' : 'Print'}
+            </button>
             <a
               href={downloadUrl}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-line text-[11px] font-medium text-ink-2 hover:bg-line-2 transition-colors"
