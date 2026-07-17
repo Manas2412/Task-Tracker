@@ -195,4 +195,4 @@ export function formatBytes(bytes: number | bigint | null | undefined): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB hard cap
+export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB hard cap
