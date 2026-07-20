@@ -49,11 +49,15 @@ jobs:
             pnpm install --frozen-lockfile
             npx prisma generate
             npx prisma migrate deploy
-            # Build from a clean dir: next build never prunes distDir/types for
-            # routes deleted from source, so an incrementally reused build dir
-            # keeps type stubs for gone routes and fails the type-check. A stale
-            # .next-build can also linger from an earlier `set -e` build abort.
-            rm -rf .next-build
+            # tsconfig `include` hardcodes `.next/types/**/*.ts`, so the build's
+            # type-check validates whatever sits in .next/types — NOT the fresh
+            # .next-build/types this deploy writes. next build never prunes type
+            # stubs for routes deleted from source, so a stale .next/types keeps
+            # a stub for a gone route (e.g. attachments/[id]/print) and fails the
+            # check. Clear both the prior build dir and the stale type stubs so
+            # the type-check only sees current routes. .next/types is build-time
+            # only (never served), so removing it can't disrupt the live app.
+            rm -rf .next-build .next/types
             NEXT_BUILD_DIR=.next-build pnpm build
             rm -rf .next-old
             [ -d .next ] && mv .next .next-old
