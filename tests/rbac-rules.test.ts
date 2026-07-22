@@ -348,6 +348,53 @@ describe('canManageTask — edit fields + manage collaborators', () => {
   });
 });
 
+describe('canManageTask — PMU team leader', () => {
+  // A PMU team leader (not a division head) manages tasks OWNED BY a member of
+  // their PMU team. `pmuTeamMemberIds` carries that team; team scope is owner-
+  // based, independent of the task's division.
+  const TEAM = ['leader-1', 'teammate-a', 'teammate-b'];
+  const leader = (overrides: Record<string, unknown> = {}) => ({
+    id: 'leader-1',
+    isSuperAdmin: false,
+    hierarchySlot: 'aso',
+    memberDivisionIds: [KI],
+    headedDivisionIds: [] as string[],
+    pmuTeamMemberIds: TEAM,
+    ...overrides,
+  });
+
+  it("manages a DIVISION task owned by a team member (not the leader's own)", () => {
+    const task = { ownerId: 'teammate-a', createdById: 'teammate-a', divisionId: KI, visibility: 'division' };
+    expect(canManageTask(leader(), task)).toBe(true);
+  });
+
+  it("does NOT manage a teammate's PERSONAL task (stays private to its creator)", () => {
+    const task = { ownerId: 'teammate-a', createdById: 'teammate-a', divisionId: KI, visibility: 'personal' };
+    expect(canManageTask(leader(), task)).toBe(false);
+    // …and with visibility unknown, the leader branch fails closed.
+    const noVis = { ownerId: 'teammate-a', createdById: 'teammate-a', divisionId: KI };
+    expect(canManageTask(leader(), noVis)).toBe(false);
+  });
+
+  it('does NOT manage a task owned by a non-team member in the same division', () => {
+    // A non-PMU ministry task in the same division: owner is not on the team.
+    const task = { ownerId: 'ministry-officer', createdById: 'ministry-officer', divisionId: KI, visibility: 'division' };
+    expect(canManageTask(leader(), task)).toBe(false);
+  });
+
+  it('is inert for a normal caller with no team (undefined/empty)', () => {
+    const task = { ownerId: 'teammate-a', createdById: 'teammate-a', divisionId: KI, visibility: 'division' };
+    expect(canManageTask(leader({ pmuTeamMemberIds: undefined }), task)).toBe(false);
+    expect(canManageTask(leader({ pmuTeamMemberIds: [] }), task)).toBe(false);
+  });
+
+  it('still lets the leader manage their own / created tasks (ownership rule)', () => {
+    expect(
+      canManageTask(leader(), { ownerId: 'leader-1', createdById: 'x', divisionId: MEDIA, visibility: 'personal' }),
+    ).toBe(true);
+  });
+});
+
 describe('canDelegateDivision', () => {
   it('only the direct head or super admin can delegate', () => {
     expect(canDelegateDivision({ id: 'u1', isSuperAdmin: false }, { headUserId: 'u1' })).toBe(true);

@@ -16,6 +16,7 @@ import {
   notifyDocumentAudience,
   writeDocumentAudit,
 } from '@/lib/document-centre';
+import { getPmuTeamMemberIds } from '@/lib/pmu-team';
 import { getMemberDivisionIds } from '@/lib/rbac';
 import { isTaskCollaborator } from '@/lib/task-participants';
 import {
@@ -84,22 +85,25 @@ export async function canEditTaskAttachments(
   callerId: string,
   taskId: string,
 ): Promise<boolean> {
-  const [me, task] = await Promise.all([
+  const [me, task, pmuTeamMemberIds] = await Promise.all([
     prisma.user.findUnique({
       where: { id: callerId },
       select: { isSuperAdmin: true, hierarchySlot: true },
     }),
     prisma.task.findUnique({
       where: { id: taskId },
-      select: { ownerId: true, createdById: true },
+      select: { ownerId: true, createdById: true, visibility: true },
     }),
+    // A PMU team leader may manage documents on their team's DIVISION tasks.
+    getPmuTeamMemberIds(callerId),
   ]);
   if (!me || !task) return false;
   return (
     me.isSuperAdmin ||
     me.hierarchySlot === 'osd' ||
     task.ownerId === callerId ||
-    task.createdById === callerId
+    task.createdById === callerId ||
+    (task.visibility === 'division' && pmuTeamMemberIds.includes(task.ownerId))
   );
 }
 

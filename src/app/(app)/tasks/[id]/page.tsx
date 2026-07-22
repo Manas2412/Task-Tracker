@@ -20,6 +20,7 @@ import {
 } from '@/lib/rbac';
 import { ACTOR_SUMMARY_SELECT, USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { buildVisibilityClauses } from '@/lib/visibility';
+import { getPmuTeamMemberIds } from '@/lib/pmu-team';
 import { buildTaskParticipantWhere } from '@/lib/task-participants';
 import { canAccessTimelineFiles } from '@/lib/timeline-files-access';
 import { CollaboratorsSection, type Candidate, type CollaboratorRow, type SubtaskScope } from './_components/CollaboratorsSection';
@@ -150,6 +151,15 @@ export default async function TaskDetailPage({ params }: PageProps) {
   const isHeadOfTaskDivision =
     actor !== null && actor.headedDivisionIds.includes(task.divisionId);
 
+  // A PMU team leader administers their team's DIVISION tasks (edit,
+  // collaborators, reassign, attachments) — scoped to tasks OWNED BY a team
+  // member. A teammate's personal task stays out of scope, matching the
+  // visibility scoper. Empty for everyone else, so it never widens a
+  // non-leader's rights.
+  const pmuTeamMemberIds = await getPmuTeamMemberIds(session.user.id);
+  const managesAsPmuLeader =
+    task.visibility === 'division' && pmuTeamMemberIds.includes(task.ownerId);
+
   const canPull =
     isUnassigned &&
     !isOwner &&
@@ -184,8 +194,14 @@ export default async function TaskDetailPage({ params }: PageProps) {
       hierarchySlot: session.user.hierarchySlot,
       memberDivisionIds,
       headedDivisionIds: actor?.headedDivisionIds ?? [],
+      pmuTeamMemberIds,
     },
-    { ownerId: task.ownerId, createdById: task.createdById, divisionId: task.divisionId },
+    {
+      ownerId: task.ownerId,
+      createdById: task.createdById,
+      divisionId: task.divisionId,
+      visibility: task.visibility,
+    },
   );
   const canEditFields = canManage;
 
@@ -390,13 +406,15 @@ export default async function TaskDetailPage({ params }: PageProps) {
     : [];
 
   // Changing the owner from the Owner row is reserved for Super Admin, OSD,
-  // and the head of the task's division. A normal user (even the owner or
-  // creator) hands the task off via the Transfer button instead, which
-  // requires a comment — so the Owner row stays read-only for them.
+  // the head of the task's division, and a PMU team leader over their team's
+  // tasks. A normal user (even the owner or creator) hands the task off via the
+  // Transfer button instead, which requires a comment — so the Owner row stays
+  // read-only for them. Mirrors the mayInitiate gate in reassignTaskAction.
   const canReassign =
     session.user.isSuperAdmin ||
     session.user.hierarchySlot === 'osd' ||
-    isHeadOfTaskDivision;
+    isHeadOfTaskDivision ||
+    managesAsPmuLeader;
 
   const canChangeDivision =
     session.user.isSuperAdmin || session.user.hierarchySlot === 'osd';

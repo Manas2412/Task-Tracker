@@ -177,6 +177,12 @@ export function canCreateDivisionTask(actor: RbacActor, divisionId: string): boo
  *     `headedDivisionIds` folds in live delegations. A delegate is the
  *     temporary head for the delegation's lifetime and manages its tasks
  *     exactly as the head would.
+ *   - a PMU team leader, over any DIVISION-visibility task OWNED BY a member of
+ *     their PMU team (`pmuTeamMemberIds`, resolved by `getPmuTeamMemberIds`).
+ *     This scopes the leader's admin to the PMU team's own board tasks — never
+ *     the wider division's ministry tasks, and never a teammate's PERSONAL task
+ *     (personal tasks stay private to their creator, exactly as the visibility
+ *     scoper keeps them off the leader's board). Management only: never delete.
  *
  * Pure so it can be unit-tested and shared verbatim by client and server.
  */
@@ -188,8 +194,14 @@ export function canManageTask(
     /** The caller's member divisions (home + granted extras). */
     memberDivisionIds: string[];
     headedDivisionIds: string[];
+    /**
+     * When the caller is a PMU team leader, the ids of their PMU team (see
+     * `getPmuTeamMemberIds`); omitted/empty otherwise. The leader manages a
+     * division task whose owner is in this set.
+     */
+    pmuTeamMemberIds?: string[];
   },
-  task: { ownerId: string; createdById: string; divisionId: string },
+  task: { ownerId: string; createdById: string; divisionId: string; visibility?: string },
 ): boolean {
   if (task.ownerId === caller.id || task.createdById === caller.id) return true;
   if (caller.isSuperAdmin) return true;
@@ -197,7 +209,14 @@ export function canManageTask(
   if (caller.hierarchySlot === 'director' && caller.memberDivisionIds.includes(task.divisionId)) {
     return true;
   }
-  return caller.headedDivisionIds.includes(task.divisionId);
+  if (caller.headedDivisionIds.includes(task.divisionId)) return true;
+  // A PMU team leader — only over the team's DIVISION tasks. A teammate's
+  // personal task is out of scope (it is off the leader's board too), so the
+  // management surface never exceeds what the leader can see.
+  return (
+    task.visibility === 'division' &&
+    (caller.pmuTeamMemberIds?.includes(task.ownerId) ?? false)
+  );
 }
 
 /**
