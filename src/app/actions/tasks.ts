@@ -23,7 +23,7 @@ import {
   resolveDivisionOwner,
 } from '@/lib/rbac';
 import { buildVisibilityClauses, getPmuParentDivisionHeadId } from '@/lib/visibility';
-import { getPmuTeamMemberIds } from '@/lib/pmu-team';
+import { getPmuTeamMemberIds, isElevatedOverDivision } from '@/lib/pmu-team';
 import {
   buildTaskParticipantWhere,
   isTaskCollaborator,
@@ -218,6 +218,55 @@ async function canEditTaskDetails(
   }
   const actor = await getRbacActor(callerId);
   return actor !== null && canActAsHeadOf(actor, task.divisionId);
+}
+
+/**
+ * Whether `callerId` may DELETE `task` as its PMU Team Head. Granted only when:
+ *   - the task is a DIVISION-visibility task owned by a member of the caller's
+ *     PMU team (so it is one of the team's own board tasks), AND
+ *   - the task was NOT allotted (created) by an elevated role — a Division Head,
+ *     Super Admin, or OSD — which retains exclusive delete control over the
+ *     tasks it hands the team.
+ * Returns false for a non-leader caller (empty team). See PERMISSIONS.md §5.19.
+ *
+ * `isElevatedOverDivision` reads the allotter's CURRENT status (consistent with
+ * the rest of the RBAC layer, which never snapshots authority): a task allotted
+ * by an acting delegate whose window later lapses, or by a head who is later
+ * replaced, stops counting as elevated-allotted — but the CURRENT division head
+ * / Super Admin / OSD always retains delete control regardless, so the elevated
+ * tier never loses the task.
+ */
+async function canPmuHeadDeleteOwnedTask(
+  callerId: string,
+  task: { ownerId: string; createdById: string; divisionId: string; visibility: string },
+): Promise<boolean> {
+  if (task.visibility !== 'division') return false;
+  const team = await getPmuTeamMemberIds(callerId);
+  if (!team.includes(task.ownerId)) return false;
+  return !(await isElevatedOverDivision(task.createdById, task.divisionId));
+}
+
+/**
+ * Whether the given task ids carry any attachment uploaded by an elevated role
+ * (Division Head / Super Admin / OSD). Used to stop a PMU Team Head's task
+ * delete from cascade-deleting a document those roles uploaded — a protected
+ * document may only be removed by them (see `deleteAttachmentAction`). The
+ * division head / Super Admin / OSD delete the task via their own gate, so this
+ * guard applies to the PMU-head path only.
+ */
+async function taskIdsHaveElevatedUpload(
+  taskIds: string[],
+  divisionId: string,
+): Promise<boolean> {
+  const uploads = await prisma.attachment.findMany({
+    where: { ownerType: 'task', ownerId: { in: taskIds } },
+    select: { uploadedById: true },
+  });
+  const uploaderIds = [...new Set(uploads.map((u) => u.uploadedById))];
+  for (const uid of uploaderIds) {
+    if (await isElevatedOverDivision(uid, divisionId)) return true;
+  }
+  return false;
 }
 
 async function canViewTask(callerId: string, taskId: string): Promise<boolean> {
@@ -1671,16 +1720,29 @@ export async function deleteTaskAction(
     // owner, the head of the task's division, or a Super Admin — never the
     // subtask's own assignee, who was merely allotted the work. (No personal
     // self-delete path either: a subtask's owner does not own its lifecycle.)
+    // A PMU Team Head may also delete subtasks of their team's OWN division
+    // tasks — but not of a task allotted by an elevated role (see below).
     const parent = await prisma.task.findUnique({
       where: { id: task.parentTaskId },
-      select: { ownerId: true },
+      select: { ownerId: true, createdById: true, divisionId: true, visibility: true },
     });
     allowed =
       (parent !== null && parent.ownerId === me.id) ||
       (actor !== null && canActAsHeadOf(actor, task.divisionId));
+    if (!allowed && parent && (await canPmuHeadDeleteOwnedTask(me.id, parent))) {
+      // The PMU head may delete this subtask — unless it carries a document
+      // uploaded by an elevated role, which the delete would cascade away.
+      if (await taskIdsHaveElevatedUpload([task.id], task.divisionId)) {
+        return fail(
+          'This subtask has a document from a division head, Super Admin, or OSD — only they can delete it.',
+          epoch,
+        );
+      }
+      allowed = true;
+    }
     if (!allowed) {
       return fail(
-        'Only the parent task owner, a division head, or a Super Admin can delete this subtask.',
+        'Only the parent task owner, a division head, a Super Admin, or the PMU team head can delete this subtask.',
         epoch,
       );
     }
@@ -1692,9 +1754,29 @@ export async function deleteTaskAction(
     allowed =
       (task.visibility === 'personal' && task.ownerId === me.id) ||
       (actor !== null && canActAsHeadOf(actor, task.divisionId));
+    // A PMU Team Head may delete their PMU team's OWN division tasks — but
+    // never a task allotted (created) by a Division Head / Super Admin / OSD,
+    // which stays under those elevated roles' control.
+    if (!allowed && (await canPmuHeadDeleteOwnedTask(me.id, task))) {
+      // Refuse if the task (or a subtask) carries a document uploaded by an
+      // elevated role — deleting the task tree would cascade it away.
+      const subIds = (
+        await prisma.task.findMany({
+          where: { parentTaskId: task.id },
+          select: { id: true },
+        })
+      ).map((s) => s.id);
+      if (await taskIdsHaveElevatedUpload([task.id, ...subIds], task.divisionId)) {
+        return fail(
+          'This task has a document from a division head, Super Admin, or OSD — only they can delete it.',
+          epoch,
+        );
+      }
+      allowed = true;
+    }
     if (!allowed) {
       return fail(
-        'Only a division head or a Super Admin can delete this task.',
+        'Only a division head, a Super Admin, or the PMU team head can delete this task.',
         epoch,
       );
     }

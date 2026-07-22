@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { getHeadedDivisionIds } from '@/lib/rbac';
 
 /**
  * PMU team-leader admin scope.
@@ -56,4 +57,26 @@ export async function getPmuTeamMemberIds(userId: string): Promise<string[]> {
     select: { id: true },
   });
   return team.map((u) => u.id);
+}
+
+/**
+ * Whether `userId` holds elevated authority over `divisionId` — a Super Admin,
+ * the OSD, or a head of that division (direct headship or an active
+ * delegation). This is the "Division Head / Super Admin / OSD" tier that a PMU
+ * Team Head must NOT override: they cannot delete a task such a person allotted,
+ * nor delete a document such a person uploaded (see `deleteTaskAction` /
+ * `deleteAttachmentAction`). Returns false for a missing user.
+ */
+export async function isElevatedOverDivision(
+  userId: string,
+  divisionId: string,
+): Promise<boolean> {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isSuperAdmin: true, hierarchySlot: true },
+  });
+  if (!u) return false;
+  if (u.isSuperAdmin || u.hierarchySlot === 'osd') return true;
+  const headed = await getHeadedDivisionIds(userId);
+  return headed.includes(divisionId);
 }
