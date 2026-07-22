@@ -23,6 +23,7 @@ import {
   resolveDivisionOwner,
 } from '@/lib/rbac';
 import { buildVisibilityClauses, getPmuParentDivisionHeadId } from '@/lib/visibility';
+import { getPmuTeamMemberIds, isElevatedOverDivision } from '@/lib/pmu-team';
 import {
   buildTaskParticipantWhere,
   isTaskCollaborator,
@@ -166,7 +167,7 @@ async function spawnRecurringTask(taskId: string, actorId: string): Promise<void
 
 async function canEditTask(
   callerId: string,
-  task: { ownerId: string; createdById: string; divisionId: string },
+  task: { ownerId: string; createdById: string; divisionId: string; visibility: string },
 ): Promise<boolean> {
   // Owner / creator never need a role lookup — the creator keeps this even
   // after handing ownership off (see canManageTask).
@@ -178,12 +179,14 @@ async function canEditTask(
   if (!caller) return false;
   // headedDivisionIds folds in active delegations, so a delegate manages the
   // division's tasks exactly as its head would; memberDivisionIds (home +
-  // admin-granted extras) lets a Director member manage that division's tasks.
-  const [headedDivisionIds, memberDivisionIds] = await Promise.all([
+  // admin-granted extras) lets a Director member manage that division's tasks;
+  // pmuTeamMemberIds lets a PMU team leader manage their team's tasks.
+  const [headedDivisionIds, memberDivisionIds, pmuTeamMemberIds] = await Promise.all([
     getHeadedDivisionIds(callerId),
     getMemberDivisionIds(callerId),
+    getPmuTeamMemberIds(callerId),
   ]);
-  return canManageTask({ ...caller, memberDivisionIds, headedDivisionIds }, task);
+  return canManageTask({ ...caller, memberDivisionIds, headedDivisionIds, pmuTeamMemberIds }, task);
 }
 
 /**
@@ -215,6 +218,55 @@ async function canEditTaskDetails(
   }
   const actor = await getRbacActor(callerId);
   return actor !== null && canActAsHeadOf(actor, task.divisionId);
+}
+
+/**
+ * Whether `callerId` may DELETE `task` as its PMU Team Head. Granted only when:
+ *   - the task is a DIVISION-visibility task owned by a member of the caller's
+ *     PMU team (so it is one of the team's own board tasks), AND
+ *   - the task was NOT allotted (created) by an elevated role — a Division Head,
+ *     Super Admin, or OSD — which retains exclusive delete control over the
+ *     tasks it hands the team.
+ * Returns false for a non-leader caller (empty team). See PERMISSIONS.md §5.19.
+ *
+ * `isElevatedOverDivision` reads the allotter's CURRENT status (consistent with
+ * the rest of the RBAC layer, which never snapshots authority): a task allotted
+ * by an acting delegate whose window later lapses, or by a head who is later
+ * replaced, stops counting as elevated-allotted — but the CURRENT division head
+ * / Super Admin / OSD always retains delete control regardless, so the elevated
+ * tier never loses the task.
+ */
+async function canPmuHeadDeleteOwnedTask(
+  callerId: string,
+  task: { ownerId: string; createdById: string; divisionId: string; visibility: string },
+): Promise<boolean> {
+  if (task.visibility !== 'division') return false;
+  const team = await getPmuTeamMemberIds(callerId);
+  if (!team.includes(task.ownerId)) return false;
+  return !(await isElevatedOverDivision(task.createdById, task.divisionId));
+}
+
+/**
+ * Whether the given task ids carry any attachment uploaded by an elevated role
+ * (Division Head / Super Admin / OSD). Used to stop a PMU Team Head's task
+ * delete from cascade-deleting a document those roles uploaded — a protected
+ * document may only be removed by them (see `deleteAttachmentAction`). The
+ * division head / Super Admin / OSD delete the task via their own gate, so this
+ * guard applies to the PMU-head path only.
+ */
+async function taskIdsHaveElevatedUpload(
+  taskIds: string[],
+  divisionId: string,
+): Promise<boolean> {
+  const uploads = await prisma.attachment.findMany({
+    where: { ownerType: 'task', ownerId: { in: taskIds } },
+    select: { uploadedById: true },
+  });
+  const uploaderIds = [...new Set(uploads.map((u) => u.uploadedById))];
+  for (const uid of uploaderIds) {
+    if (await isElevatedOverDivision(uid, divisionId)) return true;
+  }
+  return false;
 }
 
 async function canViewTask(callerId: string, taskId: string): Promise<boolean> {
@@ -588,7 +640,7 @@ export async function updateTaskStatusAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, status: true, ownerId: true, createdById: true, divisionId: true, recurrenceRule: true },
+    select: { id: true, name: true, status: true, ownerId: true, createdById: true, divisionId: true, visibility: true, recurrenceRule: true },
   });
   if (!task) return fail('Task not found.', epoch);
 
@@ -1217,7 +1269,7 @@ export async function toggleSubtaskAction(
   if (subtask.parentTaskId) {
     const parent = await prisma.task.findUnique({
       where: { id: subtask.parentTaskId },
-      select: { id: true, ownerId: true, createdById: true, divisionId: true },
+      select: { id: true, ownerId: true, createdById: true, divisionId: true, visibility: true },
     });
     if (!parent || !(await canEditTask(me.id, parent))) {
       return fail('You do not have permission to modify this task.', epoch);
@@ -1302,6 +1354,7 @@ export async function updateSubtaskAction(
       ownerId: true,
       createdById: true,
       divisionId: true,
+      visibility: true,
       dueDate: true,
       division: { select: { kind: true, headUserId: true } },
     },
@@ -1667,16 +1720,29 @@ export async function deleteTaskAction(
     // owner, the head of the task's division, or a Super Admin — never the
     // subtask's own assignee, who was merely allotted the work. (No personal
     // self-delete path either: a subtask's owner does not own its lifecycle.)
+    // A PMU Team Head may also delete subtasks of their team's OWN division
+    // tasks — but not of a task allotted by an elevated role (see below).
     const parent = await prisma.task.findUnique({
       where: { id: task.parentTaskId },
-      select: { ownerId: true },
+      select: { ownerId: true, createdById: true, divisionId: true, visibility: true },
     });
     allowed =
       (parent !== null && parent.ownerId === me.id) ||
       (actor !== null && canActAsHeadOf(actor, task.divisionId));
+    if (!allowed && parent && (await canPmuHeadDeleteOwnedTask(me.id, parent))) {
+      // The PMU head may delete this subtask — unless it carries a document
+      // uploaded by an elevated role, which the delete would cascade away.
+      if (await taskIdsHaveElevatedUpload([task.id], task.divisionId)) {
+        return fail(
+          'This subtask has a document from a division head, Super Admin, or OSD — only they can delete it.',
+          epoch,
+        );
+      }
+      allowed = true;
+    }
     if (!allowed) {
       return fail(
-        'Only the parent task owner, a division head, or a Super Admin can delete this subtask.',
+        'Only the parent task owner, a division head, a Super Admin, or the PMU team head can delete this subtask.',
         epoch,
       );
     }
@@ -1688,9 +1754,29 @@ export async function deleteTaskAction(
     allowed =
       (task.visibility === 'personal' && task.ownerId === me.id) ||
       (actor !== null && canActAsHeadOf(actor, task.divisionId));
+    // A PMU Team Head may delete their PMU team's OWN division tasks — but
+    // never a task allotted (created) by a Division Head / Super Admin / OSD,
+    // which stays under those elevated roles' control.
+    if (!allowed && (await canPmuHeadDeleteOwnedTask(me.id, task))) {
+      // Refuse if the task (or a subtask) carries a document uploaded by an
+      // elevated role — deleting the task tree would cascade it away.
+      const subIds = (
+        await prisma.task.findMany({
+          where: { parentTaskId: task.id },
+          select: { id: true },
+        })
+      ).map((s) => s.id);
+      if (await taskIdsHaveElevatedUpload([task.id, ...subIds], task.divisionId)) {
+        return fail(
+          'This task has a document from a division head, Super Admin, or OSD — only they can delete it.',
+          epoch,
+        );
+      }
+      allowed = true;
+    }
     if (!allowed) {
       return fail(
-        'Only a division head or a Super Admin can delete this task.',
+        'Only a division head, a Super Admin, or the PMU team head can delete this task.',
         epoch,
       );
     }
@@ -1945,6 +2031,7 @@ export async function addCollaboratorAction(
       ownerId: true,
       createdById: true,
       divisionId: true,
+      visibility: true,
       archivedAt: true,
       dueDate: true,
       division: { select: { kind: true, headUserId: true } },
@@ -2061,7 +2148,7 @@ export async function removeCollaboratorAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, ownerId: true, createdById: true, divisionId: true },
+    select: { id: true, ownerId: true, createdById: true, divisionId: true, visibility: true },
   });
   if (!task) return fail('Task not found.', epoch);
 
@@ -2261,7 +2348,7 @@ export async function reassignTaskAction(
 
   const task = await prisma.task.findUnique({
     where: { id: parsed.data.taskId },
-    select: { id: true, name: true, ownerId: true, createdById: true, divisionId: true, dueDate: true },
+    select: { id: true, name: true, ownerId: true, createdById: true, divisionId: true, dueDate: true, visibility: true },
   });
   if (!task) return fail('Task not found.', epoch);
   if (task.ownerId === parsed.data.newOwnerId) return fail('Already the owner.', epoch);
@@ -2278,20 +2365,31 @@ export async function reassignTaskAction(
   });
   if (!meRow) return fail('User not found.', epoch);
 
-  const [actor, targetRbac] = await Promise.all([
+  const [actor, targetRbac, pmuTeamMemberIds] = await Promise.all([
     getRbacActor(me.id),
     getRbacTarget(parsed.data.newOwnerId),
+    getPmuTeamMemberIds(me.id),
   ]);
   if (!actor || !targetRbac) return fail('User not found.', epoch);
 
+  // A PMU team leader may reassign a DIVISION task OWNED BY one of their team
+  // members — and freely, without approval, when the new owner is also on the
+  // team. The scope stays inside the PMU team; a non-team target still falls to
+  // the transfer matrix below. Personal tasks are out of scope, matching the
+  // read + manage gates.
+  const pmuLeaderManagesTask =
+    task.visibility === 'division' && pmuTeamMemberIds.includes(task.ownerId);
+
   // Initiation guard: reassigning the owner from the Owner row is a head
-  // power — Super Admin, OSD, or the head of the task's division only.
-  // Everyone else (including the owner) hands the task off via Transfer
-  // task, which requires a comment. Matches the surface the UI shows.
+  // power — Super Admin, OSD, or the head of the task's division only — plus a
+  // PMU team leader over their team's tasks. Everyone else (including the
+  // owner) hands the task off via Transfer task, which requires a comment.
+  // Matches the surface the UI shows.
   const mayInitiate =
     meRow.isSuperAdmin ||
     meRow.hierarchySlot === 'osd' ||
-    canActAsHeadOf(actor, task.divisionId);
+    canActAsHeadOf(actor, task.divisionId) ||
+    pmuLeaderManagesTask;
   if (!mayInitiate) {
     return fail('Only a division head or Super Admin can reassign the owner here. Use Transfer task instead.', epoch);
   }
@@ -2299,12 +2397,14 @@ export async function reassignTaskAction(
   const isDownward = await isSubordinateOf(parsed.data.newOwnerId, me.id);
   // Free (no approval): Super Admin / OSD anywhere; downward within own
   // chain (existing hierarchy rule); a Division Head assigning the tasks
-  // of a division they head to users within their division scope.
+  // of a division they head to users within their division scope; a PMU team
+  // leader reassigning a team task to another team member.
   const isFree =
     isDownward ||
     meRow.isSuperAdmin ||
     meRow.hierarchySlot === 'osd' ||
-    (canActAsHeadOf(actor, task.divisionId) && canAssignTaskTo(actor, targetRbac));
+    (canActAsHeadOf(actor, task.divisionId) && canAssignTaskTo(actor, targetRbac)) ||
+    (pmuLeaderManagesTask && pmuTeamMemberIds.includes(parsed.data.newOwnerId));
 
   if (!isFree && !canTransferTaskTo(actor, targetRbac)) {
     // Approval requests must still stay inside the transfer matrix —

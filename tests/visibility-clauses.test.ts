@@ -181,6 +181,31 @@ describe('buildVisibilityClausesFrom — roles', () => {
   });
 });
 
+describe('buildVisibilityClausesFrom — PMU team leader read access', () => {
+  it("adds an owner-scoped clause for the leader's team, division-only", () => {
+    const team = ['leader', 'mate-1', 'mate-2'];
+    const clauses = buildVisibilityClausesFrom(
+      caller({ isPmu: true, id: 'leader' }),
+      [],
+      [],
+      { pmuTeamLeaderMemberIds: team },
+    );
+    expect(clauses).toContainEqual({ visibility: 'division', ownerId: { in: team } });
+    // It never surfaces a bare division board, so non-PMU ministry tasks stay hidden.
+    expect(clauses.some((c) => 'divisionId' in c)).toBe(false);
+  });
+
+  it('is inert when the caller is not a team leader (empty list)', () => {
+    const clauses = buildVisibilityClausesFrom(
+      caller({ isPmu: true }),
+      [],
+      [],
+      { pmuTeamLeaderMemberIds: [] },
+    );
+    expect(clauses).toHaveLength(3);
+  });
+});
+
 describe('buildVisibilityClausesFrom — PMU team share', () => {
   const PMU = 'div-pmu';
 

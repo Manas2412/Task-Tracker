@@ -20,6 +20,7 @@ import {
 } from '@/lib/rbac';
 import { ACTOR_SUMMARY_SELECT, USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
 import { buildVisibilityClauses } from '@/lib/visibility';
+import { getPmuTeamMemberIds, isElevatedOverDivision } from '@/lib/pmu-team';
 import { buildTaskParticipantWhere } from '@/lib/task-participants';
 import { canAccessTimelineFiles } from '@/lib/timeline-files-access';
 import { CollaboratorsSection, type Candidate, type CollaboratorRow, type SubtaskScope } from './_components/CollaboratorsSection';
@@ -76,7 +77,16 @@ export default async function TaskDetailPage({ params }: PageProps) {
         include: { actor: { select: ACTOR_SUMMARY_SELECT } },
         orderBy: { createdAt: 'desc' },
       },
-      parentTask: { select: { id: true, name: true, ownerId: true } },
+      parentTask: {
+        select: {
+          id: true,
+          name: true,
+          ownerId: true,
+          createdById: true,
+          divisionId: true,
+          visibility: true,
+        },
+      },
       linkedTimelineFile: true,
       tags: { include: { tag: { select: { id: true, name: true } } } },
     },
@@ -150,6 +160,15 @@ export default async function TaskDetailPage({ params }: PageProps) {
   const isHeadOfTaskDivision =
     actor !== null && actor.headedDivisionIds.includes(task.divisionId);
 
+  // A PMU team leader administers their team's DIVISION tasks (edit,
+  // collaborators, reassign, attachments) — scoped to tasks OWNED BY a team
+  // member. A teammate's personal task stays out of scope, matching the
+  // visibility scoper. Empty for everyone else, so it never widens a
+  // non-leader's rights.
+  const pmuTeamMemberIds = await getPmuTeamMemberIds(session.user.id);
+  const managesAsPmuLeader =
+    task.visibility === 'division' && pmuTeamMemberIds.includes(task.ownerId);
+
   const canPull =
     isUnassigned &&
     !isOwner &&
@@ -157,18 +176,35 @@ export default async function TaskDetailPage({ params }: PageProps) {
     task.visibility !== 'personal' &&
     memberDivisionIds.includes(task.divisionId);
 
+  // A PMU Team Head may delete their team's OWN division tasks — but never a
+  // task allotted (created) by a Division Head / Super Admin / OSD. Mirrors
+  // canPmuHeadDeleteOwnedTask in deleteTaskAction; keys on the parent for a
+  // subtask (the subtask assignee is irrelevant to delete rights).
+  const pmuHeadDeleteBase = isSubtask ? task.parentTask : task;
+  const pmuHeadCanDeleteTask =
+    pmuHeadDeleteBase != null &&
+    pmuHeadDeleteBase.visibility === 'division' &&
+    pmuTeamMemberIds.includes(pmuHeadDeleteBase.ownerId) &&
+    !(await isElevatedOverDivision(
+      pmuHeadDeleteBase.createdById,
+      pmuHeadDeleteBase.divisionId,
+    ));
+
   // Delete mirrors deleteTaskAction. For a subtask, the right belongs to the
   // parent task's owner, the head of the division, or a Super Admin — never
   // the subtask's own assignee. For a top-level task: a Super Admin or the
   // head of the division, plus a user's own personal task. A normal user who
-  // merely owns a division task (e.g. after a transfer) cannot delete it.
-  const canDelete = isSubtask
-    ? session.user.isSuperAdmin ||
-      isHeadOfTaskDivision ||
-      task.parentTask?.ownerId === session.user.id
-    : session.user.isSuperAdmin ||
-      isHeadOfTaskDivision ||
-      (task.visibility === 'personal' && task.ownerId === session.user.id);
+  // merely owns a division task (e.g. after a transfer) cannot delete it. A PMU
+  // Team Head may also delete the team's own (non-elevated-allotted) tasks.
+  const canDelete =
+    (isSubtask
+      ? session.user.isSuperAdmin ||
+        isHeadOfTaskDivision ||
+        task.parentTask?.ownerId === session.user.id
+      : session.user.isSuperAdmin ||
+        isHeadOfTaskDivision ||
+        (task.visibility === 'personal' && task.ownerId === session.user.id)) ||
+    pmuHeadCanDeleteTask;
 
   // Managing the task — status, priority, description, subtasks, AND its
   // collaborators — all follow one rule (canManageTask), the very rule the
@@ -184,8 +220,14 @@ export default async function TaskDetailPage({ params }: PageProps) {
       hierarchySlot: session.user.hierarchySlot,
       memberDivisionIds,
       headedDivisionIds: actor?.headedDivisionIds ?? [],
+      pmuTeamMemberIds,
     },
-    { ownerId: task.ownerId, createdById: task.createdById, divisionId: task.divisionId },
+    {
+      ownerId: task.ownerId,
+      createdById: task.createdById,
+      divisionId: task.divisionId,
+      visibility: task.visibility,
+    },
   );
   const canEditFields = canManage;
 
@@ -360,6 +402,26 @@ export default async function TaskDetailPage({ params }: PageProps) {
     include: { uploadedBy: { select: { name: true } } },
     orderBy: { uploadedAt: 'desc' },
   });
+
+  // "Full" attachment rights (Super Admin / OSD / owner / creator) may delete
+  // any document. A PMU Team Head reaches canEditAttachments only via the team
+  // branch, and must NOT delete a document uploaded by an elevated role
+  // (Division Head / Super Admin / OSD) — mirrors deleteAttachmentAction.
+  const attachmentFullRights =
+    session.user.isSuperAdmin ||
+    session.user.hierarchySlot === 'osd' ||
+    task.ownerId === session.user.id ||
+    task.createdById === session.user.id;
+  const pmuHeadAttachmentMode = canEditAttachments && !attachmentFullRights;
+  let elevatedUploaderIds = new Set<string>();
+  if (pmuHeadAttachmentMode) {
+    const uploaderIds = [...new Set(attachmentRows.map((a) => a.uploadedById))];
+    const flags = await Promise.all(
+      uploaderIds.map((id) => isElevatedOverDivision(id, task.divisionId)),
+    );
+    elevatedUploaderIds = new Set(uploaderIds.filter((_, i) => flags[i]));
+  }
+
   const taskAttachments: AttachmentRow[] = attachmentRows.map((a) => ({
     id: a.id,
     fileName: a.fileName,
@@ -369,7 +431,13 @@ export default async function TaskDetailPage({ params }: PageProps) {
     source: a.source as 'uploaded' | 'drive_link',
     uploadedAt: a.uploadedAt,
     uploaderName: a.uploadedBy.name,
-    canDelete: canEditAttachments || a.uploadedById === session.user.id,
+    canDelete:
+      a.uploadedById === session.user.id ||
+      (attachmentFullRights
+        ? true
+        : pmuHeadAttachmentMode
+          ? !elevatedUploaderIds.has(a.uploadedById)
+          : false),
   }));
 
   // Tags are a Super Admin-only feature — only they see or manage tags.
@@ -390,13 +458,15 @@ export default async function TaskDetailPage({ params }: PageProps) {
     : [];
 
   // Changing the owner from the Owner row is reserved for Super Admin, OSD,
-  // and the head of the task's division. A normal user (even the owner or
-  // creator) hands the task off via the Transfer button instead, which
-  // requires a comment — so the Owner row stays read-only for them.
+  // the head of the task's division, and a PMU team leader over their team's
+  // tasks. A normal user (even the owner or creator) hands the task off via the
+  // Transfer button instead, which requires a comment — so the Owner row stays
+  // read-only for them. Mirrors the mayInitiate gate in reassignTaskAction.
   const canReassign =
     session.user.isSuperAdmin ||
     session.user.hierarchySlot === 'osd' ||
-    isHeadOfTaskDivision;
+    isHeadOfTaskDivision ||
+    managesAsPmuLeader;
 
   const canChangeDivision =
     session.user.isSuperAdmin || session.user.hierarchySlot === 'osd';

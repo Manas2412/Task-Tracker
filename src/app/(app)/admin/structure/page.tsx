@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 
 import { DivisionHeadCard, type HeadCandidate } from './_components/DivisionHeadCard';
+import { PmuTeamHeadCard, type PmuHeadCandidate } from './_components/PmuTeamHeadCard';
 import { HierarchyMapper, type OfficerNode } from './_components/HierarchyMapper';
 import {
   PersonInspector,
@@ -35,6 +36,20 @@ function headCandidateOf(
     name: u.name,
     designation: u.designation,
     divisionName: u.division.name,
+    divisionColour: u.division.avatarColour,
+  };
+}
+
+function pmuHeadCandidateOf(u: {
+  id: string;
+  name: string;
+  designation: string;
+  division: { avatarColour: string };
+}): PmuHeadCandidate {
+  return {
+    id: u.id,
+    name: u.name,
+    designation: u.designation,
     divisionColour: u.division.avatarColour,
   };
 }
@@ -187,6 +202,16 @@ export default async function StructurePage({ searchParams }: PageProps) {
     return u.sectionId === activeDivision.id;
   });
 
+  // Active PMU members of the shown division — the eligible pool for its PMU
+  // Team Head. In the current data model these are is_pmu users homed in the
+  // division; the head is whichever holds pmu_role 'pmu_team_leader'.
+  const pmuMembersOfActive =
+    activeDivision.kind === 'division'
+      ? allUsers.filter(
+          (u) => u.isActive && u.isPmu && u.divisionId === activeDivision.id,
+        )
+      : [];
+
   // Pool/roots/reachability are computed inside HierarchyMapper, which
   // guarantees every officer renders exactly once.
   const officerNodes: OfficerNode[] = officersInActive.map((u) => ({
@@ -317,6 +342,19 @@ export default async function StructurePage({ searchParams }: PageProps) {
                 divisionColour: u.division.avatarColour,
               }))}
             activeDelegates={activeDelegates}
+            canEdit={session.user.isSuperAdmin === true}
+          />
+        ) : null}
+        {activeDivision.kind === 'division' && pmuMembersOfActive.length > 0 ? (
+          <PmuTeamHeadCard
+            divisionId={activeDivision.id}
+            divisionName={activeDivision.name}
+            currentHead={
+              pmuMembersOfActive
+                .filter((u) => u.pmuRole === 'pmu_team_leader')
+                .map(pmuHeadCandidateOf)[0] ?? null
+            }
+            candidates={pmuMembersOfActive.map(pmuHeadCandidateOf)}
             canEdit={session.user.isSuperAdmin === true}
           />
         ) : null}

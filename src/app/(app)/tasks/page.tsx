@@ -7,6 +7,7 @@ import { isMediaAndIt } from '@/lib/divisions';
 import { prisma } from '@/lib/db';
 import { formatDue, initialsOf } from '@/lib/format';
 import { canManageTask, getHeadedDivisionIds } from '@/lib/rbac';
+import { getPmuTeamMemberIds } from '@/lib/pmu-team';
 import { fetchTaskCounts, fetchVisibleTasks, getPmuParentDivisionHeadId, type TaskFilter, type TaskSort } from '@/lib/visibility';
 
 import { DivisionControls } from './_components/DivisionControls';
@@ -75,7 +76,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
     memberDivisionIds.length > 1;
   const groupByDivision = canGroupByDivision && requestedGroupByDivision;
 
-  const [taskResult, counts, divisions, pmuParentHeadId, headedDivisionIds] = await Promise.all([
+  const [taskResult, counts, divisions, pmuParentHeadId, headedDivisionIds, pmuTeamMemberIds] = await Promise.all([
     fetchVisibleTasks({ callerId: me.id, filter, divisionId: divisionFilter || undefined, sort }),
     fetchTaskCounts(me.id),
     prisma.division.findMany({
@@ -90,6 +91,9 @@ export default async function TasksPage({ searchParams }: PageProps) {
     // Head/delegate divisions — powers the per-card "change status" gate for
     // the mobile long-press action modal (mirrors the server canEditTask rule).
     getHeadedDivisionIds(me.id),
+    // A PMU team leader's team (empty otherwise) — same per-card gate, so the
+    // leader can act on their team's tasks from the list.
+    me.isPmu ? getPmuTeamMemberIds(me.id) : Promise.resolve<string[]>([]),
   ]);
 
   // Mobile task-card action permissions. `canWatchlist` (Add to Priority Board
@@ -103,6 +107,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
     hierarchySlot: me.hierarchySlot,
     memberDivisionIds,
     headedDivisionIds,
+    pmuTeamMemberIds,
   };
 
   // The PMU's home-division head is not treated as a whole-team share
@@ -240,6 +245,7 @@ type PermCaller = {
   hierarchySlot: string;
   memberDivisionIds: string[];
   headedDivisionIds: string[];
+  pmuTeamMemberIds: string[];
 };
 
 function TaskRow({
@@ -262,6 +268,7 @@ function TaskRow({
     ownerId: t.ownerId,
     createdById: t.createdById,
     divisionId: t.divisionId,
+    visibility: t.visibility,
   });
 
   return (

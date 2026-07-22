@@ -16,6 +16,7 @@ import {
   notifyDocumentAudience,
   writeDocumentAudit,
 } from '@/lib/document-centre';
+import { getPmuTeamMemberIds, isElevatedOverDivision } from '@/lib/pmu-team';
 import { getMemberDivisionIds } from '@/lib/rbac';
 import { isTaskCollaborator } from '@/lib/task-participants';
 import {
@@ -81,6 +82,39 @@ async function requireSession() {
 // ============================================================
 
 export async function canEditTaskAttachments(
+  callerId: string,
+  taskId: string,
+): Promise<boolean> {
+  const [me, task, pmuTeamMemberIds] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: callerId },
+      select: { isSuperAdmin: true, hierarchySlot: true },
+    }),
+    prisma.task.findUnique({
+      where: { id: taskId },
+      select: { ownerId: true, createdById: true, visibility: true },
+    }),
+    // A PMU team leader may manage documents on their team's DIVISION tasks.
+    getPmuTeamMemberIds(callerId),
+  ]);
+  if (!me || !task) return false;
+  return (
+    me.isSuperAdmin ||
+    me.hierarchySlot === 'osd' ||
+    task.ownerId === callerId ||
+    task.createdById === callerId ||
+    (task.visibility === 'division' && pmuTeamMemberIds.includes(task.ownerId))
+  );
+}
+
+/**
+ * The "full" attachment rights on a task — Super Admin, OSD, the owner, or the
+ * creator — i.e. `canEditTaskAttachments` WITHOUT the PMU-Team-Head branch. Used
+ * by the delete guard: a PMU Team Head (who reaches `canEditTaskAttachments`
+ * only via that branch) may not delete a document uploaded by an elevated role,
+ * whereas a full-rights holder may delete any document.
+ */
+async function hasFullTaskAttachmentRights(
   callerId: string,
   taskId: string,
 ): Promise<boolean> {
@@ -518,6 +552,27 @@ export async function deleteAttachmentAction(
   let editor = att.uploadedById === me.id;
   if (!editor) editor = await canManageAttachmentRow(me.id, att.ownerType, att.ownerId);
   if (!editor) return fail('You do not have permission.', epoch);
+
+  // A PMU Team Head may delete their team's documents, but NEVER one uploaded by
+  // a Division Head / Super Admin / OSD. This bites only when the caller's sole
+  // claim to delete is the PMU-Head branch of canEditTaskAttachments — a
+  // full-rights holder (Super Admin / OSD / owner / creator) or the uploader
+  // themselves is unaffected.
+  if (att.ownerType === 'task' && att.uploadedById !== me.id) {
+    const fullRights = await hasFullTaskAttachmentRights(me.id, att.ownerId);
+    if (!fullRights) {
+      const parent = await prisma.task.findUnique({
+        where: { id: att.ownerId },
+        select: { divisionId: true },
+      });
+      if (parent && (await isElevatedOverDivision(att.uploadedById, parent.divisionId))) {
+        return fail(
+          'You cannot delete a document uploaded by a division head, Super Admin, or OSD.',
+          epoch,
+        );
+      }
+    }
+  }
 
   try {
     await prisma.$transaction(async (tx) => {

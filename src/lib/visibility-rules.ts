@@ -38,6 +38,13 @@ export type VisibilityOptions = {
    * cross-division allocation-link visibility.
    */
   memberDivisionIds?: string[];
+  /**
+   * When the caller is a PMU team leader, the ids of their PMU team (see
+   * `getPmuTeamMemberIds`). Grants owner-scoped visibility of the team's
+   * (non-personal) tasks so the leader can oversee and manage them — the read
+   * side of their PMU-team admin scope. Empty/omitted for everyone else.
+   */
+  pmuTeamLeaderMemberIds?: string[];
 };
 
 /**
@@ -68,6 +75,17 @@ export function buildVisibilityClausesFrom(
     // are already covered by the role clauses below).
     { createdById: me.id, visibility: 'personal' },
   ];
+
+  // A PMU team leader additionally sees their PMU team's non-personal tasks
+  // (owner-scoped) — the read side of their team-admin scope. Empty for
+  // everyone else, so this is inert outside that role. Personal tasks a
+  // teammate owns stay private (the clause is `division`-scoped).
+  if (opts.pmuTeamLeaderMemberIds && opts.pmuTeamLeaderMemberIds.length > 0) {
+    clauses.push({
+      visibility: 'division',
+      ownerId: { in: opts.pmuTeamLeaderMemberIds },
+    });
+  }
 
   if (me.isSuperAdmin || me.hierarchySlot === 'osd') {
     // Super Admin + OSD see all non-personal tasks across the ministry.

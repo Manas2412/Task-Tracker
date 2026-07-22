@@ -3,6 +3,7 @@ import type { Prisma, Task } from '@prisma/client';
 import { startOfDayIST, endOfDayIST } from '@/lib/date';
 import { prisma } from '@/lib/db';
 import { USER_SUMMARY_SELECT } from '@/lib/prisma-selects';
+import { getPmuTeamMemberIds } from '@/lib/pmu-team';
 import { getHeadedDivisionIds, getMemberDivisionIds } from '@/lib/rbac';
 import {
   buildVisibilityClausesFrom,
@@ -111,7 +112,7 @@ export async function getPmuParentDivisionHeadId(pmuId: string): Promise<string 
  * Returns clauses that are then composed with the filter clause in the page.
  */
 export async function buildVisibilityClauses(me: CallerSummary): Promise<Prisma.TaskWhereInput[]> {
-  const [headedDivisionIds, memberDivisionIds, pmuMemberIds, pmuParentHeadId] = await Promise.all([
+  const [headedDivisionIds, memberDivisionIds, pmuMemberIds, pmuParentHeadId, pmuTeamLeaderMemberIds] = await Promise.all([
     getHeadedDivisionIds(me.id),
     // Member divisions (home + admin-granted extras). Resolved by id here so
     // every task-read caller (list, counts, stats, search, calendar, priority
@@ -122,10 +123,15 @@ export async function buildVisibilityClauses(me: CallerSummary): Promise<Prisma.
     me.isPmu && me.pmuId
       ? getPmuParentDivisionHeadId(me.pmuId)
       : Promise.resolve<string | null>(null),
+    // Owner-scoped read access for a PMU team leader over their team's tasks
+    // (empty for everyone else). Resolved here so every task-read surface picks
+    // it up uniformly.
+    me.isPmu ? getPmuTeamMemberIds(me.id) : Promise.resolve<string[]>([]),
   ]);
   return buildVisibilityClausesFrom(me, headedDivisionIds, pmuMemberIds, {
     isPmuParentDivisionHead: pmuParentHeadId !== null && pmuParentHeadId === me.id,
     memberDivisionIds,
+    pmuTeamLeaderMemberIds,
   });
 }
 

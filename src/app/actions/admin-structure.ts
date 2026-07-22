@@ -676,3 +676,115 @@ export async function setDivisionHeadAction(
   revalidatePath('/profile');
   return ok(epoch);
 }
+
+// ============================================================
+// setPmuTeamHeadAction — designate a division's PMU Team Head
+// ============================================================
+
+const setPmuTeamHeadSchema = z.object({
+  divisionId: z.string().uuid(),
+  headUserId: z
+    .union([z.literal(''), z.string().uuid()])
+    .transform((v) => (v && v.length > 0 ? v : null)),
+});
+
+/**
+ * Designate (or clear) a division's **PMU Team Head** — the PMU member holding
+ * `pmu_role = 'pmu_team_leader'`, who administers the PMU team's tasks (edit,
+ * allot, collaborators, attachments, and delete of the team's own tasks — see
+ * PERMISSIONS.md §5.19). Super Admin only, audited.
+ *
+ * Promoting a new head **demotes** the previous one (in the same PMU group) to
+ * `pmu_senior_consultant`, so a PMU has at most one head. Clearing demotes the
+ * division's current head, leaving the PMU with none (and no team admin).
+ */
+export async function setPmuTeamHeadAction(
+  prev: AdminStructureState | undefined,
+  formData: FormData,
+): Promise<AdminStructureState> {
+  const epoch = bump(prev);
+  const guard = await requireSuperAdmin();
+  if (!guard.ok) return fail(guard.error, epoch);
+
+  const parsed = setPmuTeamHeadSchema.safeParse({
+    divisionId: formData.get('divisionId'),
+    headUserId: formData.get('headUserId') ?? '',
+  });
+  if (!parsed.success) return fail('Invalid input.', epoch);
+
+  const division = await prisma.division.findUnique({
+    where: { id: parsed.data.divisionId },
+    select: { id: true, name: true, kind: true },
+  });
+  if (!division) return fail('Division not found.', epoch);
+  if (division.kind !== 'division') {
+    return fail('PMU teams sit inside a top-level division.', epoch);
+  }
+
+  // The chosen head, if any, must be an active PMU member of THIS division.
+  let newHead: { id: string; name: string; pmuId: string | null } | null = null;
+  if (parsed.data.headUserId) {
+    const u = await prisma.user.findUnique({
+      where: { id: parsed.data.headUserId },
+      select: { id: true, name: true, isActive: true, isPmu: true, divisionId: true, pmuId: true },
+    });
+    if (!u || !u.isActive) return fail('User not found or disabled.', epoch);
+    if (!u.isPmu || u.divisionId !== division.id) {
+      return fail('Choose a PMU member of this division.', epoch);
+    }
+    newHead = { id: u.id, name: u.name, pmuId: u.pmuId };
+  }
+
+  // Current head(s) of the division's PMU, for the audit trail.
+  const prevLeaders = await prisma.user.findMany({
+    where: { divisionId: division.id, isPmu: true, pmuRole: 'pmu_team_leader' },
+    select: { id: true, name: true },
+  });
+  if (newHead && prevLeaders.length === 1 && prevLeaders[0].id === newHead.id) {
+    return ok(epoch); // already the head — no-op
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (newHead) {
+        // Demote any other current team leader in the same PMU group…
+        await tx.user.updateMany({
+          where: {
+            divisionId: division.id,
+            isPmu: true,
+            pmuRole: 'pmu_team_leader',
+            pmuId: newHead.pmuId,
+            id: { not: newHead.id },
+          },
+          data: { pmuRole: 'pmu_senior_consultant' },
+        });
+        // …and promote the chosen member.
+        await tx.user.update({
+          where: { id: newHead.id },
+          data: { pmuRole: 'pmu_team_leader' },
+        });
+      } else {
+        // Clear: demote the division's current PMU team head(s).
+        await tx.user.updateMany({
+          where: { divisionId: division.id, isPmu: true, pmuRole: 'pmu_team_leader' },
+          data: { pmuRole: 'pmu_senior_consultant' },
+        });
+      }
+    });
+    await audit(
+      guard.userId,
+      'role_change',
+      'division',
+      division.id,
+      { pmuTeamHead: prevLeaders.map((l) => l.name).join(', ') || null },
+      { pmuTeamHead: newHead?.name ?? null },
+    );
+  } catch (err) {
+    logError('setPmuTeamHeadAction failed', err);
+    return fail('Could not change the PMU team head.', epoch);
+  }
+
+  revalidateAll();
+  revalidatePath('/profile');
+  return ok(epoch);
+}
