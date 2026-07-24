@@ -310,11 +310,14 @@ function TaskRow({
  * The three segments of the tasks view, in display order:
  *   1. Tasks assigned to me — division tasks I currently own (includes any
  *                             task transferred or handed to me)
- *   2. Other tasks of my division — the rest of the division's tasks (or,
- *                             for a PMU member, the rest of their PMU team's)
- *   3. Personal tasks — personal-visibility tasks I own, created, or am a
+ *   2. Personal tasks — personal-visibility tasks I own, created, or am a
  *                             collaborator on (visible to me and added
  *                             collaborators only)
+ *   3. Other tasks of my division — the rest of the division's tasks (or,
+ *                             for a PMU member, the rest of their PMU team's)
+ * Personal tasks sit above the division's other tasks so a user's own
+ * private work stays close to the tasks assigned to them, ahead of the
+ * broader division board.
  * Every visible task falls in exactly one segment (personal vs division,
  * division split by ownership). All three segments are always shown, even
  * when empty, so the structure is consistent on every login.
@@ -363,6 +366,14 @@ function segmentTasksByRelation(
       tasks: assigned,
     },
     {
+      key: 'personal',
+      label: 'Personal tasks',
+      subtitle: 'Visible to me and added collaborators only',
+      emptyLabel: 'You have not created any personal tasks.',
+      icon: 'ti-lock',
+      tasks: personal,
+    },
+    {
       key: 'others',
       label: isPmu ? 'Other tasks of my PMU team' : 'Other tasks of my division',
       emptyLabel: isPmu
@@ -370,14 +381,6 @@ function segmentTasksByRelation(
         : 'No other tasks in your division.',
       icon: 'ti-building',
       tasks: others,
-    },
-    {
-      key: 'personal',
-      label: 'Personal tasks',
-      subtitle: 'Visible to me and added collaborators only',
-      emptyLabel: 'You have not created any personal tasks.',
-      icon: 'ti-lock',
-      tasks: personal,
     },
   ];
 }
